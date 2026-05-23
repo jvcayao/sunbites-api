@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Password;
 
 class AuthController extends Controller
 {
@@ -57,7 +58,7 @@ class AuthController extends Controller
 
     public function user(Request $request): JsonResponse
     {
-        $user = $request->user()->load('branches');
+        $user = $request->user();
 
         return response()->json([
             'id' => $user->id,
@@ -67,5 +68,41 @@ class AuthController extends Controller
             'roles' => $user->getRoleNames(),
             'branches' => $user->branches()->select('id', 'name', 'slug')->get(),
         ]);
+    }
+
+    public function sendResetEmail(Request $request): JsonResponse
+    {
+        $request->validate(['email' => ['required', 'email']]);
+
+        Password::sendResetLink($request->only('email'));
+
+        activity('auth')
+            ->withProperties(['ip' => $request->ip()])
+            ->log('auth.password_reset_requested');
+
+        return response()->json(['message' => 'Password reset link sent if the email exists.']);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => ['required'],
+            'email' => ['required', 'email'],
+            'password' => ['required', \Illuminate\Validation\Rules\Password::defaults(), 'confirmed'],
+        ]);
+
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user, string $password) {
+                $user->update(['password' => $password]);
+                $user->tokens()->delete();
+            }
+        );
+
+        if ($status !== Password::PASSWORD_RESET) {
+            return response()->json(['message' => 'Unable to reset password. Please request a new link.'], 422);
+        }
+
+        return response()->json(['message' => __($status)]);
     }
 }

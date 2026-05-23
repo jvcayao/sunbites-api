@@ -3,10 +3,16 @@
 namespace App\Providers;
 
 use App\Listeners\AuthEventSubscriber;
+use App\Models\User;
+use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -17,6 +23,8 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
 
         Event::subscribe(AuthEventSubscriber::class);
+
+        Gate::policy(User::class, UserPolicy::class);
     }
 
     /**
@@ -34,5 +42,15 @@ class AppServiceProvider extends ServiceProvider
             ? Password::min(8)->mixedCase()->numbers()->symbols()->uncompromised()
             : Password::min(8)->mixedCase()->numbers(),
         );
+
+        RateLimiter::for('login', fn (Request $request) => [
+            Limit::perMinute(5)->by($request->ip()),
+            Limit::perMinute(10)->by('login:'.$request->input('email', '')),
+        ]);
+
+        RateLimiter::for('password-reset', fn (Request $request) => [
+            Limit::perMinute(3)->by($request->ip()),
+            Limit::perMinute(5)->by('pwd-reset:'.$request->input('email', $request->input('token', ''))),
+        ]);
     }
 }

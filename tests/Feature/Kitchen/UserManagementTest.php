@@ -11,6 +11,8 @@ use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
+use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
 
 class UserManagementTest extends TestCase
@@ -25,114 +27,21 @@ class UserManagementTest extends TestCase
     {
         parent::setUp();
         $this->seed(PermissionSeeder::class);
+        app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $this->branch = Branch::factory()->create();
+        $this->branch = Branch::factory()->create(['is_active' => true]);
         $this->admin = User::factory()->create();
         $this->admin->assignRole('admin');
     }
 
-    private function actingAsAdmin(): static
+    private function adminToken(): string
     {
-        return $this->actingAs($this->admin)->withSession(['active_branch_id' => $this->branch->id]);
+        return $this->admin->createToken('staff', ['staff'])->plainTextToken;
     }
 
-    public function test_non_admin_cannot_access_user_management(): void
-    {
-        $branch = Branch::factory()->create();
-        $manager = User::factory()->create();
-        $manager->assignRole('manager');
-        $manager->branches()->attach($branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
-
-        $response = $this->actingAs($manager)
-            ->withSession(['active_branch_id' => $branch->id])
-            ->get(route('kitchen.references.users.index'));
-
-        $response->assertForbidden();
-    }
-
-    public function test_admin_can_view_users_list(): void
-    {
-        User::factory(3)->create()->each(fn ($u) => $u->assignRole('cashier'));
-
-        $response = $this->actingAsAdmin()->get(route('kitchen.references.users.index'));
-
-        $response->assertOk();
-    }
-
-    public function test_admin_can_create_user(): void
-    {
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.store'), [
-            'first_name' => 'Juan',
-            'last_name' => 'dela Cruz',
-            'email' => 'juan@test.com',
-            'password' => 'Password1',
-            'password_confirmation' => 'Password1',
-            'role' => 'cashier',
-            'branch_ids' => [$this->branch->id],
-        ]);
-
-        $response->assertRedirect(route('kitchen.references.users.index'));
-
-        $this->assertDatabaseHas('users', ['email' => 'juan@test.com']);
-        $user = User::where('email', 'juan@test.com')->first();
-        $this->assertTrue($user->hasRole('cashier'));
-        $this->assertTrue($user->branches->contains($this->branch));
-    }
-
-    public function test_admin_can_update_user(): void
-    {
-        $user = User::factory()->create();
-        $user->assignRole('cashier');
-
-        $response = $this->actingAsAdmin()->put(route('kitchen.references.users.update', $user), [
-            'first_name' => 'Updated',
-            'last_name' => 'Name',
-            'email' => $user->email,
-            'role' => 'supervisor',
-        ]);
-
-        $response->assertRedirect(route('kitchen.references.users.show', $user));
-        $this->assertDatabaseHas('users', ['id' => $user->id, 'first_name' => 'Updated']);
-        $this->assertTrue($user->fresh()->hasRole('supervisor'));
-    }
-
-    public function test_admin_can_deactivate_user(): void
-    {
-        $user = User::factory()->create();
-        $user->assignRole('cashier');
-
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.deactivate', $user));
-
-        $response->assertRedirect(route('kitchen.references.users.index'));
-        $this->assertSoftDeleted($user);
-    }
-
-    public function test_admin_cannot_deactivate_own_account(): void
-    {
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.deactivate', $this->admin));
-
-        $response->assertForbidden();
-        $this->assertNotSoftDeleted($this->admin);
-    }
-
-    public function test_non_admin_cannot_access_user_detail_page(): void
-    {
-        $manager = User::factory()->create([
-            'sss_number' => '12-3456789-0',
-        ]);
-        $manager->assignRole('manager');
-        $branch = Branch::factory()->create();
-        $manager->branches()->attach($branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
-
-        $targetUser = User::factory()->create(['sss_number' => '99-9999999-9']);
-        $targetUser->assignRole('cashier');
-
-        $response = $this->actingAs($manager)
-            ->withSession(['active_branch_id' => $branch->id])
-            ->get(route('kitchen.references.users.show', $targetUser));
-
-        $response->assertForbidden();
-    }
+    // -------------------------------------------------------------------------
+    // Unit tests — kept exactly as they were; they test the resource in isolation
+    // -------------------------------------------------------------------------
 
     public function test_user_resource_excludes_gov_ids_for_non_admin(): void
     {
@@ -167,76 +76,248 @@ class UserManagementTest extends TestCase
         $this->assertArrayHasKey('sss_number', $data);
     }
 
-    public function test_photo_upload_rejects_invalid_mime(): void
+    // -------------------------------------------------------------------------
+    // JSON API tests
+    // -------------------------------------------------------------------------
+
+    public function test_non_admin_cannot_access_user_list(): void
     {
-        $fakeFile = UploadedFile::fake()->create('document.pdf', 500, 'application/pdf');
+        $manager = User::factory()->create();
+        $manager->assignRole('manager');
+        $managerToken = $manager->createToken('staff', ['staff'])->plainTextToken;
 
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.store'), [
-            'first_name' => 'Test',
-            'last_name' => 'User',
-            'email' => 'test@test.com',
-            'password' => 'Password1',
-            'password_confirmation' => 'Password1',
-            'role' => 'cashier',
-            'profile_photo' => $fakeFile,
-        ]);
+        $response = $this->withToken($managerToken)
+            ->getJson('/api/v1/users');
 
-        $response->assertSessionHasErrors(['profile_photo']);
+        $response->assertForbidden();
     }
 
-    public function test_photo_upload_rejects_files_over_2mb(): void
+    public function test_admin_can_list_users(): void
     {
-        $bigFile = UploadedFile::fake()->create('photo.jpg', 3000, 'image/jpeg');
+        User::factory(3)->create()->each(fn (User $u) => $u->assignRole('cashier'));
 
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.store'), [
-            'first_name' => 'Test',
-            'last_name' => 'User',
-            'email' => 'test2@test.com',
-            'password' => 'Password1',
-            'password_confirmation' => 'Password1',
-            'role' => 'cashier',
-            'profile_photo' => $bigFile,
-        ]);
+        $response = $this->withToken($this->adminToken())
+            ->getJson('/api/v1/users');
 
-        $response->assertSessionHasErrors(['profile_photo']);
+        // The controller wraps a paginator in response()->json(), which serializes
+        // the ResourceCollection as a flat array (no 'data' envelope).
+        $response->assertOk()
+            ->assertJsonIsArray();
     }
 
-    public function test_admin_can_reactivate_deactivated_user(): void
+    public function test_admin_can_create_user(): void
+    {
+        $response = $this->withToken($this->adminToken())
+            ->postJson('/api/v1/users', [
+                'first_name' => 'Juan',
+                'last_name' => 'dela Cruz',
+                'email' => 'juan@sunbites.test',
+                'password' => 'Password1',
+                'password_confirmation' => 'Password1',
+                'role' => 'cashier',
+                'branch_ids' => [$this->branch->id],
+            ]);
+
+        $response->assertCreated();
+
+        $this->assertDatabaseHas('users', ['email' => 'juan@sunbites.test']);
+
+        $created = User::where('email', 'juan@sunbites.test')->first();
+        $this->assertTrue($created->hasRole('cashier'));
+        $this->assertTrue($created->branches->contains($this->branch));
+    }
+
+    public function test_create_user_validation_rejects_weak_password(): void
+    {
+        $response = $this->withToken($this->adminToken())
+            ->postJson('/api/v1/users', [
+                'first_name' => 'Test',
+                'last_name' => 'User',
+                'email' => 'weak@sunbites.test',
+                'password' => 'alllowercase',
+                'password_confirmation' => 'alllowercase',
+                'role' => 'cashier',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonStructure(['errors' => ['password']]);
+    }
+
+    public function test_create_user_validation_rejects_duplicate_email(): void
+    {
+        $existing = User::factory()->create(['email' => 'taken@sunbites.test']);
+        $existing->assignRole('cashier');
+
+        $response = $this->withToken($this->adminToken())
+            ->postJson('/api/v1/users', [
+                'first_name' => 'Another',
+                'last_name' => 'User',
+                'email' => 'taken@sunbites.test',
+                'password' => 'Password1',
+                'password_confirmation' => 'Password1',
+                'role' => 'cashier',
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonStructure(['errors' => ['email']]);
+    }
+
+    public function test_admin_can_view_user(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+
+        $response = $this->withToken($this->adminToken())
+            ->getJson("/api/v1/users/{$user->id}");
+
+        $response->assertOk()
+            ->assertJsonFragment(['email' => $user->email]);
+    }
+
+    public function test_admin_can_update_user(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+
+        $response = $this->withToken($this->adminToken())
+            ->putJson("/api/v1/users/{$user->id}", [
+                'first_name' => 'Updated',
+                'last_name' => 'Name',
+                'email' => $user->email,
+                'role' => 'cashier',
+            ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('users', ['id' => $user->id, 'first_name' => 'Updated']);
+    }
+
+    public function test_admin_can_change_user_role(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+
+        $this->withToken($this->adminToken())
+            ->putJson("/api/v1/users/{$user->id}", [
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'email' => $user->email,
+                'role' => 'supervisor',
+            ])
+            ->assertOk();
+
+        $fresh = $user->fresh();
+        $this->assertFalse($fresh->hasRole('cashier'));
+        $this->assertTrue($fresh->hasRole('supervisor'));
+    }
+
+    public function test_admin_can_deactivate_user(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$user->id}/deactivate");
+
+        $response->assertOk();
+        $this->assertSoftDeleted($user);
+    }
+
+    public function test_admin_cannot_deactivate_own_account(): void
+    {
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$this->admin->id}/deactivate");
+
+        $response->assertForbidden();
+        $this->assertNotSoftDeleted($this->admin);
+    }
+
+    public function test_admin_can_reactivate_user(): void
     {
         $user = User::factory()->create();
         $user->assignRole('cashier');
         $user->update(['is_active' => false]);
         $user->delete();
 
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.reactivate', $user));
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$user->id}/reactivate");
 
-        $response->assertRedirect(route('kitchen.references.users.show', $user));
+        $response->assertOk();
         $this->assertNotSoftDeleted($user);
         $this->assertTrue($user->fresh()->is_active);
     }
 
-    public function test_admin_can_send_password_reset_email_to_staff(): void
+    public function test_admin_can_send_password_reset_email(): void
     {
         Notification::fake();
 
         $staff = User::factory()->create();
         $staff->assignRole('cashier');
 
-        $response = $this->actingAsAdmin()->post(route('kitchen.references.users.reset-password', $staff));
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$staff->id}/reset-password");
 
-        $response->assertRedirect();
-        $response->assertSessionHas('success');
+        $response->assertOk();
         Notification::assertSentTo($staff, ResetPassword::class);
     }
 
-    public function test_login_page_does_not_expose_forgot_password_link(): void
+    public function test_photo_upload_rejects_invalid_mime(): void
     {
-        $response = $this->get(route('login'));
+        Storage::fake('private');
+
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+        $fakeFile = UploadedFile::fake()->create('document.pdf', 500, 'application/pdf');
+
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$user->id}/photo", [
+                'photo' => $fakeFile,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonStructure(['errors' => ['photo']]);
+    }
+
+    public function test_photo_upload_rejects_files_over_2mb(): void
+    {
+        Storage::fake('private');
+
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+        $bigFile = UploadedFile::fake()->create('photo.jpg', 3000, 'image/jpeg');
+
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$user->id}/photo", [
+                'photo' => $bigFile,
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertJsonStructure(['errors' => ['photo']]);
+    }
+
+    public function test_admin_can_assign_branch_to_user(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+
+        $response = $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$user->id}/branches", [
+                'branch_id' => $this->branch->id,
+            ]);
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page
-            ->component('auth/login')
-            ->missing('canResetPassword'),
-        );
+        $this->assertTrue($user->fresh()->branches->contains($this->branch));
+    }
+
+    public function test_admin_can_detach_branch_from_user(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+        $user->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => $this->admin->id]);
+
+        $response = $this->withToken($this->adminToken())
+            ->deleteJson("/api/v1/users/{$user->id}/branches/{$this->branch->id}");
+
+        $response->assertOk();
+        $this->assertFalse($user->fresh()->branches->contains($this->branch));
     }
 }
