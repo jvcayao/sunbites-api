@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -81,6 +82,32 @@ class AuthController extends Controller
             ->log('auth.password_reset_requested');
 
         return response()->json(['message' => 'Password reset link sent if the email exists.']);
+    }
+
+    public function setBranch(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'branch_id' => ['required', 'integer', 'exists:branches,id'],
+            'from_branch_id' => ['nullable', 'integer', 'exists:branches,id'],
+        ]);
+
+        $user = $request->user();
+        $branch = Branch::find($validated['branch_id']);
+
+        if (! $user->can('access.any_branch') && ! $user->branches->contains($branch)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        activity('auth')
+            ->causedBy($user)
+            ->withProperties([
+                'from_branch_id' => $validated['from_branch_id'] ?? null,
+                'to_branch_id' => $branch->id,
+                'ip' => $request->ip(),
+            ])
+            ->log('branches.switched');
+
+        return response()->json(['id' => $branch->id, 'name' => $branch->name, 'slug' => $branch->slug]);
     }
 
     public function resetPassword(Request $request): JsonResponse

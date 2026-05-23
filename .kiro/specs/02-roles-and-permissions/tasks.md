@@ -56,21 +56,21 @@
 - [x] `UserPolicy` covering all actions
 
 ## 7. User Management Frontend (POS App — Admin only)
-- [ ] User list page at `app/(kitchen)/references/users/page.tsx`
-  - [ ] Table: name, role badge, position, branch assignments, active status
-  - [ ] Search by name or email (debounced 300ms)
-  - [ ] Filter by role, filter by status
-  - [ ] `[+ Add New User]` button
-- [ ] Create user form at `app/(kitchen)/references/users/create/page.tsx`
-  - [ ] Sections: Personal, Contact, Address, Employment, Account, Gov't IDs, Branch Assignment
-  - [ ] Government IDs section clearly marked as optional with info banner
-  - [ ] Role selector, branch checkboxes, required field indicators
-  - [ ] Inline validation errors
-- [ ] User detail/edit page at `app/(kitchen)/references/users/[id]/page.tsx`
-  - [ ] Header card: photo, name, role badge, status
-  - [ ] Tabs: Personal Info | Employment | Gov't IDs | Branches
-  - [ ] Actions menu: Deactivate / Send Reset Email / Delete
-  - [ ] Edit form with all same fields as create
+- [x] User list page at `app/(kitchen)/references/users/page.tsx`
+  - [x] Table: name, role badge, position, branch assignments, active status
+  - [x] Search by name or email (debounced 300ms)
+  - [x] Filter by role, filter by status
+  - [x] `[+ Add New User]` button
+- [x] Create user form at `app/(kitchen)/references/users/create/page.tsx`
+  - [x] Sections: Personal, Contact, Address, Employment, Account, Gov't IDs, Branch Assignment
+  - [x] Government IDs section clearly marked as optional with info banner
+  - [x] Role selector, branch checkboxes, required field indicators
+  - [x] Inline validation errors
+- [x] User detail/edit page at `app/(kitchen)/references/users/[id]/page.tsx`
+  - [x] Header card: photo, name, role badge, status
+  - [x] Tabs: Personal Info | Employment | Gov't IDs | Branches
+  - [x] Actions menu: Deactivate / Send Reset Email / Reactivate
+  - [x] Edit form with all same fields as create
 
 ## 8. Activity Logging
 - [x] `auth.password_reset` logged when staff password reset email is triggered
@@ -78,7 +78,7 @@
 - [x] `users.updated` logged on profile edit (dirty-tracked)
 - [x] `users.deleted` logged on user deactivation/soft-delete
 - [x] `users.role_changed` logged when role changes (properties: old role, new role)
-- [ ] `branches.switched` logged when user switches active branch (properties: from_branch_id, to_branch_id)
+- [x] `branches.switched` logged when user switches active branch (properties: from_branch_id, to_branch_id)
 
 ## 9. Tests
 - [x] Authentication tests: login success, login failure, rate limiting, no-branch rejection, token revocation on logout
