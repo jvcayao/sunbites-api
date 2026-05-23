@@ -91,7 +91,7 @@ npm run type-check
 ### PR Title Format
 
 ```
-[TICKET-123] Short description of change
+Short description of change
 ```
 
 ### Commit and PR Body Rules

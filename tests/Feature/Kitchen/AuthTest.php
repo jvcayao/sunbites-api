@@ -164,6 +164,45 @@ class AuthTest extends TestCase
         $response->assertOk();
     }
 
+    public function test_authenticated_user_can_switch_branch_and_activity_is_logged(): void
+    {
+        $branch = Branch::factory()->create(['is_active' => true]);
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+        $user->branches()->attach($branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+        $token = $this->staffToken($user);
+
+        $response = $this->withToken($token)
+            ->postJson('/api/v1/auth/branch', [
+                'branch_id' => $branch->id,
+                'from_branch_id' => null,
+            ]);
+
+        $response->assertOk()
+            ->assertJsonFragment(['id' => $branch->id, 'slug' => $branch->slug]);
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'auth',
+            'description' => 'branches.switched',
+            'causer_id' => $user->id,
+        ]);
+    }
+
+    public function test_user_cannot_switch_to_unassigned_branch(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+        $unassignedBranch = Branch::factory()->create(['is_active' => true]);
+        $token = $this->staffToken($user);
+
+        $response = $this->withToken($token)
+            ->postJson('/api/v1/auth/branch', [
+                'branch_id' => $unassignedBranch->id,
+            ]);
+
+        $response->assertForbidden();
+    }
+
     public function test_admin_can_access_any_branch_via_header(): void
     {
         $admin = User::factory()->create();

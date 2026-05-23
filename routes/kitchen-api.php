@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Kitchen\AuthController;
+use App\Http\Controllers\Kitchen\BranchController;
 use App\Http\Controllers\Kitchen\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,9 +14,11 @@ Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])->m
 Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/user', [AuthController::class, 'user']);
+    Route::post('/auth/branch', [AuthController::class, 'setBranch']);
 
-    // User management — admin only
+    // Branch list + User management — admin only
     Route::middleware('permission:users.manage')->group(function () {
+        Route::get('/branches', [BranchController::class, 'index']);
         Route::apiResource('users', UserManagementController::class)->except('destroy');
         Route::post('/users/{user}/deactivate', [UserManagementController::class, 'deactivate']);
         Route::post('/users/{user}/reactivate', [UserManagementController::class, 'reactivate'])->withTrashed();
