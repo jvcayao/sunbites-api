@@ -25,7 +25,7 @@ class UserResource extends JsonResource
             'birthday' => $this->birthday?->toDateString(),
             'gender' => $this->gender,
             'civil_status' => $this->civil_status,
-            'profile_photo_path' => $this->profile_photo_path,
+            'has_photo' => (bool) $this->profile_photo_path,
             'phone' => $this->phone,
             'emergency_contact_name' => $this->emergency_contact_name,
             'emergency_contact_phone' => $this->emergency_contact_phone,

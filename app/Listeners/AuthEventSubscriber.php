@@ -5,6 +5,7 @@ namespace App\Listeners;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Events\Dispatcher;
 
 class AuthEventSubscriber
@@ -44,12 +45,21 @@ class AuthEventSubscriber
             ->log('auth.failed');
     }
 
+    public function handlePasswordReset(PasswordReset $event): void
+    {
+        activity('auth')
+            ->causedBy($event->user)
+            ->withProperties(['ip' => request()->ip()])
+            ->log('auth.password_reset');
+    }
+
     public function subscribe(Dispatcher $events): array
     {
         return [
             Login::class => 'handleLogin',
             Logout::class => 'handleLogout',
             Failed::class => 'handleFailed',
+            PasswordReset::class => 'handlePasswordReset',
         ];
     }
 }

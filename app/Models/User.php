@@ -70,6 +70,18 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Spatie Permission uses getDefaultGuardName() to resolve which guard's roles
+     * and permissions to look up. When requests are authenticated via Sanctum,
+     * Laravel's auth manager calls shouldUse('sanctum'), which changes the global
+     * default guard. Without this override, Spatie would look for roles/permissions
+     * with guard_name='sanctum' and find nothing (they are seeded as 'web').
+     */
+    public function getDefaultGuardName(): string
+    {
+        return 'web';
+    }
+
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
