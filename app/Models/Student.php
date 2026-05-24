@@ -98,6 +98,11 @@ class Student extends Model implements Wallet
         return $this->hasMany(CreditTransaction::class);
     }
 
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
     public static function generateUniqueQrCode(): string
     {
         $attempts = 0;

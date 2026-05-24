@@ -3,14 +3,18 @@
 use App\Http\Controllers\Kitchen\AuthController;
 use App\Http\Controllers\Kitchen\BranchController;
 use App\Http\Controllers\Kitchen\BranchMonthlyAmountController;
+use App\Http\Controllers\Kitchen\CheckoutController;
 use App\Http\Controllers\Kitchen\CreditController;
 use App\Http\Controllers\Kitchen\EnrollmentController;
+use App\Http\Controllers\Kitchen\InlineReloadController;
 use App\Http\Controllers\Kitchen\InventoryController;
 use App\Http\Controllers\Kitchen\MealPlannerController;
 use App\Http\Controllers\Kitchen\PaymentController;
 use App\Http\Controllers\Kitchen\PosMenuItemController;
 use App\Http\Controllers\Kitchen\StudentController;
+use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
+use App\Http\Controllers\Kitchen\TransactionController;
 use App\Http\Controllers\Kitchen\UserManagementController;
 use App\Http\Controllers\Kitchen\WalletController;
 use Illuminate\Support\Facades\Route;
@@ -26,12 +30,25 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     Route::get('/auth/user', [AuthController::class, 'user']);
     Route::post('/auth/branch', [AuthController::class, 'setBranch']);
 
-    // POS Menu Items — admin, manager only
+    // POS Menu Items — GET available to all staff; mutations admin/manager only
+    Route::get('/pos/menu-items', [PosMenuItemController::class, 'index']);
     Route::middleware('role:admin|manager')->group(function () {
-        Route::get('/pos/menu-items', [PosMenuItemController::class, 'index']);
         Route::post('/pos/menu-items', [PosMenuItemController::class, 'store']);
+        Route::put('/pos/menu-items/{item}', [PosMenuItemController::class, 'update']);
         Route::post('/pos/menu-items/{item}/toggle', [PosMenuItemController::class, 'toggleAvailability']);
         Route::delete('/pos/menu-items/{item}', [PosMenuItemController::class, 'destroy']);
+    });
+
+    // POS — student lookup, checkout, transactions — all staff
+    Route::post('/pos/students/lookup', [StudentLookupController::class, 'lookup']);
+    Route::get('/pos/students/{student}', [StudentLookupController::class, 'show']);
+    Route::post('/pos/checkout', [CheckoutController::class, 'store']);
+    Route::post('/pos/inline-reload', [InlineReloadController::class, 'store']);
+    Route::get('/pos/transactions', [TransactionController::class, 'index']);
+
+    // POS — void — admin, manager, supervisor only
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::post('/pos/transactions/{order}/void', [TransactionController::class, 'void']);
     });
 
     // Meal Planner — view for all staff; edit/reset for admin, manager only

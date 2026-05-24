@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Listeners\AuthEventSubscriber;
+use App\Models\Order;
 use App\Models\User;
+use App\Policies\OrderPolicy;
 use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -24,6 +26,7 @@ class AppServiceProvider extends ServiceProvider
 
         Event::subscribe(AuthEventSubscriber::class);
 
+        Gate::policy(Order::class, OrderPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
     }
 

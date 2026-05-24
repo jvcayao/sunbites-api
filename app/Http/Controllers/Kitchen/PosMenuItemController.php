@@ -32,6 +32,19 @@ class PosMenuItemController extends Controller
         return response()->json($this->formatItem($item), 201);
     }
 
+    public function update(Request $request, PosMenuItem $item): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'price' => ['required', 'numeric', 'min:0', 'max:9999.99'],
+            'category' => ['required', new Enum(MenuCategory::class)],
+        ]);
+
+        $item->update($validated);
+
+        return response()->json($this->formatItem($item));
+    }
+
     public function toggleAvailability(Request $request, PosMenuItem $item): JsonResponse
     {
         Activity::withoutLogging(function () use ($item) {
