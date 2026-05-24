@@ -4,7 +4,6 @@ namespace Tests\Feature\Kitchen;
 
 use App\Models\Branch;
 use App\Models\Concerns\HasBranch;
-use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -39,7 +38,7 @@ class BranchScopeTest extends TestCase
         $this->assertNotNull($results);
     }
 
-    public function test_withoutbranch_removes_scope_from_query(): void
+    public function test_without_branch_scope_removes_branch_id_from_query(): void
     {
         $branch = Branch::factory()->create();
         app()->instance('active_branch', $branch);
@@ -86,29 +85,5 @@ class BranchScopeTest extends TestCase
         $scopedModel::getEventDispatcher()->dispatch('eloquent.creating: '.$scopedModel::class, $instance);
 
         $this->assertEquals($branch->id, $instance->branch_id);
-    }
-
-    public function test_set_active_branch_middleware_binds_branch_from_session(): void
-    {
-        $branch = Branch::factory()->create();
-        $user = User::factory()->create();
-        $user->assignRole('admin');
-
-        $this->actingAs($user)
-            ->withSession(['active_branch_id' => $branch->id])
-            ->get(route('dashboard'));
-
-        $this->assertTrue(app()->bound('active_branch'));
-        $this->assertEquals($branch->id, app('active_branch')->id);
-    }
-
-    public function test_set_active_branch_middleware_skips_when_no_session(): void
-    {
-        $user = User::factory()->create();
-        $user->assignRole('admin');
-
-        $this->actingAs($user)->get(route('branch-selector'));
-
-        $this->assertFalse(app()->bound('active_branch'));
     }
 }

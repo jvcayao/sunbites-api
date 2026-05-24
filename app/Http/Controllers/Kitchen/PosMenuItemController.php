@@ -5,31 +5,21 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\MenuCategory;
 use App\Http\Controllers\Controller;
 use App\Models\PosMenuItem;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Enum;
-use Inertia\Inertia;
-use Inertia\Response;
+use Spatie\Activitylog\Facades\Activity;
 
 class PosMenuItemController extends Controller
 {
-    public function index(): Response
+    public function index(): JsonResponse
     {
         $items = PosMenuItem::orderBy('sort_order')->orderBy('name')->get();
 
-        return Inertia::render('kitchen/pos/index', [
-            'menuItems' => $items->map(fn (PosMenuItem $item) => [
-                'id' => $item->id,
-                'name' => $item->name,
-                'price' => $item->price,
-                'category' => $item->category->value,
-                'is_available' => $item->is_available,
-                'sort_order' => $item->sort_order,
-            ]),
-        ]);
+        return response()->json($items->map(fn (PosMenuItem $item) => $this->formatItem($item)));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -37,14 +27,16 @@ class PosMenuItemController extends Controller
             'category' => ['required', new Enum(MenuCategory::class)],
         ]);
 
-        PosMenuItem::create($validated);
+        $item = PosMenuItem::create($validated);
 
-        return back()->with('success', 'Menu item added.');
+        return response()->json($this->formatItem($item), 201);
     }
 
-    public function toggleAvailability(Request $request, PosMenuItem $item): RedirectResponse
+    public function toggleAvailability(Request $request, PosMenuItem $item): JsonResponse
     {
-        $item->update(['is_available' => ! $item->is_available]);
+        Activity::withoutLogging(function () use ($item) {
+            $item->update(['is_available' => ! $item->is_available]);
+        });
 
         activity('menu')
             ->causedBy($request->user())
@@ -52,13 +44,28 @@ class PosMenuItemController extends Controller
             ->withProperties(['is_available' => $item->is_available])
             ->log('menu.item_toggled');
 
-        return back()->with('success', $item->is_available ? 'Item marked as available.' : 'Item marked as unavailable.');
+        return response()->json(['is_available' => $item->is_available]);
     }
 
-    public function destroy(PosMenuItem $item): RedirectResponse
+    public function destroy(PosMenuItem $item): JsonResponse
     {
         $item->delete();
 
-        return back()->with('success', 'Menu item deleted.');
+        return response()->json(['message' => 'Menu item deleted.']);
+    }
+
+    /**
+     * @return array{id: int, name: string, price: string, category: string, is_available: bool, sort_order: int}
+     */
+    private function formatItem(PosMenuItem $item): array
+    {
+        return [
+            'id' => $item->id,
+            'name' => $item->name,
+            'price' => $item->price,
+            'category' => $item->category->value,
+            'is_available' => $item->is_available,
+            'sort_order' => $item->sort_order,
+        ];
     }
 }
