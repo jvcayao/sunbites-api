@@ -80,13 +80,25 @@ class UserManagementTest extends TestCase
     // JSON API tests
     // -------------------------------------------------------------------------
 
-    public function test_non_admin_cannot_access_user_list(): void
+    public function test_manager_can_access_user_list(): void
     {
         $manager = User::factory()->create();
         $manager->assignRole('manager');
         $managerToken = $manager->createToken('staff', ['staff'])->plainTextToken;
 
         $response = $this->withToken($managerToken)
+            ->getJson('/api/v1/users');
+
+        $response->assertOk()->assertJsonStructure(['data', 'links', 'meta']);
+    }
+
+    public function test_supervisor_cannot_access_user_list(): void
+    {
+        $supervisor = User::factory()->create();
+        $supervisor->assignRole('supervisor');
+        $supervisorToken = $supervisor->createToken('staff', ['staff'])->plainTextToken;
+
+        $response = $this->withToken($supervisorToken)
             ->getJson('/api/v1/users');
 
         $response->assertForbidden();
@@ -99,10 +111,9 @@ class UserManagementTest extends TestCase
         $response = $this->withToken($this->adminToken())
             ->getJson('/api/v1/users');
 
-        // The controller wraps a paginator in response()->json(), which serializes
-        // the ResourceCollection as a flat array (no 'data' envelope).
         $response->assertOk()
-            ->assertJsonIsArray();
+            ->assertJsonStructure(['data', 'links', 'meta'])
+            ->assertJsonIsArray('data');
     }
 
     public function test_admin_can_create_user(): void

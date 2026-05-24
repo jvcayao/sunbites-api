@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class StudentListTest extends TestCase
@@ -23,27 +24,29 @@ class StudentListTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
 
-        $this->branch = Branch::factory()->create();
+        $this->branch = Branch::factory()->create(['is_active' => true]);
         $this->supervisor = User::factory()->create();
         $this->supervisor->assignRole('supervisor');
         $this->supervisor->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
     }
 
-    private function actingAsSupervisor(): static
+    private function asSupervisor(): static
     {
-        return $this->actingAs($this->supervisor)->withSession(['active_branch_id' => $this->branch->id]);
+        Sanctum::actingAs($this->supervisor, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
     public function test_student_list_is_branch_scoped(): void
     {
-        $otherBranch = Branch::factory()->create();
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
         Student::factory()->create(['branch_id' => $this->branch->id]);
-        Student::factory()->create(['branch_id' => $otherBranch->id]);
+        Student::withoutBranch()->create(Student::factory()->make(['branch_id' => $otherBranch->id])->toArray());
 
-        $response = $this->actingAsSupervisor()->get(route('kitchen.students.index'));
+        $response = $this->asSupervisor()->getJson('/api/v1/students');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->where('students.data', fn ($data) => count($data) === 1));
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
     }
 
     public function test_search_filter_works_by_name(): void
@@ -51,10 +54,10 @@ class StudentListTest extends TestCase
         Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana', 'last_name' => 'Santos']);
         Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Bob', 'last_name' => 'Cruz']);
 
-        $response = $this->actingAsSupervisor()->get(route('kitchen.students.index', ['search' => 'Ana']));
+        $response = $this->asSupervisor()->getJson('/api/v1/students?search=Ana');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->where('students.data', fn ($data) => count($data) === 1));
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
     }
 
     public function test_search_filter_works_by_student_number(): void
@@ -62,10 +65,10 @@ class StudentListTest extends TestCase
         Student::factory()->create(['branch_id' => $this->branch->id, 'student_number' => 'ANT-2025-001']);
         Student::factory()->create(['branch_id' => $this->branch->id, 'student_number' => 'ANT-2025-002']);
 
-        $response = $this->actingAsSupervisor()->get(route('kitchen.students.index', ['search' => 'ANT-2025-001']));
+        $response = $this->asSupervisor()->getJson('/api/v1/students?search=ANT-2025-001');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->where('students.data', fn ($data) => count($data) === 1));
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
     }
 
     public function test_status_filter_works(): void
@@ -73,10 +76,10 @@ class StudentListTest extends TestCase
         Student::factory()->create(['branch_id' => $this->branch->id, 'enrollment_status' => EnrollmentStatus::Enrolled->value]);
         Student::factory()->create(['branch_id' => $this->branch->id, 'enrollment_status' => EnrollmentStatus::Paused->value]);
 
-        $response = $this->actingAsSupervisor()->get(route('kitchen.students.index', ['status' => 'paused']));
+        $response = $this->asSupervisor()->getJson('/api/v1/students?status=paused');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->where('students.data', fn ($data) => count($data) === 1));
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
     }
 
     public function test_type_tab_filters_subscription_students(): void
@@ -84,10 +87,10 @@ class StudentListTest extends TestCase
         Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
         Student::factory()->nonSubscription()->create(['branch_id' => $this->branch->id]);
 
-        $response = $this->actingAsSupervisor()->get(route('kitchen.students.index', ['type' => 'subscription']));
+        $response = $this->asSupervisor()->getJson('/api/v1/students?type=subscription');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->where('students.data', fn ($data) => count($data) === 1));
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
     }
 
     public function test_students_are_sorted_alphabetically_by_last_name(): void
@@ -95,10 +98,10 @@ class StudentListTest extends TestCase
         Student::factory()->create(['branch_id' => $this->branch->id, 'last_name' => 'Zapanta', 'first_name' => 'Ana']);
         Student::factory()->create(['branch_id' => $this->branch->id, 'last_name' => 'Aquino', 'first_name' => 'Bob']);
 
-        $response = $this->actingAsSupervisor()->get(route('kitchen.students.index'));
+        $response = $this->asSupervisor()->getJson('/api/v1/students');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->where('students.data.0.last_name', 'Aquino'));
+        $response->assertJsonPath('data.0.last_name', 'Aquino');
     }
 
     public function test_cashier_cannot_access_student_list(): void
@@ -107,9 +110,10 @@ class StudentListTest extends TestCase
         $cashier->assignRole('cashier');
         $cashier->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
-        $response = $this->actingAs($cashier)
-            ->withSession(['active_branch_id' => $this->branch->id])
-            ->get(route('kitchen.students.index'));
+        Sanctum::actingAs($cashier, ['staff']);
+
+        $response = $this->withHeaders(['X-Branch-Id' => $this->branch->id])
+            ->getJson('/api/v1/students');
 
         $response->assertForbidden();
     }

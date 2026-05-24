@@ -13,7 +13,7 @@ There are two types of students, set at enrollment and driving significant behav
 | | 📋 Subscription | 🪙 Non-Subscription |
 |---|---|---|
 | Monthly fee | Yes — fixed rate per school month (e.g. ₱2,970/month) | No monthly fee |
-| Payment tracking | Tracks paid/unpaid per month (June–March) | Not tracked |
+| Payment tracking | Tracks paid/unpaid per month for a configured date range | Not tracked |
 | Student list card | Orange left border, month payment badges | Purple left border, "Wallet-only" info box |
 | Parent portal tabs | Profile + Monthly Menu + Food History + Monthly Payment + Feedback | Profile + Food History + Feedback only |
 | Payment reminder banner | Shown 14 days before month end | Not shown |
@@ -63,25 +63,29 @@ student_monthly_payments (subscription students only)
   student_id               (FK → students)
   school_month             (enum: june, july, august, september, october,
                                   november, december, january, february, march)
+  year                     (int)             — school year the payment belongs to (e.g. 2025)
   status                   (enum: paid, unpaid)
   amount                   (decimal)         — amount at time of recording (admin-overridable)
   recorded_at              (timestamp, nullable)
   recorded_by              (FK → users, nullable)
 
-  UNIQUE KEY: (student_id, school_month)
+  UNIQUE KEY: (student_id, school_month, year)
 
-branch_monthly_amounts (admin-overridable monthly rates per branch)
+branch_monthly_amounts (per-branch, per-year, per-month configuration — sole source of truth)
   id
   branch_id                (FK → branches)
   school_month             (enum)
-  amount                   (decimal)         — default from school_months config
+  year                     (int)             — school year this config applies to (e.g. 2025)
+  days                     (int)             — school days in this month for this year
+  amount                   (decimal)         — monthly fee = daily_meal_rate × days
 
-  UNIQUE KEY: (branch_id, school_month)
+  UNIQUE KEY: (branch_id, school_month, year)
 ```
 
 **Notes:**
-- `student_monthly_payments` rows are created for all 10 school months at enrollment, status `unpaid`, for subscription students only.
-- `branch_monthly_amounts` stores per-branch overrides of the default monthly fee. Falls back to config default (₱135 × school days) if no override exists.
+- `student_monthly_payments` rows are created for each calendar month in the chosen subscription date range at enrollment, status `unpaid`, for subscription students only.
+- `branch_monthly_amounts` is the sole source of truth for days and amount per school month per year per branch. Falls back to system defaults (₱135 × default days per month from `config/sunbites.php`) if no record exists for a given month+year.
+- `config/sunbites.php` retains `daily_meal_rate` (₱135) as the base fallback rate and the system-default `days` per school month. The `school_months.*.amount` values in config are no longer authoritative.
 - `points` rule: 1 point earned per ₱1,000 cumulative spend. Tracked on `students.total_spent`.
 - `credit_balance` tracks outstanding canteen credit. `CREDIT_LIMIT = ₱300` is a system constant (configurable in `config/sunbites.php`).
 
@@ -135,11 +139,23 @@ Accessible at: `pos.sunbites.com.ph/enrollment`, roles: Admin, Manager, Supervis
 - Allergies / Medical restrictions (textarea)
 - Additional notes (textarea)
 
-**3. Contact / Guardian Information** (at least one required)
+**3. Enrollment Type** — Subscription or Non-Subscription radio cards
+
+**4. Subscription Period** (shown only when Subscription type is selected)
+- Start month + year picker (default: June of the current year)
+- End month + year picker (default: March of current year + 1)
+- Staff can change both pickers freely — any contiguous month range is valid
+- System derives one payment row per calendar month between start and end (inclusive)
+- A preview table renders below the pickers showing each month, its days, and computed amount
+  - If a `branch_monthly_amounts` record exists for that month+year, use its days+amount
+  - Otherwise fall back to `daily_meal_rate` × system-default days for that month
+  - Preview updates live as the pickers change
+
+**5. Contact / Guardian Information** (at least one required)
 - Full name, Relationship, Phone, Address, Email
 - "Add another contact" option (up to 3 contacts)
 
-**4. Permissions & Acknowledgement**
+**6. Permissions & Acknowledgement**
 - Checkbox: permission to receive meals
 - Checkbox: responsibility to notify about dietary changes
 - Digital signature (type full name)
@@ -150,7 +166,7 @@ Accessible at: `pos.sunbites.com.ph/enrollment`, roles: Admin, Manager, Supervis
 - Validate `student_number` is unique per branch
 - Auto-generate `qr_code`
 - Create wallet via `bavix/laravel-wallet`
-- If subscription type: seed all 10 monthly payment records (status=unpaid)
+- If subscription type: generate one `student_monthly_payments` row per calendar month in the selected range (status=unpaid, amount resolved from `branch_monthly_amounts` or config fallback)
 - Show success screen with generated student number, QR code display, and print button
 
 ---
@@ -194,7 +210,7 @@ Accessible at: `pos.sunbites.com.ph/students`, roles: Admin, Manager, Supervisor
 - Search by name or student number
 - Filter by grade level
 - Filter by enrollment status
-- **Month + Payment Status filter** (subscription tab only): Month dropdown + Paid/Unpaid toggle
+- **Month + Year + Payment Status filter** (subscription tab only): Month dropdown + Year dropdown + Paid/Unpaid toggle
 - Group tabs: All / Subscription / Non-Subscription
 - Default sort: alphabetical by last name, then first name
 
@@ -216,7 +232,7 @@ Each student shows:
 - Actions: Edit, Wallet Top-up, Remove (with confirmation)
 
 **Subscription student card (bottom section):**
-- Month payment badges (Jun–Mar): green ✓ = paid, red ✗ = unpaid — clickable to toggle
+- Month payment badges showing month + year (e.g. "Jun '25"): green ✓ = paid, red ✗ = unpaid — clickable to toggle
 - "Record Payment" button
 
 **Non-subscription student card (bottom section):**
@@ -250,8 +266,54 @@ Roles: Admin, Manager, Supervisor (NOT Cashier)
 - **Profile** — full student info, photo, QR code (with download/print), contacts
 - **Wallet** — current balance, top-up button, transaction history
 - **Order History** — all canteen transactions for this student
-- **Payment** — subscription payment manager (Admin/Manager: mark paid/unpaid, edit monthly amounts)
+- **Payment** — subscription payment manager (Admin/Manager: mark paid/unpaid, edit monthly amounts; "Add Subscription Period" button for Admin/Manager/Supervisor)
 - **Notes / Logs** — `activity_log` records where `subject_type = Student`; read-only, newest first
+
+---
+
+## Add Subscription Period (Student Detail — Payment Tab)
+
+Allows adding additional subscription date ranges to an existing student's payment records.
+
+- **Who:** Admin, Manager, Supervisor
+- **Where:** Student detail → Payment tab → `[+ Add Subscription Period]` button
+- **Action:** Opens a dialog with the same month+year range picker used in enrollment
+- **Validation:** No overlap with existing `student_monthly_payments` records for this student (same school_month + year combination must not already exist)
+- **Preview:** Same preview table as enrollment — shows computed amount per month before confirming
+- **On confirm:** Creates new `student_monthly_payments` rows for all months in the new range (status=unpaid)
+
+---
+
+## Branch Monthly Amounts — Full CRUD
+
+Accessible at: `pos.sunbites.com.ph/references/subscription-config`
+
+Roles: Admin, Manager, Supervisor
+
+This is the management interface for the `branch_monthly_amounts` table. Admins/Managers/Supervisors configure how many school days are in each month for a given year and branch, which determines the subscription fee for that month.
+
+### Amount Computation
+`amount = daily_meal_rate × days`
+
+Where `daily_meal_rate` is read from the `system_configurations` table (key: `daily_meal_rate`), falling back to `135` if no record exists. See Spec 09 (System Configuration).
+
+The computed amount is the default — admins can override it directly in the UI by entering a manual amount. If an explicit `amount` is provided in the request, it is stored as-is; otherwise the server computes `days × daily_meal_rate`.
+
+If no record exists for a given school month + year combination, the system uses the default days from `config/sunbites.php` and computes the fallback amount at runtime.
+
+### Default Days (System Fallback)
+| Month | Default Days | Default Amount |
+|---|---|---|
+| June | 22 | ₱2,970 |
+| July | 22 | ₱2,970 |
+| August | 18 | ₱2,430 |
+| September | 22 | ₱2,970 |
+| October | 22 | ₱2,970 |
+| November | 16 | ₱2,160 |
+| December | 15 | ₱2,025 |
+| January | 20 | ₱2,700 |
+| February | 18 | ₱2,430 |
+| March | 7 | ₱945 |
 
 ---
 
@@ -320,50 +382,69 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | POST | `/api/v1/students/{student}/wallet/top-up` | admin, manager, supervisor | Wallet top-up |
 | POST | `/api/v1/students/{student}/credit/settle` | admin, manager | Settle outstanding credit |
 | GET | `/api/v1/students/{student}/payments` | admin, manager, supervisor | Monthly payment records |
-| PATCH | `/api/v1/students/{student}/payments/{month}` | admin, manager | Toggle month paid/unpaid |
-| PUT | `/api/v1/branch-monthly-amounts/{month}` | admin | Override monthly amount per branch |
+| PATCH | `/api/v1/students/{student}/payments/{payment}` | admin, manager | Toggle month paid/unpaid |
+| POST | `/api/v1/students/{student}/payments/range` | admin, manager, supervisor | Add subscription period (new date range) |
+| GET | `/api/v1/branch-monthly-amounts` | admin, manager, supervisor | List all months for active branch + year |
+| POST | `/api/v1/branch-monthly-amounts` | admin, manager, supervisor | Create/upsert a month config |
+| PUT | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Update a specific month config record |
+| DELETE | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Delete a month config record |
 
 ---
 
 ## Requirements
 
-- [ ] `students` table with all fields including `student_type`, `points`, `total_spent`, `credit_balance`
-- [ ] `student_contacts` table (one-to-many from student)
-- [ ] `student_monthly_payments` table with UNIQUE KEY on `(student_id, school_month)`
-- [ ] `branch_monthly_amounts` table with UNIQUE KEY on `(branch_id, school_month)`
-- [ ] `credit_transactions` table with `type` enum (Charged/Settled/Voided — TitleCase)
-- [ ] `HasBranch` trait on `Student` model
-- [ ] `student_number` manually entered by staff — school-assigned ID; validated unique per branch
-- [ ] Auto-generate unique `qr_code` on creation: `'SB-' . Str::random(12)` with collision retry loop
-- [ ] QR regeneration: Admin/Manager/Supervisor; old token immediately invalidated; activity log entry (values not logged)
-- [ ] Wallet created via `bavix/laravel-wallet` on student enrollment
-- [ ] Points tracking: 1 point per ₱1,000 cumulative spend — incremented at POS checkout
-- [ ] Enrollment form at `POST /api/v1/enrollment` — all validation, monthly payment seeding for subscription
-- [ ] Enrollment API response includes: student_number, qr_code (for display/print) — no email/password credentials
-- [ ] Student list endpoint with filters: search, grade, enrollment status, month+payment filter (subscription only), type
-- [ ] Default sort: alphabetical by last_name then first_name
-- [ ] Subscription student: month badges (Jun–Mar) with toggle paid/unpaid
-- [ ] Non-subscription student: wallet-only info, no monthly payments
-- [ ] Admin can override monthly amounts per branch via `branch_monthly_amounts`
-- [ ] Student status change with role enforcement; reason required for `banned`/`unenrolled`
-- [ ] Wallet top-up (Admin/Manager/Supervisor only): amount, payment method, reference number (alphanumeric max 50 chars if provided), live new-balance preview
-- [ ] Student detail response with Profile, Wallet, Order History, Payment, and Logs tabs
-- [ ] `credit_balance` is a cached aggregate — all credit changes go through `credit_transactions` insert + atomic `credit_balance` update in same `DB::transaction()`
-- [ ] Admin/Manager only can settle credit (Supervisor excluded) — enforced in `StudentPolicy::settleCredit()`
-- [ ] Mark as Settled: inserts `credit_transactions` (type=Settled), atomically sets `credit_balance = 0` with `lockForUpdate()`
-- [ ] Student card shows red "₱X Credit Owed" badge when `credit_balance > 0`
-- [ ] Freetext fields (notes, allergies): `strip_tags()` server-side before storage; rendered as plain text in UI
-- [ ] GCash/Bank reference number: alphanumeric max 50 chars, server-side validation if provided
-- [ ] Student photo upload: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation
-- [ ] `CREDIT_LIMIT` constant (₱300) defined in `config/sunbites.php`
-- [ ] Export students list to Excel (Admin/Manager only); explicit field allowlist — no government ID fields
-- [ ] Soft delete with retention of order history
-- [ ] `StudentPolicy` covering view, create, update, delete, top-up, settleCredit
-- [ ] Log `students.enrolled` (properties: student_type, branch)
-- [ ] Log `students.updated` (dirty-tracked via `LogsActivity` trait)
-- [ ] Log `students.status_changed` (properties: old_status, new_status, reason)
-- [ ] Log `students.deleted` on soft delete
-- [ ] Log `wallet.topped_up` (properties: amount, payment_method, reference, new_balance)
-- [ ] Log `wallet.inline_reload` on POS inline reload (properties: amount, payment_method, cashier, order context)
-- [ ] Log `wallet.credit_settled` (properties: amount_settled, settled_by)
-- [ ] Log `payments.recorded` (properties: school_month, status, amount, recorded_by)
+- [x] `students` table with all fields including `student_type`, `points`, `total_spent`, `credit_balance`
+- [x] `student_contacts` table (one-to-many from student)
+- [x] `student_monthly_payments` table with UNIQUE KEY on `(student_id, school_month)` (to be updated to `(student_id, school_month, year)`)
+- [x] `branch_monthly_amounts` table with UNIQUE KEY on `(branch_id, school_month)` (to be updated to `(branch_id, school_month, year)`)
+- [x] `credit_transactions` table with `type` enum (Charged/Settled/Voided — TitleCase)
+- [x] `HasBranch` trait on `Student` model
+- [x] `student_number` manually entered by staff — school-assigned ID; validated unique per branch
+- [x] Auto-generate unique `qr_code` on creation: `'SB-' . Str::random(12)` with collision retry loop
+- [x] QR regeneration: Admin/Manager/Supervisor; old token immediately invalidated; activity log entry (values not logged)
+- [x] Wallet created via `bavix/laravel-wallet` on student enrollment
+- [x] Points tracking: 1 point per ₱1,000 cumulative spend — incremented at POS checkout
+- [x] Enrollment API response includes: student_number, qr_code (for display/print) — no email/password credentials
+- [x] Student list endpoint with filters: search, grade, enrollment status, month+payment filter (subscription only), type
+- [x] Default sort: alphabetical by last_name then first_name
+- [x] Subscription student: month badges with toggle paid/unpaid
+- [x] Non-subscription student: wallet-only info, no monthly payments
+- [x] Student status change with role enforcement; reason required for `banned`/`unenrolled`
+- [x] Wallet top-up (Admin/Manager/Supervisor only): amount, payment method, reference number (alphanumeric max 50 chars if provided), live new-balance preview
+- [x] Student detail response with Profile, Wallet, Order History, Payment, and Logs tabs
+- [x] `credit_balance` is a cached aggregate — all credit changes go through `credit_transactions` insert + atomic `credit_balance` update in same `DB::transaction()`
+- [x] Admin/Manager only can settle credit (Supervisor excluded) — enforced in `StudentPolicy::settleCredit()`
+- [x] Mark as Settled: inserts `credit_transactions` (type=Settled), atomically sets `credit_balance = 0` with `lockForUpdate()`
+- [x] Student card shows red "₱X Credit Owed" badge when `credit_balance > 0`
+- [x] Freetext fields (notes, allergies): `strip_tags()` server-side before storage; rendered as plain text in UI
+- [x] GCash/Bank reference number: alphanumeric max 50 chars, server-side validation if provided
+- [x] Student photo upload: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation
+- [x] `CREDIT_LIMIT` constant (₱300) defined in `config/sunbites.php`
+- [x] Export students list to Excel (Admin/Manager only); explicit field allowlist — no government ID fields
+- [x] Soft delete with retention of order history
+- [x] `StudentPolicy` covering view, create, update, delete, top-up, settleCredit
+- [x] Log `students.enrolled` (properties: student_type, branch)
+- [x] Log `students.updated` (dirty-tracked via `LogsActivity` trait)
+- [x] Log `students.status_changed` (properties: old_status, new_status, reason)
+- [x] Log `students.deleted` on soft delete
+- [x] Log `wallet.topped_up` (properties: amount, payment_method, reference, new_balance)
+- [x] Log `wallet.inline_reload` on POS inline reload (properties: amount, payment_method, cashier, order context)
+- [x] Log `wallet.credit_settled` (properties: amount_settled, settled_by)
+- [x] Log `payments.recorded` (properties: school_month, year, status, amount, recorded_by)
+- [ ] `BranchMonthlyAmountController::store()` and `update()` — accept optional `amount` field in request; if provided, store it directly instead of computing `days × daily_meal_rate`; if absent, compute from current `daily_meal_rate` system config value
+- [ ] Student detail Payment tab — for `unpaid` payments only: show an `[Edit Amount]` inline button next to the toggle; opens a small dialog with a decimal input pre-filled with current amount; on save: `PATCH /api/v1/students/{student}/payments/{payment}` with `{ amount }`; updates the `amount` column without changing status
+- [ ] `PaymentController::updateAmount(Request, Student, StudentMonthlyPayment)` — new action on existing PATCH route: if request only contains `amount` (no status toggle), update the `amount` field on the payment record; only allowed on `unpaid` payments; roles: admin, manager
+- [ ] Migration: add `year` (int) column to `student_monthly_payments`; drop old unique key `(student_id, school_month)`; add new unique key `(student_id, school_month, year)`
+- [ ] Migration: add `year` (int) and `days` (int) columns to `branch_monthly_amounts`; drop old unique key `(branch_id, school_month)`; add new unique key `(branch_id, school_month, year)`
+- [ ] `config/sunbites.php`: keep `daily_meal_rate` and `school_months.*.days` as fallback defaults; `school_months.*.amount` is no longer authoritative but may remain for reference
+- [ ] Enrollment form: replace fixed 10-month seeding with subscription period date range picker (start month+year, end month+year); default June [current year] → March [current year + 1]
+- [ ] Enrollment form: preview table showing each month in range with resolved days+amount before submit
+- [ ] `EnrollmentController::store()`: accept `subscription_start` (month+year) and `subscription_end` (month+year); generate one payment row per calendar month in that range; resolve amount from `branch_monthly_amounts` for the given year, else fallback to `daily_meal_rate × default_days`
+- [ ] `GET /api/v1/branch-monthly-amounts?year=YYYY` — list all configured months for active branch + specified year
+- [ ] `POST /api/v1/branch-monthly-amounts` — create/upsert a month config (branch from active branch, school_month, year, days, amount computed as `daily_meal_rate × days`)
+- [ ] `PUT /api/v1/branch-monthly-amounts/{id}` — update days (and recompute amount); roles: admin, manager, supervisor
+- [ ] `DELETE /api/v1/branch-monthly-amounts/{id}` — delete a month config record; roles: admin, manager, supervisor
+- [ ] `POST /api/v1/students/{student}/payments/range` — add subscription period for existing student; validate no overlap on `(student_id, school_month, year)`; roles: admin, manager, supervisor
+- [ ] Student detail Payment tab: show `year` alongside month in each payment row
+- [ ] Student detail Payment tab: `[+ Add Subscription Period]` button (admin/manager/supervisor) — opens dialog with same range picker + preview table
+- [ ] New page: `pos.sunbites.com.ph/references/subscription-config` — year selector, table of configured months (Month | Days | Amount | Actions), "Add Month" button, inline or modal edit, show default vs configured indicator

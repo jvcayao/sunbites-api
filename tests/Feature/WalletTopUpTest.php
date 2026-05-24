@@ -7,6 +7,7 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class WalletTopUpTest extends TestCase
@@ -24,7 +25,7 @@ class WalletTopUpTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
 
-        $this->branch = Branch::factory()->create();
+        $this->branch = Branch::factory()->create(['is_active' => true]);
         $this->manager = User::factory()->create();
         $this->manager->assignRole('manager');
         $this->manager->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
@@ -32,53 +33,55 @@ class WalletTopUpTest extends TestCase
         $this->student = Student::factory()->create(['branch_id' => $this->branch->id]);
     }
 
-    private function actingAsManager(): static
+    private function asManager(): static
     {
-        return $this->actingAs($this->manager)->withSession(['active_branch_id' => $this->branch->id]);
+        Sanctum::actingAs($this->manager, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
     public function test_manager_can_top_up_wallet(): void
     {
-        $response = $this->actingAsManager()->post(route('kitchen.students.wallet.top-up', $this->student), [
+        $response = $this->asManager()->postJson("/api/v1/students/{$this->student->id}/wallet/top-up", [
             'amount' => 100,
             'payment_method' => 'cash',
         ]);
 
-        $response->assertRedirect();
-        $this->assertGreaterThan(0, $this->student->fresh()->wallet->balance);
+        $response->assertOk();
+        $response->assertJsonPath('new_balance', fn ($b) => $b > 0);
     }
 
     public function test_gcash_top_up_with_valid_reference_number(): void
     {
-        $response = $this->actingAsManager()->post(route('kitchen.students.wallet.top-up', $this->student), [
+        $response = $this->asManager()->postJson("/api/v1/students/{$this->student->id}/wallet/top-up", [
             'amount' => 200,
             'payment_method' => 'gcash',
             'reference_number' => 'ABC123456',
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
     }
 
     public function test_reference_number_must_be_alphanumeric(): void
     {
-        $response = $this->actingAsManager()->post(route('kitchen.students.wallet.top-up', $this->student), [
+        $response = $this->asManager()->postJson("/api/v1/students/{$this->student->id}/wallet/top-up", [
             'amount' => 100,
             'payment_method' => 'gcash',
             'reference_number' => 'ABC-123!@#',
         ]);
 
-        $response->assertSessionHasErrors('reference_number');
+        $response->assertJsonValidationErrors(['reference_number']);
     }
 
     public function test_reference_number_max_50_chars(): void
     {
-        $response = $this->actingAsManager()->post(route('kitchen.students.wallet.top-up', $this->student), [
+        $response = $this->asManager()->postJson("/api/v1/students/{$this->student->id}/wallet/top-up", [
             'amount' => 100,
             'payment_method' => 'gcash',
             'reference_number' => str_repeat('A', 51),
         ]);
 
-        $response->assertSessionHasErrors('reference_number');
+        $response->assertJsonValidationErrors(['reference_number']);
     }
 
     public function test_cashier_cannot_top_up_wallet(): void
@@ -87,9 +90,10 @@ class WalletTopUpTest extends TestCase
         $cashier->assignRole('cashier');
         $cashier->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
-        $response = $this->actingAs($cashier)
-            ->withSession(['active_branch_id' => $this->branch->id])
-            ->post(route('kitchen.students.wallet.top-up', $this->student), [
+        Sanctum::actingAs($cashier, ['staff']);
+
+        $response = $this->withHeaders(['X-Branch-Id' => $this->branch->id])
+            ->postJson("/api/v1/students/{$this->student->id}/wallet/top-up", [
                 'amount' => 100,
                 'payment_method' => 'cash',
             ]);
@@ -99,11 +103,11 @@ class WalletTopUpTest extends TestCase
 
     public function test_amount_must_be_at_least_1(): void
     {
-        $response = $this->actingAsManager()->post(route('kitchen.students.wallet.top-up', $this->student), [
+        $response = $this->asManager()->postJson("/api/v1/students/{$this->student->id}/wallet/top-up", [
             'amount' => 0,
             'payment_method' => 'cash',
         ]);
 
-        $response->assertSessionHasErrors('amount');
+        $response->assertJsonValidationErrors(['amount']);
     }
 }
