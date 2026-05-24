@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Listeners\AuthEventSubscriber;
 use App\Models\Order;
+use App\Models\Student;
 use App\Models\User;
 use App\Policies\OrderPolicy;
+use App\Policies\ParentStudentPolicy;
 use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -28,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
 
         Gate::policy(Order::class, OrderPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
+        Gate::policy(Student::class, ParentStudentPolicy::class);
     }
 
     /**
@@ -55,5 +58,9 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(3)->by($request->ip()),
             Limit::perMinute(5)->by('pwd-reset:'.$request->input('email', $request->input('token', ''))),
         ]);
+
+        RateLimiter::for('portal-login', fn (Request $request) => Limit::perMinutes(5, 5)->by($request->ip()));
+
+        RateLimiter::for('portal-forgot-password', fn (Request $request) => Limit::perMinutes(5, 5)->by($request->ip()));
     }
 }

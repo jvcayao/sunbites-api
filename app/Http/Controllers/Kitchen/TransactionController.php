@@ -57,12 +57,7 @@ class TransactionController extends Controller
 
         return response()->json([
             'data' => OrderResource::collection($orders->items()),
-            'meta' => [
-                'current_page' => $orders->currentPage(),
-                'last_page' => $orders->lastPage(),
-                'per_page' => $orders->perPage(),
-                'total' => $orders->total(),
-            ],
+            'meta' => $this->paginationMeta($orders),
             'summary' => [
                 'total_transactions' => (int) ($completedOrders->total_transactions ?? 0),
                 'total_revenue' => (float) ($completedOrders->revenue ?? 0),

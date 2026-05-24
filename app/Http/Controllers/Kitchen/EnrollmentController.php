@@ -10,6 +10,7 @@ use App\Models\BranchMonthlyAmount;
 use App\Models\Student;
 use App\Models\StudentContact;
 use App\Models\SystemConfiguration;
+use App\Services\ParentProvisioningService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,6 +19,8 @@ use Illuminate\Validation\Rule;
 
 class EnrollmentController extends Controller
 {
+    public function __construct(private readonly ParentProvisioningService $provisioningService) {}
+
     public function index(): JsonResponse
     {
         $dailyRate = SystemConfiguration::getValue('daily_meal_rate', 135);
@@ -63,7 +66,7 @@ class EnrollmentController extends Controller
             'contacts.*.relationship' => ['required', 'string', 'max:100'],
             'contacts.*.phone' => ['required', 'string', 'max:30'],
             'contacts.*.address' => ['required', 'string', 'max:255'],
-            'contacts.*.email' => ['required', 'email', 'max:150'],
+            'contacts.*.email' => ['nullable', 'email', 'max:150'],
             'signature' => ['required', 'string', 'max:255'],
             'permission_meals' => ['required', 'accepted'],
             'permission_dietary' => ['required', 'accepted'],
@@ -101,11 +104,11 @@ class EnrollmentController extends Controller
                 'first_name' => $validated['first_name'],
                 'last_name' => $validated['last_name'],
                 'grade_level' => $validated['grade_level'],
-                'section' => $validated['section'],
+                'section' => $validated['section'] ?? null,
                 'birthday' => $validated['birthday'],
                 'photo_path' => $photoPath,
-                'allergies' => $validated['allergies'],
-                'notes' => $validated['notes'],
+                'allergies' => $validated['allergies'] ?? null,
+                'notes' => $validated['notes'] ?? null,
                 'qr_code' => $qrCode,
                 'student_type' => $validated['student_type'],
                 'enrollment_status' => 'enrolled',
@@ -119,9 +122,18 @@ class EnrollmentController extends Controller
                     'relationship' => $contact['relationship'],
                     'phone' => $contact['phone'],
                     'address' => $contact['address'],
-                    'email' => $contact['email'],
+                    'email' => $contact['email'] ?? null,
                     'is_primary' => $index === 0,
                 ]);
+
+                if (! empty($contact['email'])) {
+                    $this->provisioningService->provision(
+                        $contact['email'],
+                        $contact['full_name'],
+                        $student->id,
+                        $request->user()->id,
+                    );
+                }
             }
 
             if ($studentType === StudentType::Subscription) {

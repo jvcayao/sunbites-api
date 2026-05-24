@@ -9,6 +9,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
+use App\Jobs\WalletAlertJob;
 use App\Models\CreditTransaction;
 use App\Models\Order;
 use App\Models\PosMenuItem;
@@ -183,6 +184,11 @@ class CheckoutController extends Controller
         });
 
         $order->load(['items', 'student.wallet', 'cashier']);
+
+        if ($order->payment_method === PaymentMethod::Wallet && $order->student_id) {
+            $currentBalance = $order->student->wallet?->balanceFloat ?? 0;
+            WalletAlertJob::dispatch($order->student_id, $currentBalance);
+        }
 
         activity('pos')
             ->causedBy($request->user())

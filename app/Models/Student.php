@@ -11,6 +11,8 @@ use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
@@ -83,6 +85,11 @@ class Student extends Model implements Wallet
         );
     }
 
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
     public function contacts(): HasMany
     {
         return $this->hasMany(StudentContact::class);
@@ -101,6 +108,12 @@ class Student extends Model implements Wallet
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function parents(): BelongsToMany
+    {
+        return $this->belongsToMany(ParentUser::class, 'parent_student', 'student_id', 'parent_id')
+            ->withPivot(['wallet_alert_threshold', 'linked_at', 'linked_by']);
     }
 
     public static function generateUniqueQrCode(): string

@@ -144,4 +144,45 @@ class StudentDetailTest extends TestCase
         $response->assertOk();
         $this->assertSoftDeleted('students', ['id' => $student->id]);
     }
+
+    public function test_manager_can_downgrade_subscription_student_to_wallet(): void
+    {
+        $student = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->patchJson("/api/v1/students/{$student->id}/type", [
+            'student_type' => 'non_subscription',
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'student_type' => 'non_subscription',
+        ]);
+    }
+
+    public function test_manager_can_upgrade_wallet_student_to_subscription(): void
+    {
+        $student = Student::factory()->nonSubscription()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->patchJson("/api/v1/students/{$student->id}/type", [
+            'student_type' => 'subscription',
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('students', [
+            'id' => $student->id,
+            'student_type' => 'subscription',
+        ]);
+    }
+
+    public function test_invalid_student_type_is_rejected(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->patchJson("/api/v1/students/{$student->id}/type", [
+            'student_type' => 'premium',
+        ]);
+
+        $response->assertUnprocessable();
+    }
 }

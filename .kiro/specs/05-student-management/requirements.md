@@ -152,8 +152,9 @@ Accessible at: `pos.sunbites.com.ph/enrollment`, roles: Admin, Manager, Supervis
   - Preview updates live as the pickers change
 
 **5. Contact / Guardian Information** (at least one required)
-- Full name, Relationship, Phone, Address, Email
+- Full name, Relationship, Phone, Address, Email (optional — but if provided, a parent portal account is provisioned)
 - "Add another contact" option (up to 3 contacts)
+- A note is shown on the form: "Providing an email will automatically send a portal activation link to the guardian."
 
 **6. Permissions & Acknowledgement**
 - Checkbox: permission to receive meals
@@ -167,7 +168,13 @@ Accessible at: `pos.sunbites.com.ph/enrollment`, roles: Admin, Manager, Supervis
 - Auto-generate `qr_code`
 - Create wallet via `bavix/laravel-wallet`
 - If subscription type: generate one `student_monthly_payments` row per calendar month in the selected range (status=unpaid, amount resolved from `branch_monthly_amounts` or config fallback)
+- **Parent account provisioning** (for each contact that has an email):
+  1. Look up `parents` table by email
+  2. If no record exists: create a `parents` record (name from contact, email, `email_verified_at = null` = not yet activated); generate a signed activation URL via `PasswordBroker` and dispatch `ParentWelcomeMail`
+  3. If a record already exists (same parent with another child): skip creation, but create the `parent_student` pivot link if it does not already exist
+  4. Insert `parent_student` row: `parent_id`, `student_id`, `linked_at = now()`, `linked_by = auth()->id()`
 - Show success screen with generated student number, QR code display, and print button
+- If any contact had an email: success screen notes "Activation email sent to {email}"
 
 ---
 
@@ -264,6 +271,7 @@ Roles: Admin, Manager, Supervisor (NOT Cashier)
 
 ### Tabs
 - **Profile** — full student info, photo, QR code (with download/print), contacts
+- **Contacts** — guardian/contact management (see Guardian Contact Management below)
 - **Wallet** — current balance, top-up button, transaction history
 - **Order History** — all canteen transactions for this student
 - **Payment** — subscription payment manager (Admin/Manager: mark paid/unpaid, edit monthly amounts; "Add Subscription Period" button for Admin/Manager/Supervisor)
@@ -317,11 +325,44 @@ If no record exists for a given school month + year combination, the system uses
 
 ---
 
-## Parent–Student Link Requests
+## Guardian Contact Management
 
-Full detail in Spec 07 (Parent Portal). Summary:
-- When a parent requests to link, a `parent_student_requests` record is created
-- Admin/Manager/Supervisor see pending requests and can approve/reject from the student's profile
+Accessible at: Student detail → **Contacts** tab. Roles: Admin, Manager, Supervisor.
+
+This tab replaces the previous link-request approval flow. All parent-linking happens automatically at enrollment or when a contact with an email is added here.
+
+### Contact List
+- Displays all `student_contacts` for the student
+- Each row shows: Full name, Relationship, Phone, Address, Email, Portal account status badge (`Activated` / `Pending Activation` / `No Email`)
+- One contact must always be marked `is_primary = true`
+
+### Add Contact
+- Same fields as enrollment: Full name, Relationship, Phone, Address, Email (optional)
+- If an email is provided:
+  - Follow the same find-or-create parent logic as enrollment
+  - Create/link `parent_student` pivot
+  - Send activation email if the account is new
+- A student may have up to 3 contacts total
+
+### Edit Contact
+- All fields are editable
+- If the email is changed and a new email is provided:
+  - Treat as a new find-or-create: look up by new email, create parent if not found, link pivot
+  - Old parent account loses the `parent_student` pivot link for this student if no other contacts share that email
+- If email is removed: `parent_student` pivot is removed (parent loses access to this student)
+
+### Delete Contact
+- Requires at least one contact to remain (`is_primary` contact cannot be deleted while other contacts exist without a primary replacement)
+- If deleted contact had a linked parent account: remove the `parent_student` pivot for this student; the parent account itself is NOT deleted (they may be linked to other students)
+
+### Resend Activation
+- Available on contacts whose parent account exists but `email_verified_at` is null (pending activation)
+- Button label: `Resend Activation Email`
+- Throttled: max 3 resends per guardian per 24 hours (server-side)
+- Also available for activated accounts as `Send Password Reset Email`
+
+### Minimum Guardian Enforcement
+- At least one contact must exist at all times — the delete action is disabled (greyed out with tooltip) when only one contact remains
 
 ---
 
@@ -388,6 +429,11 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | POST | `/api/v1/branch-monthly-amounts` | admin, manager, supervisor | Create/upsert a month config |
 | PUT | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Update a specific month config record |
 | DELETE | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Delete a month config record |
+| GET | `/api/v1/students/{student}/contacts` | admin, manager, supervisor | List contacts for a student |
+| POST | `/api/v1/students/{student}/contacts` | admin, manager, supervisor | Add a new contact (triggers parent provisioning if email given) |
+| PUT | `/api/v1/students/{student}/contacts/{contact}` | admin, manager, supervisor | Update a contact |
+| DELETE | `/api/v1/students/{student}/contacts/{contact}` | admin, manager, supervisor | Delete a contact (min 1 enforced) |
+| POST | `/api/v1/students/{student}/contacts/{contact}/resend-activation` | admin, manager, supervisor | Resend activation or password reset email |
 
 ---
 
@@ -448,3 +494,16 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Student detail Payment tab: show `year` alongside month in each payment row
 - [ ] Student detail Payment tab: `[+ Add Subscription Period]` button (admin/manager/supervisor) — opens dialog with same range picker + preview table
 - [ ] New page: `pos.sunbites.com.ph/references/subscription-config` — year selector, table of configured months (Month | Days | Amount | Actions), "Add Month" button, inline or modal edit, show default vs configured indicator
+- [ ] **Enrollment → parent provisioning**: `EnrollmentController::store()` loops contacts; for each contact with a non-null email, calls `ParentProvisioningService::provision(email, name, studentId, enrolledBy)` — find-or-create `parents` record, create `parent_student` pivot, dispatch `ParentWelcomeMail` if account is new
+- [ ] `ParentProvisioningService` — reusable service used by enrollment and contact CRUD; idempotent: calling twice with same email+student does not create duplicate pivot
+- [ ] `parent_student` pivot row: `parent_id`, `student_id`, `linked_at`, `linked_by`, `wallet_alert_threshold (decimal, default 0)`
+- [ ] Student detail Contacts tab: lists all `student_contacts` with portal account status badge (`Activated` / `Pending Activation` / `No Email`)
+- [ ] `StudentContactController::store()` — add contact; calls `ParentProvisioningService` if email present; enforces max 3 contacts per student
+- [ ] `StudentContactController::update()` — edit contact; handles email change (re-provision parent with new email; remove old pivot if old email no longer associated with any contact for this student)
+- [ ] `StudentContactController::destroy()` — delete contact; removes linked `parent_student` pivot; enforces min 1 contact remains
+- [ ] `StudentContactController::resendActivation()` — sends activation email (if `email_verified_at` null) or password reset email (if activated); rate-limited: max 3 per guardian per 24 hours
+- [ ] Enrollment success screen shows "Activation email sent to {email}" for each contact email provided
+- [ ] Log `student_contact.added` (properties: contact_name, email_provided, parent_provisioned)
+- [ ] Log `student_contact.updated` (properties: dirty fields)
+- [ ] Log `student_contact.deleted` (properties: contact_name)
+- [ ] Log `parent.activation_resent` (properties: parent_email, sent_by)
