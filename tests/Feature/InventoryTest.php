@@ -8,6 +8,7 @@ use App\Models\InventoryLog;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class InventoryTest extends TestCase
@@ -50,7 +51,9 @@ class InventoryTest extends TestCase
 
     private function asUser(User $user): static
     {
-        return $this->actingAs($user)->withSession(['active_branch_id' => $this->branch->id]);
+        Sanctum::actingAs($user, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
     private function makeItem(array $attrs = []): InventoryItem
@@ -62,23 +65,24 @@ class InventoryTest extends TestCase
     {
         $this->makeItem();
 
-        $response = $this->asUser($this->admin)->get(route('kitchen.pos.inventory.index'));
+        $response = $this->asUser($this->admin)->getJson('/api/v1/pos/inventory');
 
         $response->assertOk();
+        $response->assertJsonStructure([['id', 'name', 'quantity', 'unit', 'restock_threshold', 'status']]);
     }
 
     public function test_supervisor_can_view_inventory(): void
     {
         $this->makeItem();
 
-        $response = $this->asUser($this->supervisor)->get(route('kitchen.pos.inventory.index'));
+        $response = $this->asUser($this->supervisor)->getJson('/api/v1/pos/inventory');
 
         $response->assertOk();
     }
 
     public function test_cashier_cannot_view_inventory(): void
     {
-        $response = $this->asUser($this->cashier)->get(route('kitchen.pos.inventory.index'));
+        $response = $this->asUser($this->cashier)->getJson('/api/v1/pos/inventory');
 
         $response->assertForbidden();
     }
@@ -87,14 +91,14 @@ class InventoryTest extends TestCase
     {
         $item = $this->makeItem(['quantity' => 10.00, 'restock_threshold' => 5.00]);
 
-        $response = $this->asUser($this->admin)->post(route('kitchen.pos.inventory.adjust', $item), [
+        $response = $this->asUser($this->admin)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
             'type' => 'restock',
             'direction' => 'add',
             'quantity' => '5',
             'reason' => 'Test restock',
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('inventory_items', ['id' => $item->id, 'quantity' => '15.00']);
     }
 
@@ -102,14 +106,14 @@ class InventoryTest extends TestCase
     {
         $item = $this->makeItem(['quantity' => 10.00]);
 
-        $response = $this->asUser($this->supervisor)->post(route('kitchen.pos.inventory.adjust', $item), [
+        $response = $this->asUser($this->supervisor)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
             'type' => 'waste',
             'direction' => 'deduct',
             'quantity' => '3',
             'reason' => 'Spoiled goods',
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('inventory_items', ['id' => $item->id, 'quantity' => '7.00']);
     }
 
@@ -117,7 +121,7 @@ class InventoryTest extends TestCase
     {
         $item = $this->makeItem(['quantity' => 10.00]);
 
-        $response = $this->asUser($this->cashier)->post(route('kitchen.pos.inventory.adjust', $item), [
+        $response = $this->asUser($this->cashier)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
             'type' => 'restock',
             'direction' => 'add',
             'quantity' => '5',
@@ -131,7 +135,7 @@ class InventoryTest extends TestCase
     {
         $item = $this->makeItem(['quantity' => 20.00]);
 
-        $this->asUser($this->admin)->post(route('kitchen.pos.inventory.adjust', $item), [
+        $this->asUser($this->admin)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
             'type' => 'manual',
             'direction' => 'deduct',
             'quantity' => '5',
@@ -152,7 +156,7 @@ class InventoryTest extends TestCase
     {
         $item = $this->makeItem(['quantity' => 3.00]);
 
-        $this->asUser($this->admin)->post(route('kitchen.pos.inventory.adjust', $item), [
+        $this->asUser($this->admin)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
             'type' => 'waste',
             'direction' => 'deduct',
             'quantity' => '10',
@@ -174,26 +178,24 @@ class InventoryTest extends TestCase
             'restock_threshold' => 5,
         ]);
 
-        $response = $this->asUser($this->admin)->get(route('kitchen.pos.inventory.index'));
+        $response = $this->asUser($this->admin)->getJson('/api/v1/pos/inventory');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page
-            ->has('inventoryItems')
-            ->where('inventoryItems', fn ($items) => collect($items)->contains('id', $ownItem->id) &&
-                ! collect($items)->contains('id', $otherItem->id))
-        );
+        $ids = array_column($response->json(), 'id');
+        $this->assertContains($ownItem->id, $ids);
+        $this->assertNotContains($otherItem->id, $ids);
     }
 
     public function test_references_inventory_admin_can_add_item(): void
     {
-        $response = $this->asUser($this->admin)->post(route('kitchen.references.inventory.store'), [
+        $response = $this->asUser($this->admin)->postJson('/api/v1/references/inventory', [
             'name' => 'New Item',
             'quantity' => '25',
             'unit' => 'pcs',
             'restock_threshold' => '10',
         ]);
 
-        $response->assertRedirect();
+        $response->assertCreated();
         $this->assertDatabaseHas('inventory_items', [
             'branch_id' => $this->branch->id,
             'name' => 'New Item',
@@ -205,13 +207,13 @@ class InventoryTest extends TestCase
     {
         $item = $this->makeItem(['name' => 'Old Name']);
 
-        $response = $this->asUser($this->admin)->put(route('kitchen.references.inventory.update', $item), [
+        $response = $this->asUser($this->admin)->putJson("/api/v1/references/inventory/{$item->id}", [
             'name' => 'New Name',
             'unit' => 'kg',
             'restock_threshold' => '15',
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('inventory_items', ['id' => $item->id, 'name' => 'New Name']);
     }
 
@@ -229,19 +231,20 @@ class InventoryTest extends TestCase
             'reason' => 'Initial stock',
         ]);
 
-        $response = $this->asUser($this->admin)->delete(route('kitchen.references.inventory.destroy', $item));
+        $response = $this->asUser($this->admin)->deleteJson("/api/v1/references/inventory/{$item->id}");
 
-        $response->assertRedirect();
-        $this->assertDatabaseHas('inventory_items', ['id' => $item->id]);
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['message' => 'This item has adjustment history and cannot be deleted.']);
+        $this->assertModelExists($item);
     }
 
     public function test_can_delete_item_without_logs(): void
     {
         $item = $this->makeItem();
 
-        $response = $this->asUser($this->admin)->delete(route('kitchen.references.inventory.destroy', $item));
+        $response = $this->asUser($this->admin)->deleteJson("/api/v1/references/inventory/{$item->id}");
 
-        $response->assertRedirect();
-        $this->assertDatabaseMissing('inventory_items', ['id' => $item->id]);
+        $response->assertOk();
+        $this->assertModelMissing($item);
     }
 }

@@ -16,11 +16,13 @@ class SetActiveBranch
     {
         $branchId = $request->header('X-Branch-Id');
 
-        if ($branchId && $request->user()) {
+        $user = $request->user('sanctum');
+
+        if ($branchId && $user) {
             $branch = Branch::where('id', $branchId)->where('is_active', true)->first();
 
             if ($branch) {
-                if ($request->user()->can('access.any_branch') || $request->user()->branches->contains($branch)) {
+                if ($user->can('access.any_branch') || $user->branches->contains($branch)) {
                     app()->instance('active_branch', $branch);
                 } else {
                     return response()->json(['message' => 'Forbidden.'], 403);

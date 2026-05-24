@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\WeeklyMealPlan;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class MealPlannerTest extends TestCase
@@ -49,7 +50,9 @@ class MealPlannerTest extends TestCase
 
     private function asUser(User $user): static
     {
-        return $this->actingAs($user)->withSession(['active_branch_id' => $this->branch->id]);
+        Sanctum::actingAs($user, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
     /** @return array<int, array{day: string, ulam: string, vegetables: string, fruit: string, soup: string}> */
@@ -66,20 +69,21 @@ class MealPlannerTest extends TestCase
 
     public function test_anyone_can_view_meal_planner(): void
     {
-        $response = $this->asUser($this->cashier)->get(route('kitchen.references.meal-planner.show'));
+        $response = $this->asUser($this->cashier)->getJson('/api/v1/references/meal-planner');
 
         $response->assertOk();
+        $response->assertJsonStructure(['grid']);
     }
 
     public function test_admin_can_save_meal_plan(): void
     {
-        $response = $this->asUser($this->admin)->patch(route('kitchen.references.meal-planner.update'), [
+        $response = $this->asUser($this->admin)->patchJson('/api/v1/references/meal-planner', [
             'month' => 'june',
             'week' => 1,
             'rows' => $this->validRows(),
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('weekly_meal_plans', [
             'branch_id' => $this->branch->id,
             'school_month' => 'june',
@@ -91,19 +95,19 @@ class MealPlannerTest extends TestCase
 
     public function test_manager_can_save_meal_plan(): void
     {
-        $response = $this->asUser($this->manager)->patch(route('kitchen.references.meal-planner.update'), [
+        $response = $this->asUser($this->manager)->patchJson('/api/v1/references/meal-planner', [
             'month' => 'july',
             'week' => 2,
             'rows' => $this->validRows(),
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('weekly_meal_plans', ['school_month' => 'july', 'week_number' => 2]);
     }
 
     public function test_supervisor_cannot_save_meal_plan(): void
     {
-        $response = $this->asUser($this->supervisor)->patch(route('kitchen.references.meal-planner.update'), [
+        $response = $this->asUser($this->supervisor)->patchJson('/api/v1/references/meal-planner', [
             'month' => 'june',
             'week' => 1,
             'rows' => $this->validRows(),
@@ -114,7 +118,7 @@ class MealPlannerTest extends TestCase
 
     public function test_cashier_cannot_save_meal_plan(): void
     {
-        $response = $this->asUser($this->cashier)->patch(route('kitchen.references.meal-planner.update'), [
+        $response = $this->asUser($this->cashier)->patchJson('/api/v1/references/meal-planner', [
             'month' => 'june',
             'week' => 1,
             'rows' => $this->validRows(),
@@ -133,12 +137,12 @@ class MealPlannerTest extends TestCase
             'ulam' => 'Custom Ulam',
         ]);
 
-        $response = $this->asUser($this->admin)->post(route('kitchen.references.meal-planner.reset'), [
+        $response = $this->asUser($this->admin)->postJson('/api/v1/references/meal-planner/reset', [
             'month' => 'june',
             'week' => 1,
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('weekly_meal_plans', [
             'branch_id' => $this->branch->id,
             'school_month' => 'june',
@@ -158,7 +162,7 @@ class MealPlannerTest extends TestCase
             'ulam' => 'Old Ulam',
         ]);
 
-        $this->asUser($this->admin)->patch(route('kitchen.references.meal-planner.update'), [
+        $this->asUser($this->admin)->patchJson('/api/v1/references/meal-planner', [
             'month' => 'june',
             'week' => 1,
             'rows' => $this->validRows(),
@@ -183,12 +187,11 @@ class MealPlannerTest extends TestCase
             'ulam' => 'Other Branch Ulam',
         ]);
 
-        $response = $this->asUser($this->admin)->get(route('kitchen.references.meal-planner.show'));
+        $response = $this->asUser($this->admin)->getJson('/api/v1/references/meal-planner');
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page
-            ->has('grid')
-            ->where('grid', fn ($grid) => ! collect($grid)->contains('ulam', 'Other Branch Ulam'))
-        );
+        $grid = $response->json('grid');
+        $ulams = array_column($grid, 'ulam');
+        $this->assertNotContains('Other Branch Ulam', $ulams);
     }
 }

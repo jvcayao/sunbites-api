@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Kitchen\AuthController;
 use App\Http\Controllers\Kitchen\BranchController;
+use App\Http\Controllers\Kitchen\InventoryController;
+use App\Http\Controllers\Kitchen\MealPlannerController;
+use App\Http\Controllers\Kitchen\PosMenuItemController;
 use App\Http\Controllers\Kitchen\UserManagementController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,9 +19,39 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     Route::get('/auth/user', [AuthController::class, 'user']);
     Route::post('/auth/branch', [AuthController::class, 'setBranch']);
 
-    // Branch list + User management — admin only
-    Route::middleware('permission:users.manage')->group(function () {
+    // POS Menu Items — admin, manager only
+    Route::middleware('role:admin|manager')->group(function () {
+        Route::get('/pos/menu-items', [PosMenuItemController::class, 'index']);
+        Route::post('/pos/menu-items', [PosMenuItemController::class, 'store']);
+        Route::post('/pos/menu-items/{item}/toggle', [PosMenuItemController::class, 'toggleAvailability']);
+        Route::delete('/pos/menu-items/{item}', [PosMenuItemController::class, 'destroy']);
+    });
+
+    // Meal Planner — view for all staff; edit/reset for admin, manager only
+    Route::get('/references/meal-planner', [MealPlannerController::class, 'show']);
+    Route::middleware('role:admin|manager')->group(function () {
+        Route::patch('/references/meal-planner', [MealPlannerController::class, 'update']);
+        Route::post('/references/meal-planner/reset', [MealPlannerController::class, 'reset']);
+    });
+
+    // Inventory — admin, manager, supervisor
+    // /pos/inventory* — POS screen (read + adjust); /references/inventory* — management (full CRUD)
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::get('/pos/inventory', [InventoryController::class, 'index']);
+        Route::post('/pos/inventory/{item}/adjust', [InventoryController::class, 'adjust']);
+        Route::get('/references/inventory', [InventoryController::class, 'index']);
+        Route::post('/references/inventory', [InventoryController::class, 'store']);
+        Route::put('/references/inventory/{item}', [InventoryController::class, 'update']);
+        Route::delete('/references/inventory/{item}', [InventoryController::class, 'destroy']);
+        Route::get('/references/inventory/{item}/logs', [InventoryController::class, 'logs']);
+    });
+
+    // Branch management + User management — admin only
+    Route::middleware('role:admin')->group(function () {
         Route::get('/branches', [BranchController::class, 'index']);
+        Route::put('/branches/{branch}', [BranchController::class, 'update']);
+        Route::post('/branches/{branch}/toggle', [BranchController::class, 'toggleActive']);
+
         Route::apiResource('users', UserManagementController::class)->except('destroy');
         Route::post('/users/{user}/deactivate', [UserManagementController::class, 'deactivate']);
         Route::post('/users/{user}/reactivate', [UserManagementController::class, 'reactivate'])->withTrashed();
