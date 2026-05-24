@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ActivityController extends Controller
 {
+    use AuthorizesRequests;
+
     public function index(Request $request, Student $student): JsonResponse
     {
         $this->authorize('view', $student);
@@ -55,12 +58,7 @@ class ActivityController extends Controller
                 ]),
                 'created_at' => $order->created_at,
             ]),
-            'meta' => [
-                'current_page' => $orders->currentPage(),
-                'last_page' => $orders->lastPage(),
-                'per_page' => $orders->perPage(),
-                'total' => $orders->total(),
-            ],
+            'meta' => $this->paginationMeta($orders),
         ]);
     }
 }

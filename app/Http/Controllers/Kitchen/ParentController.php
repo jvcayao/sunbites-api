@@ -47,12 +47,7 @@ class ParentController extends Controller
                     'full_name' => $s->full_name,
                 ]),
             ]),
-            'meta' => [
-                'current_page' => $parents->currentPage(),
-                'last_page' => $parents->lastPage(),
-                'per_page' => $parents->perPage(),
-                'total' => $parents->total(),
-            ],
+            'meta' => $this->paginationMeta($parents),
         ]);
     }
 

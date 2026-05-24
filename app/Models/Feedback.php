@@ -10,7 +10,7 @@ class Feedback extends Model
 {
     protected $table = 'feedbacks';
 
-    public $timestamps = false;
+    public const UPDATED_AT = null;
 
     protected $fillable = [
         'parent_id',
@@ -30,7 +30,6 @@ class Feedback extends Model
             'category' => FeedbackCategory::class,
             'is_read' => 'boolean',
             'replied_at' => 'datetime',
-            'created_at' => 'datetime',
         ];
     }
 

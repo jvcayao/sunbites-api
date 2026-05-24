@@ -34,12 +34,7 @@ class FeedbackController extends Controller
                 ] : null,
                 'created_at' => $feedback->created_at,
             ]),
-            'meta' => [
-                'current_page' => $feedbacks->currentPage(),
-                'last_page' => $feedbacks->lastPage(),
-                'per_page' => $feedbacks->perPage(),
-                'total' => $feedbacks->total(),
-            ],
+            'meta' => $this->paginationMeta($feedbacks),
         ]);
     }
 

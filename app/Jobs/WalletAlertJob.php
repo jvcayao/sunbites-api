@@ -26,16 +26,12 @@ class WalletAlertJob implements ShouldQueue
         }
 
         $student->parents()
-            ->wherePivot('wallet_alert_threshold', '>', 0)
+            ->wherePivot('wallet_alert_threshold', '>', $this->currentBalance)
             ->get()
             ->each(function ($parent) use ($student) {
-                $threshold = (float) $parent->pivot->wallet_alert_threshold;
-
-                if ($this->currentBalance < $threshold) {
-                    Mail::to($parent->email)->queue(
-                        new WalletAlertMail($parent, $student, $this->currentBalance, $threshold)
-                    );
-                }
+                Mail::to($parent->email)->queue(
+                    new WalletAlertMail($parent, $student, $this->currentBalance, (float) $parent->pivot->wallet_alert_threshold)
+                );
             });
     }
 }

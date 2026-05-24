@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ParentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
 
@@ -37,7 +38,7 @@ class ProfileController extends Controller
             $parent->password = $validated['password'];
         }
 
-        $parent->fill(array_intersect_key($validated, array_flip(['first_name', 'last_name', 'phone', 'address'])));
+        $parent->fill(Arr::only($validated, ['first_name', 'last_name', 'phone', 'address']));
         $parent->save();
 
         return response()->json($this->parentData($parent));
