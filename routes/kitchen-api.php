@@ -6,11 +6,14 @@ use App\Http\Controllers\Kitchen\BranchMonthlyAmountController;
 use App\Http\Controllers\Kitchen\CheckoutController;
 use App\Http\Controllers\Kitchen\CreditController;
 use App\Http\Controllers\Kitchen\EnrollmentController;
+use App\Http\Controllers\Kitchen\FeedbackController;
 use App\Http\Controllers\Kitchen\InlineReloadController;
 use App\Http\Controllers\Kitchen\InventoryController;
 use App\Http\Controllers\Kitchen\MealPlannerController;
+use App\Http\Controllers\Kitchen\ParentController;
 use App\Http\Controllers\Kitchen\PaymentController;
 use App\Http\Controllers\Kitchen\PosMenuItemController;
+use App\Http\Controllers\Kitchen\StudentContactController;
 use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
@@ -109,6 +112,27 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::patch('/students/{student}/status', [StudentController::class, 'updateStatus']);
         Route::post('/students/{student}/wallet/top-up', [WalletController::class, 'topUp']);
         Route::get('/students/{student}/payments', [PaymentController::class, 'index']);
+
+        // Student contacts
+        Route::get('/students/{student}/contacts', [StudentContactController::class, 'index']);
+        Route::post('/students/{student}/contacts', [StudentContactController::class, 'store']);
+        Route::put('/students/{student}/contacts/{contact}', [StudentContactController::class, 'update']);
+        Route::delete('/students/{student}/contacts/{contact}', [StudentContactController::class, 'destroy']);
+        Route::post('/students/{student}/contacts/{contact}/resend-activation', [StudentContactController::class, 'resendActivation']);
+    });
+
+    // Parent management — admin, manager only
+    Route::middleware('role:admin|manager')->group(function () {
+        Route::get('/references/parents', [ParentController::class, 'index']);
+        Route::get('/references/parents/{parent}', [ParentController::class, 'show']);
+        Route::post('/references/parents/{parent}/resend-activation', [ParentController::class, 'resendActivation']);
+    });
+
+    // Feedback — admin, manager, supervisor
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::get('/references/feedback', [FeedbackController::class, 'index']);
+        Route::post('/references/feedback/{feedback}/reply', [FeedbackController::class, 'reply']);
+        Route::patch('/references/feedback/{feedback}/mark-read', [FeedbackController::class, 'markRead']);
     });
 
     // Payment toggle/record + credit settle — admin, manager only

@@ -54,6 +54,8 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'portal_url' => env('PORTAL_APP_URL', 'http://localhost:3001'),
+
     'domain' => env('APP_DOMAIN', 'sunbites.test'),
 
     /*
