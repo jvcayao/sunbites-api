@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\OrderResource;
 use App\Http\Resources\StudentResource;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
@@ -162,6 +164,45 @@ class StudentController extends Controller
                 'reason' => $validated['reason'] ?? null,
             ])
             ->log('students.status_changed');
+
+        return response()->json(new StudentResource($student->fresh()));
+    }
+
+    public function orders(Request $request, Student $student): JsonResponse
+    {
+        $validated = $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $orders = $student->orders()
+            ->with('items')
+            ->latest()
+            ->paginate($validated['per_page'] ?? 20);
+
+        return response()->json([
+            'data' => OrderResource::collection($orders->items()),
+            'meta' => $this->paginationMeta($orders),
+        ]);
+    }
+
+    public function updateType(Request $request, Student $student): JsonResponse
+    {
+        $validated = $request->validate([
+            'student_type' => ['required', Rule::enum(StudentType::class)],
+        ]);
+
+        $oldType = $student->student_type->value;
+
+        $student->update(['student_type' => StudentType::from($validated['student_type'])]);
+
+        activity('students')
+            ->causedBy($request->user())
+            ->performedOn($student)
+            ->withProperties([
+                'old_type' => $oldType,
+                'new_type' => $validated['student_type'],
+            ])
+            ->log('students.type_changed');
 
         return response()->json(new StudentResource($student->fresh()));
     }

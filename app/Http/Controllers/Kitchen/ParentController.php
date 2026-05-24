@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Kitchen;
 use App\Http\Controllers\Controller;
 use App\Mail\ParentWelcomeMail;
 use App\Models\ParentUser;
+use App\Models\StudentContact;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -55,12 +56,16 @@ class ParentController extends Controller
     {
         $parent->load(['students:id,first_name,last_name,student_number,grade_level,branch_id', 'students.branch:id,name']);
 
+        // Phone and address come from the student contact record matching this parent's email,
+        // falling back to whatever the parent filled in on their portal profile.
+        $contact = StudentContact::where('email', $parent->email)->latest()->first();
+
         return response()->json([
             'id' => $parent->id,
             'full_name' => $parent->full_name,
             'email' => $parent->email,
-            'phone' => $parent->phone,
-            'address' => $parent->address,
+            'phone' => $parent->phone ?? $contact?->phone,
+            'address' => $parent->address ?? $contact?->address,
             'profile_photo_path' => $parent->profile_photo_path,
             'is_activated' => $parent->isActivated(),
             'created_at' => $parent->created_at,

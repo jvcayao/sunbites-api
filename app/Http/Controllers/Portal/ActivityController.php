@@ -24,7 +24,7 @@ class ActivityController extends Controller
 
         $query = $student->orders()
             ->whereNull('voided_at')
-            ->with('items:id,order_id,name,quantity,unit_price,subtotal')
+            ->with('items:id,order_id,name,quantity,price,line_total')
             ->latest();
 
         if (! empty($validated['from'])) {
@@ -53,8 +53,8 @@ class ActivityController extends Controller
                 'items' => $order->items->map(fn ($item) => [
                     'name' => $item->name,
                     'quantity' => $item->quantity,
-                    'unit_price' => (float) $item->unit_price,
-                    'subtotal' => (float) $item->subtotal,
+                    'price' => (float) $item->price,
+                    'line_total' => (float) $item->line_total,
                 ]),
                 'created_at' => $order->created_at,
             ]),

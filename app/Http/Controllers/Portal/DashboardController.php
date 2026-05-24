@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
-use App\Models\Student;
-use Bavix\Wallet\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -19,37 +17,31 @@ class DashboardController extends Controller
 
         $studentIds = $students->pluck('id');
 
-        $todayOrders = Order::whereIn('student_id', $studentIds)
-            ->whereDate('created_at', today())
+        $recentOrders = Order::whereIn('student_id', $studentIds)
             ->whereNull('voided_at')
             ->with('student:id,first_name,last_name')
-            ->get();
-
-        $recentTransactions = Transaction::whereHasMorph('payable', [Student::class], fn ($q) => $q->whereIn('id', $studentIds))
-            ->with('payable:id,first_name,last_name')
             ->latest()
             ->take(10)
             ->get();
 
-        $summary = $students->map(fn ($student) => [
-            'student_id' => $student->id,
-            'full_name' => $student->full_name,
-            'branch_name' => $student->branch->name,
-            'wallet_balance' => $student->wallet?->balanceFloat ?? 0,
-            'total_spent' => (float) $student->total_spent,
-            'today_orders_count' => $todayOrders->where('student_id', $student->id)->count(),
-            'today_total' => (float) $todayOrders->where('student_id', $student->id)->sum('total'),
-        ]);
-
         return response()->json([
-            'summary' => $summary,
-            'recent_transactions' => $recentTransactions->map(fn ($tx) => [
-                'id' => $tx->id,
-                'type' => $tx->type,
-                'amount' => $tx->amountFloat,
-                'student_name' => $tx->payable?->full_name,
-                'meta' => $tx->meta,
-                'created_at' => $tx->created_at,
+            'students' => $students->map(fn ($student) => [
+                'id' => $student->id,
+                'full_name' => $student->full_name,
+                'student_number' => $student->student_number,
+                'grade_level' => $student->grade_level,
+                'branch_name' => $student->branch?->name,
+                'wallet_balance' => $student->wallet?->balanceFloat ?? 0,
+                'wallet_alert_threshold' => (float) $student->pivot->wallet_alert_threshold,
+                'enrollment_status' => $student->enrollment_status,
+                'student_type' => $student->student_type,
+            ]),
+            'recent_orders' => $recentOrders->map(fn ($order) => [
+                'id' => $order->id,
+                'student_full_name' => $order->student?->full_name,
+                'total' => (float) $order->total,
+                'payment_method' => $order->payment_method,
+                'created_at' => $order->created_at,
             ]),
         ]);
     }
