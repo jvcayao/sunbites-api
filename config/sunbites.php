@@ -1,11 +1,11 @@
 <?php
 
 return [
-    'credit_limit' => env('SUNBITES_CREDIT_LIMIT', 300),
+    'credit_limit' => 300,
 
-    'loyalty_point_threshold' => env('SUNBITES_LOYALTY_THRESHOLD', 1000),
+    'loyalty_point_threshold' => 1000,
 
-    'daily_meal_rate' => env('SUNBITES_DAILY_MEAL_RATE', 135),
+    'daily_meal_rate' => 135,
 
     'school_months' => [
         'june' => ['label' => 'June', 'days' => 22, 'amount' => 2970],

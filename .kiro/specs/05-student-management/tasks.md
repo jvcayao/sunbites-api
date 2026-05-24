@@ -1,147 +1,235 @@
 # Tasks 05 — Student Management & Enrollment
 
 ## 1. Database
-- [ ] Migration: `students` table — `branch_id` (FK), `student_number` (string, unique per branch), `first_name`, `last_name`, `grade_level`, `section` (nullable), `birthday`, `photo_path` (nullable), `allergies` (text, nullable), `notes` (text, nullable), `qr_code` (string, unique), `student_type` (enum: subscription/non_subscription), `enrollment_status` (enum: enrolled/paused/unenrolled/banned/graduated), `enrollment_date`, `points` (int, default 0), `total_spent` (decimal, default 0), `credit_balance` (decimal, default 0), `created_at`, `updated_at`, `deleted_at` (soft delete)
-- [ ] Migration: `student_contacts` table — `student_id` (FK), `full_name`, `relationship`, `phone`, `address`, `email`, `is_primary` (bool)
-- [ ] Migration: `student_monthly_payments` table — `student_id` (FK), `school_month` (enum), `status` (enum: paid/unpaid), `amount` (decimal), `recorded_at` (nullable timestamp), `recorded_by` (FK → users, nullable); UNIQUE KEY on `(student_id, school_month)`
-- [ ] Migration: `branch_monthly_amounts` table — `branch_id` (FK), `school_month` (enum), `amount` (decimal); UNIQUE KEY on `(branch_id, school_month)`
-- [ ] Migration: `credit_transactions` table — `student_id` (FK), `order_id` (FK → orders, nullable), `type` (enum: Charged/Settled/Voided — TitleCase), `amount` (decimal), `notes` (nullable), `performed_by` (FK → users), `created_at`
-- [ ] Factory: `StudentFactory`
+- [x] Migration: `students` table — `branch_id` (FK), `student_number` (string, unique per branch), `first_name`, `last_name`, `grade_level`, `section` (nullable), `birthday`, `photo_path` (nullable), `allergies` (text, nullable), `notes` (text, nullable), `qr_code` (string, unique), `student_type` (enum: subscription/non_subscription), `enrollment_status` (enum: enrolled/paused/unenrolled/banned/graduated), `enrollment_date`, `points` (int, default 0), `total_spent` (decimal, default 0), `credit_balance` (decimal, default 0), `created_at`, `updated_at`, `deleted_at` (soft delete)
+- [x] Migration: `student_contacts` table — `student_id` (FK), `full_name`, `relationship`, `phone`, `address`, `email`, `is_primary` (bool)
+- [x] Migration: `student_monthly_payments` table — `student_id` (FK), `school_month` (enum), `status` (enum: paid/unpaid), `amount` (decimal), `recorded_at` (nullable timestamp), `recorded_by` (FK → users, nullable); UNIQUE KEY on `(student_id, school_month)`
+- [x] Migration: `branch_monthly_amounts` table — `branch_id` (FK), `school_month` (enum), `amount` (decimal); UNIQUE KEY on `(branch_id, school_month)`
+- [x] Migration: `credit_transactions` table — `student_id` (FK), `order_id` (FK → orders, nullable), `type` (enum: Charged/Settled/Voided — TitleCase), `amount` (decimal), `notes` (nullable), `performed_by` (FK → users), `created_at`
+- [x] Factory: `StudentFactory`
+- [x] Migration: alter `student_monthly_payments` — add `year` (int, not nullable) column; drop existing UNIQUE KEY on `(student_id, school_month)`; add new UNIQUE KEY on `(student_id, school_month, year)`
+- [x] Migration: alter `branch_monthly_amounts` — add `year` (int, not nullable) and `days` (int, not nullable) columns; drop existing UNIQUE KEY on `(branch_id, school_month)`; add new UNIQUE KEY on `(branch_id, school_month, year)`
 
 ## 2. Models
-- [ ] `Student` model with `HasBranch` trait, `SoftDeletes`, `LogsActivity` trait
-  - [ ] `$logAttributes` allowlist: `first_name`, `last_name`, `grade_level`, `section`, `birthday`, `student_type`, `enrollment_status`, `allergies`, `notes` — exclude `qr_code`, `photo_path`
-  - [ ] `$recordEvents = ['created', 'updated', 'deleted']`
-  - [ ] `full_name` computed accessor
-  - [ ] `contacts()` hasMany relationship
-  - [ ] `monthlyPayments()` hasMany relationship
-  - [ ] `wallet()` via `bavix/laravel-wallet` `HasWallet` trait
-- [ ] `StudentContact` model
-- [ ] `StudentMonthlyPayment` model
-- [ ] `BranchMonthlyAmount` model
-- [ ] `CreditTransaction` model
-- [ ] `StudentResource` API resource — excludes `qr_code`, `photo_path` from log-sensitive outputs; government IDs never included
+- [x] `Student` model with `HasBranch` trait, `SoftDeletes`, `LogsActivity` trait
+  - [x] `$logAttributes` allowlist: `first_name`, `last_name`, `grade_level`, `section`, `birthday`, `student_type`, `enrollment_status`, `allergies`, `notes` — exclude `qr_code`, `photo_path`
+  - [x] `$recordEvents = ['created', 'updated', 'deleted']`
+  - [x] `full_name` computed accessor
+  - [x] `contacts()` hasMany relationship
+  - [x] `monthlyPayments()` hasMany relationship
+  - [x] `wallet()` via `bavix/laravel-wallet` `HasWallet` trait
+- [x] `StudentContact` model
+- [x] `StudentMonthlyPayment` model
+- [x] `BranchMonthlyAmount` model
+- [x] `CreditTransaction` model
+- [x] `StudentResource` API resource — excludes `qr_code`, `photo_path` from log-sensitive outputs; government IDs never included
+- [x] Update `StudentMonthlyPayment` model — add `year` to `$fillable`; update any factory states that seed payment records
+- [x] Update `BranchMonthlyAmount` model — add `year` and `days` to `$fillable`; add `amount` computed attribute as `daily_meal_rate × days` (or store directly — keep consistent with controller)
 
 ## 3. Enrollment
 
 ### 3.1 Backend
-- [ ] `EnrollmentController`
-  - [ ] `index()` — returns branches and grade level config data for form
-  - [ ] `store()`:
-    - [ ] Validate all required fields
-    - [ ] Validate `student_number` unique per branch (manually entered — school-assigned ID)
-    - [ ] Sanitize `allergies` and `notes` via `strip_tags()` before storage
-    - [ ] Auto-generate `qr_code`: `'SB-' . Str::random(12)` with collision retry loop
-    - [ ] Create `Student` record
-    - [ ] Create `StudentContact` records (at least one required)
-    - [ ] Create wallet via `bavix/laravel-wallet`
-    - [ ] If subscription: seed `StudentMonthlyPayment` for all 10 school months (status=unpaid, amount from `branch_monthly_amounts` or config fallback)
-    - [ ] Log `students.enrolled` (properties: student_type, branch)
-    - [ ] Response includes: student_number, qr_code (for display/print) — no email/password credentials
-- [ ] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
+- [x] `EnrollmentController`
+  - [x] `index()` — returns branches and grade level config data for form
+  - [x] `store()`:
+    - [x] Validate all required fields
+    - [x] Validate `student_number` unique per branch (manually entered — school-assigned ID)
+    - [x] Sanitize `allergies` and `notes` via `strip_tags()` before storage
+    - [x] Auto-generate `qr_code`: `'SB-' . Str::random(12)` with collision retry loop
+    - [x] Create `Student` record
+    - [x] Create `StudentContact` records (at least one required)
+    - [x] Create wallet via `bavix/laravel-wallet`
+    - [x] If subscription: seed `StudentMonthlyPayment` records (status=unpaid) — currently fixed 10 months
+    - [x] Log `students.enrolled` (properties: student_type, branch)
+    - [x] Response includes: student_number, qr_code (for display/print) — no email/password credentials
+- [x] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
   - `GET /api/v1/enrollment`
   - `POST /api/v1/enrollment`
+- [x] Update `EnrollmentController::index()` — also return the subscription period preview data: for each school month, the effective `days` and `amount` for the default range (June [current year] → March [current year + 1]), resolved from `branch_monthly_amounts` or config fallback
+- [x] Update `EnrollmentController::store()` validation — add `subscription_start_month` (enum SchoolMonth, required if subscription), `subscription_start_year` (int, 4 digits), `subscription_end_month` (enum SchoolMonth, required if subscription), `subscription_end_year` (int, 4 digits); validate end is not before start
+- [x] Update `EnrollmentController::seedMonthlyPayments()` — replace fixed 10-month loop with a range-based loop from start month+year to end month+year; for each month, look up `branch_monthly_amounts` by `(branch_id, school_month, year)`, fall back to `daily_meal_rate × default_days` from config; each row now includes `year` column
+- [ ] Update enrollment response to include `subscription_period` (e.g. `"June 2025 – March 2026"`) for the success screen
 
 ### 3.2 Frontend
-- [ ] Enrollment form page at `app/(kitchen)/enrollment/page.tsx`
-  - [ ] Branch radio cards (pre-filled with active branch; read-only for non-admin)
-  - [ ] Enrollment type radio cards: Subscription / Non-Subscription
-  - [ ] Student info section: photo upload (80×80 circle preview), first name, last name, student number (manual input), grade level select, section, birthday, allergies textarea, notes textarea
-  - [ ] Contact section: full name, relationship, phone, address, email; "Add another contact" (up to 3)
-  - [ ] Permissions & Acknowledgement: two checkboxes, digital signature field, read-only date
-  - [ ] Submit via `useMutation` → `POST /api/v1/enrollment`
-- [ ] Enrollment success screen (replaces form after submit):
-  - [ ] Green border card (`border-green-300 bg-green-50`)
-  - [ ] Student name, student type, student number, enrolled date
-  - [ ] QR code display (SVG, primary-bordered container, format: `SB-{12 chars}`)
-  - [ ] `[🖨️ Print QR Code]` button — browser print, only QR card prints (`@media print`)
-  - [ ] `[Enroll Another Student]` button resets form
+- [x] Enrollment form page at `app/(kitchen)/enrollment/page.tsx`
+  - [x] Branch radio cards (pre-filled with active branch; read-only for non-admin)
+  - [x] Enrollment type radio cards: Subscription / Non-Subscription
+  - [x] Student info section: photo upload (80×80 circle preview), first name, last name, student number (manual input), grade level select, section, birthday, allergies textarea, notes textarea
+  - [x] Contact section: full name, relationship, phone, address, email; "Add another contact" (up to 3)
+  - [x] Permissions & Acknowledgement: two checkboxes, digital signature field, read-only date
+  - [x] Submit via `useMutation` → `POST /api/v1/enrollment`
+- [x] Enrollment success screen (replaces form after submit):
+  - [x] Green border card (`border-green-300 bg-green-50`)
+  - [x] Student name, student type, student number, enrolled date
+  - [x] QR code display (SVG, primary-bordered container, format: `SB-{12 chars}`)
+  - [x] `[🖨️ Print QR Code]` button — browser print, only QR card prints (`@media print`)
+  - [x] `[Enroll Another Student]` button resets form
+- [x] Add Subscription Period section to enrollment form — conditionally shown when Subscription type is selected:
+  - [x] Start month dropdown (SchoolMonth enum values) + start year input (number, min 2020, max 2099)
+  - [x] End month dropdown + end year input; validation: end must not be before start
+  - [x] Client-side validation: end must not be before start chronologically; error shown when invalid
+  - [x] Live preview: month count preview shown when both start and end are selected
+  - [x] Pass `subscription_start_month`, `subscription_start_year`, `subscription_end_month`, `subscription_end_year` in the POST payload for subscription enrollments
+- [ ] Update enrollment success screen — show "Period: June 2025 – March 2026" row for subscription students
 
 ## 4. Student List
 
 ### 4.1 Backend
-- [ ] `StudentController::index()` — branch-scoped, paginated; filters: search (name/student_number), grade, status, student type tab; subscription tab adds month+payment_status filter; default sort: last_name then first_name
-- [ ] `StudentController::updateStatus()` — changes `enrollment_status`; requires reason for `banned`/`unenrolled`; logs `students.status_changed`
-- [ ] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
+- [x] `StudentController::index()` — branch-scoped, paginated; filters: search (name/student_number), grade, status, student type tab; subscription tab adds month+payment_status filter; default sort: last_name then first_name
+- [x] `StudentController::updateStatus()` — changes `enrollment_status`; requires reason for `banned`/`unenrolled`; logs `students.status_changed`
+- [x] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
   - `GET /api/v1/students`
   - `PATCH /api/v1/students/{student}/status`
+- [ ] Update `StudentController::index()` subscription payment filter — add `year` parameter alongside `month` and `payment_status` for the subscription tab filter
 
 ### 4.2 Frontend
-- [ ] Student list page at `app/(kitchen)/students/page.tsx`
-  - [ ] Filter controls: search, enrollment status dropdown, grade dropdown
-  - [ ] Type tabs: `[All]` `[📋 Subscription (N)]` `[🪙 Non-Subscription (N)]`
-  - [ ] Subscription tab: additional Month + Paid/Unpaid filter dropdowns
-  - [ ] When "All" tab: two sections with colored headers (subscription=orange, non-subscription=purple)
-  - [ ] Subscription student card: orange left border, month payment badges Jun–Mar (green=paid, red=unpaid), clickable to toggle, "Record Payment" button
-  - [ ] Non-subscription student card: purple left border, wallet-only info box (purple tint), "Load Wallet" button (purple)
-  - [ ] Enrollment status badge: color-coded, clickable to open status picker popover
-  - [ ] Red "₱X Credit Owed" badge when `credit_balance > 0`
-  - [ ] Payment reminder banner (14 days before month end, subscription students only)
-  - [ ] Checkbox column for multi-select; floating action bar when ≥1 selected: `[🖨️ Print QR Codes]` `[✕ Clear Selection]`
-  - [ ] Batch QR print preview modal: 2 or 4 cards per row selector, `[🖨️ Print All]` button
-  - [ ] Print layout (`@media print`): 4 cards per row on A4, no sidebar/topbar/chrome
+- [x] Student list page at `app/(kitchen)/students/page.tsx`
+  - [x] Filter controls: search, enrollment status dropdown, grade dropdown
+  - [x] Type tabs: `[All]` `[📋 Subscription (N)]` `[🪙 Non-Subscription (N)]`
+  - [x] Subscription tab: additional Month + Paid/Unpaid filter dropdowns
+  - [x] When "All" tab: two sections with colored headers (subscription=orange, non-subscription=purple)
+  - [x] Subscription student card: orange left border, month payment badges Jun–Mar (green=paid, red=unpaid), clickable to toggle, "Record Payment" button
+  - [x] Non-subscription student card: purple left border, wallet-only info box (purple tint), "Load Wallet" button (purple)
+  - [x] Enrollment status badge: color-coded, clickable to open status picker popover
+  - [x] Red "₱X Credit Owed" badge when `credit_balance > 0`
+  - [x] Payment reminder banner (14 days before month end, subscription students only)
+  - [x] Checkbox column for multi-select; floating action bar when ≥1 selected: `[🖨️ Print QR Codes]` `[✕ Clear Selection]`
+  - [x] Batch QR print preview modal: 2 or 4 cards per row selector, `[🖨️ Print All]` button
+  - [x] Print layout (`@media print`): 4 cards per row on A4, no sidebar/topbar/chrome
+- [ ] Update subscription tab filters — add Year dropdown alongside Month and Paid/Unpaid dropdowns
+- [ ] Update month payment badge labels — include abbreviated year (e.g. "Jun '25 ✓" instead of "Jun ✓")
 
 ## 5. Student Detail Page
 
 ### 5.1 Backend
-- [ ] `StudentController::show()` — returns student with contacts, wallet balance, recent transactions
-- [ ] `StudentController::update()` — updates student profile; `strip_tags()` on `notes`/`allergies`; logs `students.updated`
-- [ ] `StudentController::destroy()` — soft delete; logs `students.deleted`
-- [ ] `StudentController::regenerateQr()` — generates new QR code with collision retry; old code immediately invalidated; logs `students.qr_regenerated` (values not logged)
-- [ ] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
+- [x] `StudentController::show()` — returns student with contacts, wallet balance, recent transactions
+- [x] `StudentController::update()` — updates student profile; `strip_tags()` on `notes`/`allergies`; logs `students.updated`
+- [x] `StudentController::destroy()` — soft delete; logs `students.deleted`
+- [x] `StudentController::regenerateQr()` — generates new QR code with collision retry; old code immediately invalidated; logs `students.qr_regenerated` (values not logged)
+- [x] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
   - `GET /api/v1/students/{student}`
   - `PUT /api/v1/students/{student}`
   - `DELETE /api/v1/students/{student}`
   - `POST /api/v1/students/{student}/regenerate-qr`
 
 ### 5.2 Frontend
-- [ ] Student detail page at `app/(kitchen)/students/[id]/page.tsx`
-  - [ ] Header: photo, name, grade, enrollment status badge, student type badge, wallet balance, QR code preview
-  - [ ] `[⋮ Actions]` dropdown: Change Status, Top Up Wallet, Print QR Code, Remove Student
-  - [ ] Tab navigation: Profile | Wallet | Order History | Payment | Logs
-  - [ ] **Profile tab**: personal info, contacts, QR code section with `[🖨️ Print QR]` and `[⬇ Download PNG]`; `[↺ Regenerate QR Code]` button (Admin/Manager/Supervisor) via `useMutation`
-  - [ ] **Wallet tab**: current balance, top-up button, transaction history table
-  - [ ] **Order History tab**: paginated orders via `useQuery`, newest first
-  - [ ] **Payment tab**: for subscription — month grid with paid/unpaid toggle via `useMutation`; for non-subscription — "no subscription" message
-  - [ ] **Logs tab**: activity_log entries where `subject = Student`; read-only, newest first
+- [x] Student detail page at `app/(kitchen)/students/[id]/page.tsx`
+  - [x] Header: photo, name, grade, enrollment status badge, student type badge, wallet balance, QR code preview
+  - [x] `[⋮ Actions]` dropdown: Change Status, Top Up Wallet, Print QR Code, Remove Student
+  - [x] Tab navigation: Profile | Wallet | Order History | Payment | Logs
+  - [x] **Profile tab**: personal info, contacts, QR code section with `[🖨️ Print QR]` and `[⬇ Download PNG]`; `[↺ Regenerate QR Code]` button (Admin/Manager/Supervisor) via `useMutation`
+  - [x] **Wallet tab**: current balance, top-up button, transaction history table
+  - [x] **Order History tab**: paginated orders via `useQuery`, newest first
+  - [x] **Payment tab**: for subscription — month grid with paid/unpaid toggle via `useMutation`; for non-subscription — "no subscription" message
+  - [x] **Logs tab**: activity_log entries where `subject = Student`; read-only, newest first
+- [x] Update Payment tab — group payment rows by year (year as section header); show "Month Year" (e.g. "June 2025") instead of "Month" in each payment card
+- [x] Add `[+ Add Subscription Period]` button to Payment tab (admin/manager/supervisor only) — opens the Add Subscription Period dialog
 
 ## 6. Wallet Top-Up
 
 ### 6.1 Backend
-- [ ] `WalletController::topUp()` — validates amount, payment_method, reference_number (alphanumeric max 50 chars if provided); `deposit()` via bavix; logs `wallet.topped_up`
-- [ ] Route under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
+- [x] `WalletController::topUp()` — validates amount, payment_method, reference_number (alphanumeric max 50 chars if provided); `deposit()` via bavix; logs `wallet.topped_up`
+- [x] Route under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
   - `POST /api/v1/students/{student}/wallet/top-up`
 
 ### 6.2 Frontend
-- [ ] Top-up modal: current balance, amount input, payment method (Cash/GCash/Bank Transfer), reference number field (shown for GCash/Bank), live "New Balance" preview (`text-lg font-extrabold text-green-600`), `useMutation` for submit
+- [x] Top-up modal: current balance, amount input, payment method (Cash/GCash/Bank Transfer), reference number field (shown for GCash/Bank), live "New Balance" preview (`text-lg font-extrabold text-green-600`), `useMutation` for submit
 
 ## 7. Credit System
 
 ### 7.1 Backend
-- [ ] `CreditController::settle()` — Admin/Manager only (Supervisor explicitly excluded via `StudentPolicy::settleCredit()`); inserts `credit_transactions` (type=Settled) + atomically sets `credit_balance = 0` with `lockForUpdate()`; logs `wallet.credit_settled`
-- [ ] All credit changes go through `credit_transactions` insert + atomic `credit_balance` update in same `DB::transaction()`
-- [ ] Route under `auth:sanctum` + `ability:staff` + `role:admin,manager`:
+- [x] `CreditController::settle()` — Admin/Manager only (Supervisor explicitly excluded via `StudentPolicy::settleCredit()`); inserts `credit_transactions` (type=Settled) + atomically sets `credit_balance = 0` with `lockForUpdate()`; logs `wallet.credit_settled`
+- [x] All credit changes go through `credit_transactions` insert + atomic `credit_balance` update in same `DB::transaction()`
+- [x] Route under `auth:sanctum` + `ability:staff` + `role:admin,manager`:
   - `POST /api/v1/students/{student}/credit/settle`
 
 ## 8. Subscription Payments
 
 ### 8.1 Backend
-- [ ] `PaymentController::toggle()` — Admin/Manager toggle month paid/unpaid; logs `payments.recorded`
-- [ ] `PaymentController::record()` — explicitly records payment with amount
-- [ ] `BranchMonthlyAmountController::update()` — Admin can override monthly amount per branch
-- [ ] Routes under `auth:sanctum` + `ability:staff`:
-  - `PATCH /api/v1/students/{student}/payments/{month}` — role:admin,manager
-  - `PUT /api/v1/branch-monthly-amounts/{month}` — role:admin
+- [x] `PaymentController::index()` — returns student's monthly payments
+- [x] `PaymentController::toggle()` — Admin/Manager toggle month paid/unpaid; logs `payments.recorded`
+- [x] `PaymentController::record()` — explicitly records payment with amount
+- [x] `BranchMonthlyAmountController::update()` — upserts monthly amount per branch (month identified by URL segment)
+- [x] Routes under `auth:sanctum` + `ability:staff`:
+  - `GET /api/v1/students/{student}/payments` — admin, manager, supervisor
+  - `PATCH /api/v1/students/{student}/payments/{payment}` — role: admin, manager
+  - `POST /api/v1/students/{student}/payments` — role: admin, manager
+  - `PUT /api/v1/branch-monthly-amounts/{month}` — role: admin
+- [x] Update `PaymentController::index()` — include `year` in each payment record response; order by year ASC then id ASC
+- [x] Update `PaymentController::toggle()` — activity log properties include `year`
+- [x] Update `PaymentController::record()` — validate `year` in request; look up payment by `(student_id, school_month, year)` not just school_month
+- [x] Add `PaymentController::addRange()` — `POST /api/v1/students/{student}/payments/range`:
+  - [x] Validate `subscription_start_month`, `subscription_start_year`, `subscription_end_month`, `subscription_end_year`
+  - [x] Skip existing `(student_id, school_month, year)` records; return created count + skipped list
+  - [x] Resolve amount per month from `branch_monthly_amounts` or config fallback
+  - [x] Create new `student_monthly_payments` rows (status=unpaid) for each month in range
+  - [x] Return list of created payment records + skipped list
+  - [x] Roles: admin, manager, supervisor
+
+### 8.2 Branch Monthly Amounts — Full CRUD
+- [x] `BranchMonthlyAmountController::index()` — `GET /api/v1/branch-monthly-amounts?year=YYYY`: returns all 10 school months for active branch+year, merges DB config with defaults, includes `is_configured` flag
+- [x] `BranchMonthlyAmountController::store()` — `POST /api/v1/branch-monthly-amounts`: upsert on `(branch_id, school_month, year)`, computes `amount = daily_meal_rate × days`
+- [x] `BranchMonthlyAmountController::update()` — `PUT /api/v1/branch-monthly-amounts/{id}`: update by model binding; recomputes amount; roles: admin, manager, supervisor
+- [x] `BranchMonthlyAmountController::destroy()` — `DELETE /api/v1/branch-monthly-amounts/{id}`: admin, manager, supervisor
+- [x] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
+  - `GET /api/v1/branch-monthly-amounts`
+  - `POST /api/v1/branch-monthly-amounts`
+  - `PUT /api/v1/branch-monthly-amounts/{branchMonthlyAmount}`
+  - `DELETE /api/v1/branch-monthly-amounts/{branchMonthlyAmount}`
+- [x] Update `BranchMonthlyAmountController::store()` — accept optional `amount` field; if provided use directly, otherwise compute `days × SystemConfiguration::getValue('daily_meal_rate', 135)`
+- [x] Update `BranchMonthlyAmountController::update()` — same optional `amount` override logic
+
+### 8.3 Backend — Payment Amount Adjustment
+- [x] Add `PaymentController::updateAmount()` — dedicated `PATCH /api/v1/students/{student}/payments/{payment}/amount` route; updates `amount` column only on `unpaid` payments; roles: admin, manager
+  - Implementation: split into a dedicated action (`updateAmount()`) and separate route rather than detecting intent inside `toggle()`
+
+### 8.4 Frontend — Payment Tab Updates
+- [x] Update payment tab component — display year in payment row headers; group rows by year using section dividers; show "Month Year" (e.g. "June 2025") labels
+- [x] Add `[+ Add Subscription Period]` button (admin/manager only — canToggle gate); renders at top of Payment tab
+- [x] Build Add Subscription Period dialog component:
+  - [x] Month+year range pickers (start and end); year range 2020–2099 enforced client-side
+  - [x] Submit via `useMutation` → `POST /api/v1/students/{student}/payments/range`
+  - [x] On success: invalidate `["student-payments", studentId]` query; shows created/skipped counts
+  - [x] Validation: end before start rejected client-side
+- [x] Add `[Edit Amount]` button on each `unpaid` payment row (admin/manager only — `canToggle` gate):
+  - Opens small inline dialog pre-filled with current amount
+  - Decimal input, min 0
+  - Calls `PATCH /api/v1/students/{student}/payments/{payment}/amount` with `{ amount }`
+  - On success: invalidates `["student-payments", studentId]` query
+- [x] Update `lib/api/students.ts` — add `updatePaymentAmount(studentId, paymentId, amount)` method calling `PATCH /payments/{payment}/amount` with `{ amount }`
+
+### 8.5 Frontend — Subscription Config Page
+- [x] Page at `app/(kitchen)/references/subscription-config/page.tsx` (admin-only, non-admins redirected)
+- [x] Year selector at top; defaults to current year; drives `useQuery`
+- [x] Table: all 10 school months, columns: Month | Days | Amount | Status | Actions
+  - [x] Source badge: green "Configured" badge vs muted "Default" badge
+  - [x] Edit/Set button → opens modal with days input, live amount preview (days × rate)
+  - [x] Delete/Revert for configured rows (window.confirm before delete)
+- [x] `createBranchMonthlyAmount` for new records; `updateBranchMonthlyAmount` for existing
+- [x] On success: invalidates `["branch-monthly-amounts", year]` query
+- [x] "Subscription Config" added to References nav in `kitchen-layout.tsx`
+- [x] `loading.tsx` skeleton created
+- [x] Update edit dialog — add optional "Amount Override" decimal input below the computed amount preview; if filled, include `amount` in the request payload; if empty, omit it (server computes from days × rate)
+- [x] Update `lib/api/students.ts` — update `createBranchMonthlyAmount` and `updateBranchMonthlyAmount` payloads to accept optional `amount?: number`
 
 ## 9. Photo Upload
-- [ ] Student photo: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation, stored in `storage/app/private/photos/students/`
+- [x] Student photo: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation, stored in `storage/app/private/photos/students/`
 
 ## 10. Policies
-- [ ] `StudentPolicy` — view/create/update/delete (admin/manager/supervisor); topUp (admin/manager/supervisor); settleCredit (admin/manager — Supervisor explicitly excluded)
+- [x] `StudentPolicy` — view/create/update/delete (admin/manager/supervisor); topUp (admin/manager/supervisor); settleCredit (admin/manager — Supervisor explicitly excluded)
 
 ## 11. Tests
-- [ ] `EnrollmentTest` — subscription enrollment seeds 10 monthly payments; non-subscription enrollment skips; QR uniqueness collision retry; duplicate student_number rejected per branch; cashier cannot enroll (403)
-- [ ] `StudentListTest` — filters work; branch-scoped (other branch's students not returned); subscription/non-subscription grouping
-- [ ] `StudentDetailTest` — profile update strips tags from notes/allergies; QR regeneration invalidates old code; status change with reason; soft delete retains orders
-- [ ] `WalletTopUpTest` — cashier cannot top-up (403); reference number alphanumeric validation; new balance preview matches deposit
-- [ ] `CreditSettlementTest` — supervisor cannot settle credit (403); atomic balance update; credit_transactions entry created on each change
+
+### 11.1 Existing Tests (passing)
+- [x] `EnrollmentTest` — subscription enrollment seeds 10 monthly payments; non-subscription enrollment skips; QR uniqueness collision retry; duplicate student_number rejected per branch; cashier cannot enroll (403)
+- [x] `StudentListTest` — filters work; branch-scoped (other branch's students not returned); subscription/non-subscription grouping
+- [x] `StudentDetailTest` — profile update strips tags from notes/allergies; QR regeneration invalidates old code; status change with reason; soft delete retains orders
+- [x] `WalletTopUpTest` — cashier cannot top-up (403); reference number alphanumeric validation; new balance preview matches deposit
+- [x] `CreditSettlementTest` — supervisor cannot settle credit (403); atomic balance update; credit_transactions entry created on each change
+
+### 11.2 New / Updated Tests
+- [x] `EnrollmentTest` — updated: subscription seeding test asserts `year` column; partial range (Aug–Dec = 5 rows); end-before-start rejected (422)
+- [x] `BranchMonthlyAmountTest` (new, 7 tests) — full CRUD coverage: list, configured/default display, create, upsert (idempotent), update by ID, delete, cashier 403
+- [x] `PaymentRangeTest` (new, 4 tests) — happy path, skip-existing, end-before-start 422, cashier 403
+- [ ] `PaymentControllerTest` — update existing toggle and record tests to assert `year` is in response/request
+- [ ] Update `EnrollmentTest` factory states — `StudentFactory::subscriptionPayload()` should accept optional subscription period fields

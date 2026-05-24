@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class WalletController extends Controller
 {
-    public function topUp(Request $request, Student $student): RedirectResponse
+    public function topUp(Request $request, Student $student): JsonResponse
     {
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'min:1', 'max:100000'],
@@ -23,14 +23,14 @@ class WalletController extends Controller
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $note = isset($validated['note']) ? strip_tags($validated['note']) : null;
-
         $student->deposit((int) round($validated['amount'] * 100), [
             'payment_method' => $validated['payment_method'],
             'reference_number' => $validated['reference_number'] ?? null,
-            'note' => $note,
+            'note' => isset($validated['note']) ? strip_tags($validated['note']) : null,
             'performed_by' => $request->user()->id,
         ]);
+
+        $student->load('wallet');
 
         activity('wallet')
             ->causedBy($request->user())
@@ -39,10 +39,13 @@ class WalletController extends Controller
                 'amount' => $validated['amount'],
                 'payment_method' => $validated['payment_method'],
                 'reference' => $validated['reference_number'] ?? null,
-                'new_balance' => $student->fresh()->balance / 100,
+                'new_balance' => $student->wallet?->balanceFloat ?? 0,
             ])
             ->log('wallet.topped_up');
 
-        return back()->with('success', 'Wallet topped up successfully.');
+        return response()->json([
+            'message' => 'Wallet topped up successfully.',
+            'new_balance' => $student->wallet?->balanceFloat ?? 0,
+        ]);
     }
 }

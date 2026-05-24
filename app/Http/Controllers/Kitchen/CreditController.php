@@ -6,16 +6,16 @@ use App\Enums\CreditTransactionType;
 use App\Http\Controllers\Controller;
 use App\Models\CreditTransaction;
 use App\Models\Student;
-use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CreditController extends Controller
 {
-    public function settle(Request $request, Student $student): RedirectResponse
+    public function settle(Request $request, Student $student): JsonResponse
     {
         if ($student->credit_balance <= 0) {
-            return back()->withErrors(['credit' => 'No outstanding credit to settle.']);
+            return response()->json(['message' => 'No outstanding credit to settle.'], 422);
         }
 
         $amountSettled = DB::transaction(function () use ($request, $student): float {
@@ -34,7 +34,6 @@ class CreditController extends Controller
                 'amount' => $amount,
                 'notes' => 'Credit settled manually.',
                 'performed_by' => $request->user()->id,
-                'created_at' => now(),
             ]);
 
             $locked->update(['credit_balance' => 0]);
@@ -42,8 +41,8 @@ class CreditController extends Controller
             return $amount;
         });
 
-        if ($amountSettled === 0.0) {
-            return back()->withErrors(['credit' => 'No outstanding credit to settle.']);
+        if ($amountSettled <= 0.0) {
+            return response()->json(['message' => 'No outstanding credit to settle.'], 422);
         }
 
         activity('wallet')
@@ -55,6 +54,9 @@ class CreditController extends Controller
             ])
             ->log('wallet.credit_settled');
 
-        return back()->with('success', 'Credit balance settled.');
+        return response()->json([
+            'message' => 'Credit balance settled.',
+            'amount_settled' => $amountSettled,
+        ]);
     }
 }

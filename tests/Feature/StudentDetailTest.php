@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class StudentDetailTest extends TestCase
@@ -23,32 +24,34 @@ class StudentDetailTest extends TestCase
         parent::setUp();
         $this->seed(PermissionSeeder::class);
 
-        $this->branch = Branch::factory()->create();
+        $this->branch = Branch::factory()->create(['is_active' => true]);
         $this->manager = User::factory()->create();
         $this->manager->assignRole('manager');
         $this->manager->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
     }
 
-    private function actingAsManager(): static
+    private function asManager(): static
     {
-        return $this->actingAs($this->manager)->withSession(['active_branch_id' => $this->branch->id]);
+        Sanctum::actingAs($this->manager, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
     public function test_manager_can_view_student_detail(): void
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $response = $this->actingAsManager()->get(route('kitchen.students.show', $student));
+        $response = $this->asManager()->getJson("/api/v1/students/{$student->id}");
 
         $response->assertOk();
-        $response->assertInertia(fn ($page) => $page->component('kitchen/students/show'));
+        $response->assertJsonStructure(['student', 'wallet_transactions', 'activity_logs']);
     }
 
     public function test_manager_can_update_student_profile(): void
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $response = $this->actingAsManager()->put(route('kitchen.students.update', $student), [
+        $response = $this->asManager()->putJson("/api/v1/students/{$student->id}", [
             'first_name' => 'Updated',
             'last_name' => 'Name',
             'grade_level' => 'Grade 5',
@@ -56,7 +59,7 @@ class StudentDetailTest extends TestCase
             'birthday' => '2015-06-01',
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('students', ['id' => $student->id, 'first_name' => 'Updated']);
     }
 
@@ -64,7 +67,7 @@ class StudentDetailTest extends TestCase
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $this->actingAsManager()->put(route('kitchen.students.update', $student), [
+        $this->asManager()->putJson("/api/v1/students/{$student->id}", [
             'first_name' => 'Juan',
             'last_name' => 'Cruz',
             'grade_level' => 'Grade 3',
@@ -84,11 +87,11 @@ class StudentDetailTest extends TestCase
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id, 'qr_code' => 'SB-ORIGINALCODE0']);
 
-        $this->actingAsManager()->post(route('kitchen.students.regenerate-qr', $student));
+        $response = $this->asManager()->postJson("/api/v1/students/{$student->id}/regenerate-qr");
 
-        $student->refresh();
-        $this->assertNotEquals('SB-ORIGINALCODE0', $student->qr_code);
-        $this->assertStringStartsWith('SB-', $student->qr_code);
+        $response->assertOk();
+        $this->assertStringStartsWith('SB-', $response->json('qr_code'));
+        $this->assertNotEquals('SB-ORIGINALCODE0', $response->json('qr_code'));
     }
 
     public function test_regenerated_qr_is_globally_unique(): void
@@ -97,10 +100,10 @@ class StudentDetailTest extends TestCase
         Student::factory()->create(['branch_id' => $this->branch->id, 'qr_code' => $existingCode]);
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $this->actingAsManager()->post(route('kitchen.students.regenerate-qr', $student));
+        $response = $this->asManager()->postJson("/api/v1/students/{$student->id}/regenerate-qr");
 
-        $student->refresh();
-        $this->assertNotEquals($existingCode, $student->qr_code);
+        $response->assertOk();
+        $this->assertNotEquals($existingCode, $response->json('qr_code'));
     }
 
     public function test_status_change_without_reason_for_non_requiring_status(): void
@@ -110,11 +113,11 @@ class StudentDetailTest extends TestCase
             'enrollment_status' => EnrollmentStatus::Enrolled->value,
         ]);
 
-        $response = $this->actingAsManager()->post(route('kitchen.students.update-status', $student), [
+        $response = $this->asManager()->patchJson("/api/v1/students/{$student->id}/status", [
             'enrollment_status' => EnrollmentStatus::Paused->value,
         ]);
 
-        $response->assertRedirect();
+        $response->assertOk();
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
             'enrollment_status' => EnrollmentStatus::Paused->value,
@@ -125,19 +128,20 @@ class StudentDetailTest extends TestCase
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $response = $this->actingAsManager()->post(route('kitchen.students.update-status', $student), [
+        $response = $this->asManager()->patchJson("/api/v1/students/{$student->id}/status", [
             'enrollment_status' => EnrollmentStatus::Banned->value,
         ]);
 
-        $response->assertSessionHasErrors('reason');
+        $response->assertJsonValidationErrors(['reason']);
     }
 
     public function test_manager_can_soft_delete_student(): void
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $this->actingAsManager()->delete(route('kitchen.students.destroy', $student));
+        $response = $this->asManager()->deleteJson("/api/v1/students/{$student->id}");
 
+        $response->assertOk();
         $this->assertSoftDeleted('students', ['id' => $student->id]);
     }
 }

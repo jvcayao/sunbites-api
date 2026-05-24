@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
             PosMenuItemSeeder::class,
             WeeklyMealPlanSeeder::class,
             InventoryItemSeeder::class,
+            SystemConfigurationSeeder::class,
         ]);
     }
 }

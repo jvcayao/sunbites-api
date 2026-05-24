@@ -39,7 +39,7 @@ class UserManagementController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        return response()->json(UserResource::collection($users));
+        return response()->json(UserResource::collection($users)->response()->getData(true));
     }
 
     public function store(Request $request): JsonResponse

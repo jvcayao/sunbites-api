@@ -9,24 +9,37 @@ use App\Models\Branch;
 use App\Models\BranchMonthlyAmount;
 use App\Models\Student;
 use App\Models\StudentContact;
-use Illuminate\Http\RedirectResponse;
+use App\Models\SystemConfiguration;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Inertia\Inertia;
-use Inertia\Response;
 
 class EnrollmentController extends Controller
 {
-    public function create(): Response
+    public function index(): JsonResponse
     {
-        return Inertia::render('kitchen/enrollment/index', [
+        $dailyRate = SystemConfiguration::getValue('daily_meal_rate', 135);
+        $configMonths = config('sunbites.school_months');
+
+        $defaults = collect(SchoolMonth::cases())->mapWithKeys(fn ($m) => [
+            $m->value => [
+                'month' => $m->value,
+                'label' => $m->label(),
+                'days' => $configMonths[$m->value]['days'] ?? 0,
+                'default_amount' => ($configMonths[$m->value]['days'] ?? 0) * $dailyRate,
+            ],
+        ]);
+
+        return response()->json([
             'branches' => Branch::where('is_active', true)->get(['id', 'name', 'slug']),
-            'gradeLevels' => config('sunbites.grade_levels'),
+            'grade_levels' => config('sunbites.grade_levels'),
+            'school_month_defaults' => $defaults,
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'branch_id' => ['required', 'exists:branches,id'],
@@ -54,12 +67,27 @@ class EnrollmentController extends Controller
             'signature' => ['required', 'string', 'max:255'],
             'permission_meals' => ['required', 'accepted'],
             'permission_dietary' => ['required', 'accepted'],
+            'subscription_start_month' => ['required_if:student_type,subscription', Rule::enum(SchoolMonth::class)],
+            'subscription_start_year' => ['required_if:student_type,subscription', 'integer', 'digits:4', 'min:2020', 'max:2099'],
+            'subscription_end_month' => ['required_if:student_type,subscription', Rule::enum(SchoolMonth::class)],
+            'subscription_end_year' => ['required_if:student_type,subscription', 'integer', 'digits:4', 'min:2020', 'max:2099'],
         ]);
+
+        $studentType = StudentType::from($validated['student_type']);
+
+        if ($studentType === StudentType::Subscription) {
+            $start = Carbon::createFromDate($validated['subscription_start_year'], SchoolMonth::from($validated['subscription_start_month'])->toMonthNumber(), 1);
+            $end = Carbon::createFromDate($validated['subscription_end_year'], SchoolMonth::from($validated['subscription_end_month'])->toMonthNumber(), 1);
+
+            if ($end->lt($start)) {
+                return response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422);
+            }
+        }
 
         $validated['allergies'] = isset($validated['allergies']) ? strip_tags($validated['allergies']) : null;
         $validated['notes'] = isset($validated['notes']) ? strip_tags($validated['notes']) : null;
 
-        $student = DB::transaction(function () use ($validated, $request) {
+        $student = DB::transaction(function () use ($validated, $request, $studentType) {
             $qrCode = Student::generateUniqueQrCode();
 
             $photoPath = null;
@@ -96,8 +124,8 @@ class EnrollmentController extends Controller
                 ]);
             }
 
-            if ($student->student_type === StudentType::Subscription) {
-                $this->seedMonthlyPayments($student);
+            if ($studentType === StudentType::Subscription) {
+                $this->seedMonthlyPayments($student, $validated);
             }
 
             activity('students')
@@ -112,47 +140,48 @@ class EnrollmentController extends Controller
             return $student;
         });
 
-        return redirect()->route('kitchen.enrollment.success', $student)
-            ->with('success', 'Student enrolled successfully.');
+        $subscriptionPeriod = null;
+        if ($studentType === StudentType::Subscription) {
+            $startLabel = SchoolMonth::from($validated['subscription_start_month'])->label().' '.$validated['subscription_start_year'];
+            $endLabel = SchoolMonth::from($validated['subscription_end_month'])->label().' '.$validated['subscription_end_year'];
+            $subscriptionPeriod = $startLabel.' – '.$endLabel;
+        }
+
+        return response()->json([
+            'id' => $student->id,
+            'student_number' => $student->student_number,
+            'qr_code' => $student->qr_code,
+            'full_name' => $student->full_name,
+            'student_type' => $student->student_type->value,
+            'enrollment_date' => $student->enrollment_date->toDateString(),
+            'subscription_period' => $subscriptionPeriod,
+        ], 201);
     }
 
-    public function success(Student $student): Response
+    private function seedMonthlyPayments(Student $student, array $validated): void
     {
-        $student->load('contacts');
+        $startYear = (int) $validated['subscription_start_year'];
+        $endYear = (int) $validated['subscription_end_year'];
+        $startMonth = SchoolMonth::from($validated['subscription_start_month']);
+        $endMonth = SchoolMonth::from($validated['subscription_end_month']);
 
-        return Inertia::render('kitchen/enrollment/success', [
-            'student' => [
-                'id' => $student->id,
-                'full_name' => $student->full_name,
-                'student_number' => $student->student_number,
-                'student_type' => $student->student_type->label(),
-                'enrollment_date' => $student->enrollment_date->toDateString(),
-                'qr_code' => $student->qr_code,
-                'grade_level' => $student->grade_level,
-                'section' => $student->section,
-                'branch_id' => $student->branch_id,
-            ],
-        ]);
-    }
+        $start = Carbon::createFromDate($startYear, $startMonth->toMonthNumber(), 1);
+        $end = Carbon::createFromDate($endYear, $endMonth->toMonthNumber(), 1);
 
-    private function seedMonthlyPayments(Student $student): void
-    {
-        $branchAmounts = BranchMonthlyAmount::where('branch_id', $student->branch_id)
-            ->pluck('amount', 'school_month')
-            ->toArray();
-
-        $configMonths = config('sunbites.school_months');
-
-        foreach (SchoolMonth::cases() as $month) {
-            $amount = $branchAmounts[$month->value]
-                ?? $configMonths[$month->value]['amount']
-                ?? 0;
-
-            $student->monthlyPayments()->create([
-                'school_month' => $month->value,
-                'status' => 'unpaid',
-                'amount' => $amount,
-            ]);
+        $current = $start->copy();
+        while ($current->lte($end)) {
+            $schoolMonth = SchoolMonth::fromMonthNumber($current->month);
+            if ($schoolMonth !== null) {
+                $year = $current->year;
+                $amount = BranchMonthlyAmount::resolveAmount($student->branch_id, $schoolMonth, $year);
+                $student->monthlyPayments()->create([
+                    'school_month' => $schoolMonth->value,
+                    'year' => $year,
+                    'status' => 'unpaid',
+                    'amount' => $amount,
+                ]);
+            }
+            $current->addMonth();
         }
     }
 }

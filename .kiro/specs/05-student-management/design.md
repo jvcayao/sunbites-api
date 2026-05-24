@@ -26,6 +26,28 @@
 │  │  Includes daily meal tray. │  │  only. No fee.   │   │
 │  └────────────────────────────┘  └──────────────────┘   │
 │                                                          │
+│  ── SUBSCRIPTION PERIOD ──────────────────────────────  │
+│  (shown only when Subscription type is selected)         │
+│                                                          │
+│  Start Month *                End Month *                │
+│  [June ▾]  [2025 ▾]           [March ▾]  [2026 ▾]       │
+│                                                          │
+│  ┌─ Payment Preview ─────────────────────────────────┐  │
+│  │  Month         Days   Amount                      │  │
+│  │  June 2025      22    ₱2,970   (configured)       │  │
+│  │  July 2025      22    ₱2,970   (configured)       │  │
+│  │  August 2025    18    ₱2,430   (default)          │  │
+│  │  September 2025 22    ₱2,970   (default)          │  │
+│  │  October 2025   22    ₱2,970   (configured)       │  │
+│  │  November 2025  16    ₱2,160   (default)          │  │
+│  │  December 2025  15    ₱2,025   (default)          │  │
+│  │  January 2026   20    ₱2,700   (default)          │  │
+│  │  February 2026  18    ₱2,430   (default)          │  │
+│  │  March 2026      7    ₱945     (configured)       │  │
+│  │  ─────────────────────────────────────────────    │  │
+│  │  Total: 10 months   ₱26,400                      │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                          │
 │  ── STUDENT INFORMATION ─────────────────────────────   │
 │  [📷 Photo]   (80×80 upload preview)                    │
 │                                                          │
@@ -58,7 +80,7 @@
 │  Digital Signature (type full name) *                    │
 │  [__________________]                                    │
 │                                                          │
-│  Date: 05/09/2026  (read-only)                          │
+│  Date: 05/24/2026  (read-only)                          │
 │                                                          │
 │  [_____ Submit Enrollment → _____]                       │
 └──────────────────────────────────────────────────────────┘
@@ -67,6 +89,16 @@
 **Component Notes:**
 - Branch selector: radio cards with border highlight on active — `border-primary` when selected
 - Type selector: same radio card pattern
+- **Subscription Period section** — conditionally rendered when Subscription type is selected:
+  - Two side-by-side pairs: `[Month ▾]  [Year ▾]` for start and end
+  - Month options: June, July, August, September, October, November, December, January, February, March
+  - Year options: current year and next year (dynamic based on today)
+  - Defaults: start = June + current year, end = March + (current year + 1)
+  - Validation: end must be on or after start in chronological school year order
+  - Live preview table renders below pickers — updates on any picker change
+  - Preview table columns: Month (e.g. "June 2025"), Days, Amount, Source indicator ("configured" = from `branch_monthly_amounts`, "default" = from config fallback)
+  - Preview table footer: total months count + total amount
+  - Source indicator: `text-xs text-muted-foreground` — "configured" in primary color, "default" in muted
 - Photo: 80×80 circle placeholder, file input, preview swaps in on selection
 - Required fields: `*` red asterisk in label
 - Checkboxes: custom styled with `accent-primary`
@@ -82,7 +114,8 @@
 │  │  Student:    Maria Santos                     │   │
 │  │  Type:       📋 Subscription                  │   │
 │  │  Number:     ANT-2025-001                     │   │
-│  │  Enrolled:   05/09/2026                       │   │
+│  │  Period:     June 2025 – March 2026           │   │
+│  │  Enrolled:   05/24/2026                       │   │
 │  └───────────────────────────────────────────────┘   │
 │                                                       │
 │  Student QR Code                                      │
@@ -97,6 +130,7 @@
 ```
 - Green border card (`border-green-300 bg-green-50`)
 - QR code: auto-generated SVG, primary color border, format `SB-{12 random alphanumeric}`
+- "Period" row shown only for subscription students — displays the configured range
 - "Enroll Another" button clears and resets the form
 
 ---
@@ -116,7 +150,7 @@
 │                                              [14 days left]  │
 ├──────────────────────────────────────────────────────────────┤
 │  [Search name or student number...]  [Enroll Status ▾]      │
-│  (Subscription tab only): [Month ▾] [Paid/Unpaid ▾]         │
+│  (Subscription tab only): [Month ▾] [Year ▾] [Paid/Unpaid ▾]│
 │                                                              │
 │  [All●] [📋 Subscription (3)] [🪙 Non-Subscription (1)]     │
 ├──────────────────────────────────────────────────────────────┤
@@ -132,8 +166,9 @@
 │  │  [✏️ Edit]  [💰 Wallet]  [🗑 Remove]                  │   │
 │  │  ──────────────────────────────────────────────────  │   │
 │  │  MONTHLY SUBSCRIPTION — click badge to toggle        │   │
-│  │  [Jun ✓] [Jul ✗] [Aug ✗] [Sep ✗] [Oct ✗]           │   │
-│  │  [Nov ✗] [Dec ✗] [Jan ✗] [Feb ✗] [Mar ✗]           │   │
+│  │  [Jun '25 ✓] [Jul '25 ✗] [Aug '25 ✗] [Sep '25 ✗]   │   │
+│  │  [Oct '25 ✗] [Nov '25 ✗] [Dec '25 ✗] [Jan '26 ✗]   │   │
+│  │  [Feb '26 ✗] [Mar '26 ✗]                            │   │
 │  │  [💳 Record Payment]                                 │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
@@ -162,8 +197,9 @@
 - Non-subscription: `bg-purple-50 border-2 border-purple-600 rounded-lg px-4 py-1.5 text-sm font-extrabold text-purple-700`
 
 **Subscription card — month badges:**
-- Paid month: `bg-green-100 text-green-700 border-green-300 rounded-full text-[11px] font-bold px-3 py-1` — "Jun ✓"
-- Unpaid month: `bg-red-100 text-destructive border-red-300 rounded-full text-[11px] font-bold px-3 py-1` — "Jul ✗"
+- Include abbreviated year in label: "Jun '25", "Jan '26"
+- Paid month: `bg-green-100 text-green-700 border-green-300 rounded-full text-[11px] font-bold px-3 py-1` — "Jun '25 ✓"
+- Unpaid month: `bg-red-100 text-destructive border-red-300 rounded-full text-[11px] font-bold px-3 py-1` — "Jul '25 ✗"
 - Click to toggle (with confirm dialog for marking unpaid)
 
 **Non-subscription card — bottom section:**
@@ -330,16 +366,30 @@ All: `text-[11px] font-bold px-3 py-1 rounded-full border cursor-pointer` — cl
 ```
 
 **Tab: Payment (Subscription only)**
+
+The payment tab shows all `student_monthly_payments` records for this student, grouped by year, with the year displayed as a section header. Each row shows the month name, year, days, daily rate, payment status badge, and amount.
+
 ```
-│  ┌──── June ──────────────────────────────────────────┐  │
-│  │  22 school days · ₱135/day    [PAID ✓]  ₱2,970   │  │
-│  │  [Download Receipt 📄]                              │  │
-│  └────────────────────────────────────────────────────┘  │
-│  ┌──── July ──────────────────────────────────────────┐  │
-│  │  22 school days · ₱135/day   [UNPAID]   ₱2,970   │  │
-│  │  [Mark as Paid →]                                   │  │
-│  └────────────────────────────────────────────────────┘  │
+│  [+ Add Subscription Period]      (Admin/Manager/Supervisor)│
+│                                                             │
+│  ── 2025 ─────────────────────────────────────────────    │
+│  ┌──── June 2025 ──────────────────────────────────────┐  │
+│  │  22 school days · ₱135/day    [PAID ✓]  ₱2,970    │  │
+│  │  [Download Receipt 📄]                               │  │
+│  └─────────────────────────────────────────────────────┘  │
+│  ┌──── July 2025 ──────────────────────────────────────┐  │
+│  │  22 school days · ₱135/day   [UNPAID]   ₱2,970    │  │
+│  │  [Mark as Paid →]                                    │  │
+│  └─────────────────────────────────────────────────────┘  │
+│                                                             │
+│  ── 2026 ─────────────────────────────────────────────    │
+│  ┌──── January 2026 ───────────────────────────────────┐  │
+│  │  20 school days · ₱135/day   [UNPAID]   ₱2,700    │  │
+│  │  [Mark as Paid →]                                    │  │
+│  └─────────────────────────────────────────────────────┘  │
 ```
+
+For non-subscription students this tab shows a "No subscription plan" empty state.
 
 **Tab: Notes / Logs**
 ```
@@ -353,12 +403,123 @@ All: `text-[11px] font-bold px-3 py-1 rounded-full border cursor-pointer` — cl
 
 ---
 
+## Dialog: Add Subscription Period
+
+Opens from the `[+ Add Subscription Period]` button on the Payment tab of Student Detail.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Add Subscription Period — Maria Santos            [✕]   │
+├──────────────────────────────────────────────────────────┤
+│                                                           │
+│  Start Month *                End Month *                 │
+│  [June ▾]   [2025 ▾]          [March ▾]   [2026 ▾]       │
+│                                                           │
+│  ┌─ Payment Preview ──────────────────────────────────┐  │
+│  │  Month           Days   Amount                     │  │
+│  │  June 2025        22    ₱2,970   (configured)      │  │
+│  │  July 2025        22    ₱2,970   (default)         │  │
+│  │  ...                                               │  │
+│  │  ──────────────────────────────────────────────    │  │
+│  │  Total: 10 months   ₱26,400                       │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                           │
+│  ⚠ Months that already have a payment record for this    │
+│    student will be highlighted in red and blocked.        │
+│                                                           │
+│  [Cancel]                    [Create Payment Records →]  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Component Notes:**
+- Same range picker pattern as the enrollment form subscription period section
+- Preview table renders live as pickers change
+- If any month in the range already has a `student_monthly_payments` record for this student (same school_month + year), that row is highlighted `bg-red-50 border-l-2 border-red-500` with a "⚠ Already exists" indicator
+- Submit button disabled if any conflicting months are present
+- On success: payment tab list refreshes, dialog closes, success toast shown
+
+---
+
+## Screen: References → Subscription Config
+
+**Route:** `pos.sunbites.com.ph/references/subscription-config`
+**Nav item:** References (submenu)
+**Layout:** `KitchenLayout`
+**Roles:** Admin, Manager, Supervisor
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 📅 Subscription Config                                        │
+│ Configure school days and monthly amounts per year            │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  School Year:  [2025 ▾]                [+ Add Month]        │
+│                                                              │
+│  Base daily rate: ₱135/day  (from config)                   │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│  Month          Days    Amount      Source    Actions        │
+├──────────────────────────────────────────────────────────────┤
+│  June           22      ₱2,970      ✅ Set    [Edit] [Del]  │
+│  July           22      ₱2,970      ✅ Set    [Edit] [Del]  │
+│  August         18      ₱2,430      ⬜ Default  [Set]       │
+│  September      22      ₱2,970      ✅ Set    [Edit] [Del]  │
+│  October        22      ₱2,970      ⬜ Default  [Set]       │
+│  November       16      ₱2,160      ⬜ Default  [Set]       │
+│  December       15      ₱2,025      ⬜ Default  [Set]       │
+│  January        20      ₱2,700      ⬜ Default  [Set]       │
+│  February       18      ₱2,430      ⬜ Default  [Set]       │
+│  March           7      ₱945        ✅ Set    [Edit] [Del]  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Component Notes:**
+- Year selector at top: shows current year and adjacent years; defaults to the current school year
+- Table shows all 10 school months — always all 10 rows, whether configured or not
+- Source column:
+  - "✅ Set" — a `branch_monthly_amounts` record exists for this branch + month + year; badge `bg-green-100 text-green-700`
+  - "⬜ Default" — no record exists; showing system fallback; badge `bg-muted text-muted-foreground`
+- Amount column: shows the effective amount (configured or computed from fallback)
+- Days column: shows the effective days (configured or system default)
+- **[Set] button** (for Default rows): opens the Add/Edit modal to configure this month
+- **[Edit] button** (for Set rows): opens the Add/Edit modal pre-filled with existing values
+- **[Del] button** (for Set rows): deletes the record with a confirmation prompt; row reverts to Default
+- **[+ Add Month] button**: opens the modal with month + year pre-set to the first unconfigured month
+
+### Add / Edit Month Modal
+
+```
+┌──────────────────────────────────────────────────────┐
+│  Configure Month — June 2025                   [✕]   │
+├──────────────────────────────────────────────────────┤
+│                                                       │
+│  Month         Year                                   │
+│  [June ▾]      [2025 ▾]   (read-only when editing)   │
+│                                                       │
+│  School Days *                                        │
+│  [__22__]                                             │
+│                                                       │
+│  Computed Amount                                      │
+│  ₱2,970  (₱135 × 22 days)  — live preview            │
+│                                                       │
+│  [Cancel]                       [Save Configuration] │
+└──────────────────────────────────────────────────────┘
+```
+
+- School days input: integer, min 1, max 31
+- Computed amount: `text-lg font-bold text-primary`, updates live as days changes
+- Formula shown inline: `(₱{daily_rate} × {days} days)`
+- Amount is always computed server-side as `daily_meal_rate × days` — not sent directly by client
+- On save: table row updates, success toast
+
+---
+
 ## Modal: Wallet Top-Up
 
 ```
-┌──────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────┐
 │  Top Up Wallet — Maria Santos              [✕]   │
-├──────────────────────────────────────────────────┤
+├──────────────────────────────────────────────────────┤
 │  Current Balance: ₱450                           │
 │                                                   │
 │  Amount to Add (₱) *                             │

@@ -11,6 +11,7 @@ class StudentMonthlyPayment extends Model
     protected $fillable = [
         'student_id',
         'school_month',
+        'year',
         'status',
         'amount',
         'recorded_at',
@@ -21,6 +22,7 @@ class StudentMonthlyPayment extends Model
     {
         return [
             'school_month' => SchoolMonth::class,
+            'year' => 'integer',
             'amount' => 'decimal:2',
             'recorded_at' => 'datetime',
         ];
