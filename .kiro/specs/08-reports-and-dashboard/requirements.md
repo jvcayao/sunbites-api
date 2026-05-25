@@ -202,6 +202,85 @@ Full operational audit trail from the `activity_log` table populated by `spatie/
 
 ---
 
+## Subscription Billing Report
+
+Accessible at: `pos.sunbites.com.ph/reports/billing`
+Roles: Admin, Manager, Supervisor
+
+Tracks monthly subscription payment collection across all enrolled subscriber students for the selected school month and year. Data source: `student_monthly_payments` joined with `students`.
+
+### Filters
+- **School Year** — year number dropdown (e.g. 2025, 2026)
+- **School Month** — dropdown of school months (June → March)
+- **Payment Status** — All / Paid / Unpaid
+- **Grade Level** — All or specific grade
+
+### Summary Panel
+- Total Subscribers (count of subscription students in branch with payment records for the selected month/year)
+- Total Collected (sum of `amount` where `status = paid`)
+- Total Outstanding (sum of `amount` where `status = unpaid`)
+- Collection Rate (% of subscribers who have paid)
+
+### Table
+| Column | Source |
+|---|---|
+| Student Name | `students.full_name` |
+| Student Number | `students.student_number` |
+| Grade | `students.grade_level` |
+| Section | `students.section` |
+| Month / Year | `school_month` + `year` |
+| Amount Due | `amount` |
+| Status | `status` badge — Paid (green) / Unpaid (red) |
+| Paid On | `recorded_at` (blank if unpaid) |
+| Recorded By | `recorded_by` → user full name (blank if unpaid) |
+
+- Sorted by status (unpaid first), then student name
+- Paginated 50 per page
+
+### Export
+- `BillingReportExport` class — Admin/Manager only
+- Filename: `billing-report-{branch}-{month}-{year}.xlsx`
+- Includes summary totals row at bottom
+
+---
+
+## Credit Collection Report
+
+Accessible at: `pos.sunbites.com.ph/reports/credits`
+Roles: Admin, Manager only — Supervisor excluded (financial sensitivity)
+
+Full audit trail of credit transactions from the `credit_transactions` table. Shows when credit was charged at checkout, when it was settled, and when it was voided.
+
+### Filters
+- **Date Range** — preset buttons (Today, This Week, This Month, Custom Range)
+- **Type** — All / Charged / Settled / Voided
+- **Student** — free-text search by name or student number
+
+### Summary Panel
+- Total Credit Charged in period (sum of `amount` where `type = charged`)
+- Total Settled in period (sum of `amount` where `type = settled`)
+- Total Voided in period (sum of `amount` where `type = voided`)
+- Net Outstanding (charged − settled − voided)
+
+### Table
+| Column | Source |
+|---|---|
+| Date & Time | `credit_transactions.created_at` |
+| Student | `student.full_name` + student number |
+| Grade | `student.grade_level` |
+| Type | `type` badge — Charged (red) / Settled (green) / Voided (muted) |
+| Amount | `amount` |
+| Order # | linked `order_id` if present (Voided orders show strikethrough) |
+| Notes | `notes` |
+| Staff | `performed_by` → user full name |
+
+- Sorted newest first
+- Paginated 25 per page
+- No export — credit transaction audit trail stays in-system only
+- No delete or edit — entries are immutable
+
+---
+
 ## Export Classes (maatwebsite/excel)
 
 Each report has a dedicated export class under `app/Exports/`:
@@ -243,6 +322,9 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | GET | `/api/v1/reports/inventory/export` | admin, manager | Excel export |
 | GET | `/api/v1/reports/daily-summary` | admin, manager | Daily summary |
 | GET | `/api/v1/reports/activity` | admin, manager | Activity log viewer |
+| GET | `/api/v1/reports/billing` | admin, manager, supervisor | Subscription billing report |
+| GET | `/api/v1/reports/billing/export` | admin, manager | Excel export |
+| GET | `/api/v1/reports/credits` | admin, manager | Credit collection report |
 
 ---
 
@@ -271,5 +353,13 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Activity log filters: date range, user dropdown, log_name/category, free-text search
 - [ ] Activity log table: date/time, user, action, category badge, subject link, expandable properties
 - [ ] Activity log entries are immutable — no delete or edit actions
-- [ ] "Reports" group in `KitchenLayout` sidebar: Dashboard, Sales, Students, Wallet, Inventory, Daily Summary
-- [ ] "Activity Log" link visible to Admin/Manager only
+- [ ] Subscription Billing report at `pos.sunbites.com.ph/reports/billing` with school year/month/status/grade filters and summary panel
+- [ ] Billing table: student name, number, grade, section, month/year, amount due, status badge, paid-on date, recorded-by; sorted unpaid-first
+- [ ] `BillingReportExport` — Admin/Manager only; includes summary totals row; filename `billing-report-{branch}-{month}-{year}.xlsx`
+- [ ] Credit Collection report at `pos.sunbites.com.ph/reports/credits` — Admin/Manager only (Supervisor excluded)
+- [ ] Credit report filters: date range, type (All/Charged/Settled/Voided), student search
+- [ ] Credit report table: date/time, student, grade, type badge (Charged=red/Settled=green/Voided=muted), amount, order #, notes, staff
+- [ ] Credit report summary: total charged, settled, voided, and net outstanding for the period
+- [ ] Credit report entries are immutable — no delete or edit; no export
+- [ ] "Reports" group in `KitchenLayout` sidebar: Dashboard, Sales, Students, Wallet, Inventory, Daily Summary, Billing
+- [ ] "Activity Log" and "Credits" links visible to Admin/Manager only

@@ -312,6 +312,80 @@
 
 ---
 
+## Screen: Subscription Billing Report
+
+**Route:** `pos.sunbites.com.ph/reports/billing`
+**Roles:** Admin, Manager, Supervisor
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ Subscription Billing                       [Export to Excel 📥]  │
+├───────────────────────────────────────────────────────────────────┤
+│  Filters: [Year 2026 ▾]  [Month: June ▾]  [Status: All ▾]  [Grade ▾] │
+├───────────────────────────────────────────────────────────────────┤
+│  ┌── Summary ─────────────────────────────────────────────────┐  │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌──────────────┐ │  │
+│  │  │ Total Sub.      │  │ Collected       │  │ Outstanding  │ │  │
+│  │  │    38           │  │   ₱4,185.00     │  │  ₱945.00     │ │  │
+│  │  └────────────────┘  └────────────────┘  └──────────────┘ │  │
+│  │  Collection Rate: 81.6%                                    │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  Student         Std No.  Grade   Month    Amount  Status  Paid On│
+│  Maria Santos   STU-001  Gr. 3   June 26  ₱135  [Paid✓]  05/02  │
+│  Juan dela Cruz STU-002  Gr. 5   June 26  ₱135  [Unpaid] —      │
+│  Sofia Reyes    STU-003  Gr. 1   June 26  ₱135  [Paid✓]  05/01  │
+│                                                                   │
+│  [← 1  2  3 →]                              Sorted: Unpaid first │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+**Status badges:**
+- Paid — `bg-green-50 border-green-600 text-green-700`
+- Unpaid — `bg-red-50 border-destructive text-destructive`
+
+**Export button:** Admin/Manager only — hidden for Supervisor (also enforced server-side).
+
+---
+
+## Screen: Credit Collection Report
+
+**Route:** `pos.sunbites.com.ph/reports/credits`
+**Roles:** Admin, Manager only — Supervisor excluded
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│ 💳 Credit Collection                                              │
+├───────────────────────────────────────────────────────────────────┤
+│  [Today] [This Week] [This Month●] [Custom]                       │
+│  Type [All ▾]   Student [Search by name or number...]            │
+├───────────────────────────────────────────────────────────────────┤
+│  ┌── Summary ─────────────────────────────────────────────────┐  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │  │
+│  │  │ Charged       │  │ Settled       │  │ Net Outstanding  │ │  │
+│  │  │  ₱1,350.00    │  │  ₱810.00      │  │  ₱540.00         │ │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────────┘ │  │
+│  └────────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│  Date/Time     Student          Grade  Type       Amount  Order # │
+│  05/10 12:01  Maria Santos     Gr. 3  [Charged🔴] ₱135   #001012 │
+│  05/10 14:30  Maria Santos     Gr. 3  [Settled🟢] ₱135   —       │
+│  05/09 11:45  Juan dela Cruz   Gr. 5  [Charged🔴] ₱270   #001008 │
+│  05/09 09:10  Sofia Reyes      Gr. 1  [Voided⚫]  ₱135   #001005 │
+│                                                                   │
+│  [← 1  2  3 →]                           Sorted: Newest first    │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+**Type badges:**
+- Charged — `bg-red-50 border-destructive text-destructive`
+- Settled — `bg-green-50 border-green-600 text-green-700`
+- Voided — `bg-muted text-muted-foreground`
+
+No export button — credit audit trail stays in-system only. No delete or edit actions.
+
+---
+
 ## Sidebar Navigation for Reports
 
 Under a "Reports" group in `KitchenLayout` sidebar:
@@ -323,11 +397,13 @@ Under a "Reports" group in `KitchenLayout` sidebar:
   👛 Wallet Report
   📦 Inventory Report
   🧾 Daily Summary
+  🗓️ Billing
 ```
 
-Under "References" group:
+Under "References" group (Admin/Manager only — hidden for Supervisor):
 ```
-  📋 Activity Log   ← Admin/Manager only (hidden for Supervisor)
+  📋 Activity Log
+  💳 Credit Collection
 ```
 
 Export buttons: Admin + Manager only — hidden for Supervisor (also enforced server-side).
