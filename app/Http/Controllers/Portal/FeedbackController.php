@@ -45,19 +45,24 @@ class FeedbackController extends Controller
         $linkedStudents = $parent->students()->get(['students.id', 'branch_id']);
         $linkedStudentIds = $linkedStudents->pluck('id')->all();
 
+        if ($linkedStudents->isEmpty()) {
+            return response()->json(['message' => 'You have no linked students.'], 422);
+        }
+
         $validated = $request->validate([
-            'student_id' => ['required', 'integer', Rule::in($linkedStudentIds)],
+            'student_id' => ['nullable', 'integer', Rule::in($linkedStudentIds)],
             'category' => ['required', Rule::enum(FeedbackCategory::class)],
             'rating' => ['required', 'integer', 'min:1', 'max:5'],
             'message' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
 
-        $student = $linkedStudents->firstWhere('id', $validated['student_id']);
+        $branchId = $linkedStudents->firstWhere('id', $validated['student_id'])?->branch_id
+            ?? $linkedStudents->first()->branch_id;
 
         $feedback = Feedback::create([
             'parent_id' => $parent->id,
-            'student_id' => $validated['student_id'],
-            'branch_id' => $student->branch_id,
+            'student_id' => $validated['student_id'] ?? null,
+            'branch_id' => $branchId,
             'category' => $validated['category'],
             'rating' => $validated['rating'],
             'message' => strip_tags($validated['message']),
