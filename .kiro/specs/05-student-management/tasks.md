@@ -122,6 +122,7 @@
   - [x] **Order History tab**: paginated orders via `useQuery`, newest first
   - [x] **Payment tab**: for subscription — month grid with paid/unpaid toggle via `useMutation`; for non-subscription — "no subscription" message
   - [x] **Logs tab**: activity_log entries where `subject = Student`; read-only, newest first
+  - [ ] **Contacts tab**: each contact row shows a portal account status badge — "Activated" (green) when `email_verified_at` is set, "Pending Activation" (amber) when parent record exists but not yet activated, "No Email" (muted) when contact has no email; badge fetched from linked `parents` table via contact email match
 - [x] Update Payment tab — group payment rows by year (year as section header); show "Month Year" (e.g. "June 2025") instead of "Month" in each payment card
 - [x] Add `[+ Add Subscription Period]` button to Payment tab (admin/manager/supervisor only) — opens the Add Subscription Period dialog
 

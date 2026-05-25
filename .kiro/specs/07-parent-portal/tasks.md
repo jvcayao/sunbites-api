@@ -39,7 +39,7 @@
 
 ## 6. Jobs
 - [x] `WalletAlertJob` — queued job
-  - [ ] Dispatched from `CheckoutController` after successful wallet withdrawal when `balance < wallet_alert_threshold`
+  - [x] Dispatched from `CheckoutController` after successful wallet withdrawal when `balance < wallet_alert_threshold`
   - [x] Query `parent_student` pivot for this student where `wallet_alert_threshold > 0`
   - [x] Only dispatch if current balance < threshold
   - [x] Send `WalletAlertMail` to linked parent
@@ -65,7 +65,7 @@
 - [x] `POST /api/v1/portal/auth/logout` — `auth:parents`, `ability:parent`
 
 ### 8.3 Frontend (`~/sunbites-portal`)
-- [ ] Fix Zustand auth store — remove `persist` middleware and sessionStorage; token stored in memory only
+- [x] Fix Zustand auth store — remove `persist` middleware and sessionStorage; token stored in memory only
 - [ ] `lib/api/auth.ts` — add `forgotPassword(email)` and `resetPassword(token, email, password, passwordConfirmation)` methods
 - [ ] Login page — handle `account_not_activated` error: show message "Your account has not been activated yet. Check your email or contact the canteen."
 - [ ] Forgot password page at `app/(auth)/forgot-password/page.tsx` — email input, generic success message on submit
@@ -120,7 +120,10 @@
 - [x] Routes: `GET /api/v1/portal/students/{student}/wallet`, `PATCH /api/v1/portal/students/{student}/wallet/alert`
 
 ### 13.2 Frontend
-- [ ] Wallet page at `app/(portal)/students/[id]/wallet/page.tsx`
+- [ ] Wallet page at `app/(portal)/students/[id]/wallet/page.tsx`:
+  - [ ] Current wallet balance card
+  - [ ] Transaction history list (type, amount, date) via `useQuery`
+  - [ ] "Alert Setting" section: number input "Alert me when balance drops below ₱___"; pre-filled with current `wallet_alert_threshold` from pivot; save via `useMutation` → `PATCH /api/v1/portal/students/{student}/wallet/alert`; set to 0 to disable
 
 ## 14. Meal Planner (Portal)
 
@@ -153,7 +156,7 @@
 
 ### 16.1 Backend
 - [x] `WalletAlertJob` — queries parent_student pivot; sends WalletAlertMail per matching parent
-- [ ] Dispatch `WalletAlertJob` from `CheckoutController` after wallet withdrawal
+- [x] Dispatch `WalletAlertJob` from `CheckoutController` after wallet withdrawal
 
 ## 17. Student Contact Management (Kitchen/POS)
 
@@ -162,29 +165,29 @@
 - [x] `Kitchen\StudentContactController::store(Student $student)` — add contact (max 3); calls provisioning service if email provided
 - [x] `Kitchen\StudentContactController::update(Student $student, StudentContact $contact)` — edit; re-provisions on email change
 - [x] `Kitchen\StudentContactController::destroy(Student $student, StudentContact $contact)` — delete; detaches pivot
-- [ ] `Kitchen\StudentContactController::resendActivation(Student $student, StudentContact $contact)` — sends appropriate mail based on activation status
-- [ ] Add `portal_status` field to contact index response: `"activated"` / `"pending_activation"` / `"no_email"`
+- [x] `Kitchen\StudentContactController::resendActivation(Student $student, StudentContact $contact)` — sends appropriate mail based on activation status
+- [x] Add `portal_status` field to contact index response: `"activated"` / `"pending_activation"` / `"no_email"`
 - [x] Routes: CRUD on `/api/v1/students/{student}/contacts`
-- [ ] Route: `POST /api/v1/students/{student}/contacts/{contact}/resend-activation`
+- [x] Route: `POST /api/v1/students/{student}/contacts/{contact}/resend-activation`
 
 ### 17.2 Frontend (POS)
-- [ ] Add "Contacts" tab to student detail page
-- [ ] `AddContactDialog`, `EditContactDialog`, delete confirmation
-- [ ] Resend Activation button when `portal_status === "pending_activation"`
-- [ ] `lib/api/contacts.ts`, update `types/student.ts`
+- [x] Add "Contacts" tab to student detail page
+- [x] `AddContactDialog`, `EditContactDialog`, delete confirmation
+- [x] Resend Activation button when `portal_status === "pending_activation"`
+- [x] `lib/api/contacts.ts`, update `types/student.ts`
 
 ## 18. Parent Management (Kitchen/POS)
 
 ### 18.1 Backend
 - [x] `Kitchen\ParentController::index()` — paginated list, search by name/email, activation status
-- [ ] `Kitchen\ParentController::show(ParentUser $parent)` — parent profile + linked students
+- [x] `Kitchen\ParentController::show(ParentUser $parent)` — parent profile + linked students
 - [x] Routes: `GET /api/v1/references/parents`, `POST /api/v1/references/parents/{parent}/resend-activation`
-- [ ] Route: `GET /api/v1/references/parents/{parent}`
+- [x] Route: `GET /api/v1/references/parents/{parent}`
 
 ### 18.2 Frontend (POS)
-- [ ] `app/(kitchen)/references/parents/page.tsx` — list table with search, status filter, click to detail drawer
-- [ ] Add "Parents" to References navigation
-- [ ] `lib/api/parents.ts`, `types/parent.ts`
+- [x] `app/(kitchen)/references/parents/page.tsx` — list table with search, status filter, click to detail drawer
+- [x] Add "Parents" to References navigation
+- [x] `lib/api/parents.ts`, `types/parent.ts`
 
 ## 19. Update EnrollmentController
 - [x] Call `ParentProvisioningService::provision()` for each contact with non-null email
@@ -204,5 +207,5 @@
 - [x] `ParentProvisioningTest` — provision/idempotent/multi-student/enrollment integration
 - [x] `StudentContactTest` — CRUD + provisioning side effects + ownership guard
 - [x] `FeedbackTest` — portal submit/sanitize/kitchen reply/mark-read
-- [ ] `ParentManagementTest` — list/show/search/activation status
-- [ ] `WalletAlertTest` — job dispatched on low balance; not dispatched when threshold is 0
+- [x] `ParentManagementTest` — list/show/search/activation status
+- [x] `WalletAlertTest` — job dispatched on low balance; not dispatched when threshold is 0

@@ -14,6 +14,7 @@ use App\Models\CreditTransaction;
 use App\Models\Order;
 use App\Models\PosMenuItem;
 use App\Models\Student;
+use App\Models\SystemConfiguration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -89,7 +90,7 @@ class CheckoutController extends Controller
                     }
 
                     if ($shortfall > 0 && $useCredit) {
-                        $creditLimit = config('sunbites.credit_limit', 300);
+                        $creditLimit = SystemConfiguration::getValue('credit_limit', 300);
                         if ($student->credit_balance + $shortfall > $creditLimit) {
                             abort(422, 'Credit limit exceeded.');
                         }
@@ -167,7 +168,7 @@ class CheckoutController extends Controller
                 $previousTotalSpent = (float) $student->total_spent;
                 $newTotalSpent = $previousTotalSpent + $total;
 
-                $threshold = config('sunbites.loyalty_point_threshold', 1000);
+                $threshold = SystemConfiguration::getValue('loyalty_point_threshold', 1000);
                 $previousPoints = floor($previousTotalSpent / $threshold);
                 $newPoints = floor($newTotalSpent / $threshold);
                 $pointsEarned = max(0, (int) ($newPoints - $previousPoints));

@@ -1,25 +1,34 @@
 <?php
 
+use App\Http\Controllers\Kitchen\ActivityLogController;
 use App\Http\Controllers\Kitchen\AuthController;
+use App\Http\Controllers\Kitchen\BillingReportController;
 use App\Http\Controllers\Kitchen\BranchController;
 use App\Http\Controllers\Kitchen\BranchMonthlyAmountController;
 use App\Http\Controllers\Kitchen\CheckoutController;
 use App\Http\Controllers\Kitchen\CreditController;
+use App\Http\Controllers\Kitchen\CreditReportController;
+use App\Http\Controllers\Kitchen\DailySummaryController;
+use App\Http\Controllers\Kitchen\DashboardController;
 use App\Http\Controllers\Kitchen\EnrollmentController;
 use App\Http\Controllers\Kitchen\FeedbackController;
 use App\Http\Controllers\Kitchen\InlineReloadController;
 use App\Http\Controllers\Kitchen\InventoryController;
+use App\Http\Controllers\Kitchen\InventoryReportController;
 use App\Http\Controllers\Kitchen\MealPlannerController;
 use App\Http\Controllers\Kitchen\ParentController;
 use App\Http\Controllers\Kitchen\PaymentController;
 use App\Http\Controllers\Kitchen\PosMenuItemController;
+use App\Http\Controllers\Kitchen\SalesReportController;
 use App\Http\Controllers\Kitchen\StudentContactController;
 use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
+use App\Http\Controllers\Kitchen\StudentReportController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
 use App\Http\Controllers\Kitchen\UserManagementController;
 use App\Http\Controllers\Kitchen\WalletController;
+use App\Http\Controllers\Kitchen\WalletReportController;
 use Illuminate\Support\Facades\Route;
 
 // Staff auth — public (rate limited)
@@ -152,5 +161,33 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::put('/branch-monthly-amounts/{branchMonthlyAmount}', [BranchMonthlyAmountController::class, 'update']);
         Route::delete('/branch-monthly-amounts/{branchMonthlyAmount}', [BranchMonthlyAmountController::class, 'destroy']);
         Route::post('/students/{student}/payments/range', [PaymentController::class, 'addRange']);
+    });
+
+    // Dashboard — admin, manager, supervisor
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::get('/dashboard', [DashboardController::class, 'index']);
+        Route::post('/dashboard/staff-status', [DashboardController::class, 'updateStaffStatus']);
+    });
+
+    // Reports
+    Route::prefix('reports')->group(function () {
+        Route::middleware('role:admin|manager|supervisor')->group(function () {
+            Route::get('/sales', [SalesReportController::class, 'index']);
+            Route::get('/students', [StudentReportController::class, 'index']);
+            Route::get('/inventory', [InventoryReportController::class, 'index']);
+            Route::get('/billing', [BillingReportController::class, 'index']);
+        });
+
+        Route::middleware('role:admin|manager')->group(function () {
+            Route::get('/sales/export', [SalesReportController::class, 'export']);
+            Route::get('/students/export', [StudentReportController::class, 'export']);
+            Route::get('/wallet', [WalletReportController::class, 'index']);
+            Route::get('/wallet/export', [WalletReportController::class, 'export']);
+            Route::get('/inventory/export', [InventoryReportController::class, 'export']);
+            Route::get('/daily-summary', [DailySummaryController::class, 'index']);
+            Route::get('/activity', [ActivityLogController::class, 'index']);
+            Route::get('/billing/export', [BillingReportController::class, 'export']);
+            Route::get('/credits', [CreditReportController::class, 'index']);
+        });
     });
 });

@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Policies\OrderPolicy;
 use App\Policies\ParentStudentPolicy;
+use App\Policies\ReportPolicy;
 use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -31,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Order::class, OrderPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Student::class, ParentStudentPolicy::class);
+        Gate::policy(ReportPolicy::class, ReportPolicy::class);
     }
 
     /**
