@@ -25,11 +25,10 @@ class StudentController extends Controller
         ])
             ->when($request->search, function ($q, $search) {
                 $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search);
-                $operator = DB::connection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
-                $q->where(function ($q) use ($escaped, $operator) {
-                    $q->where('first_name', $operator, "%{$escaped}%")
-                        ->orWhere('last_name', $operator, "%{$escaped}%")
-                        ->orWhere('student_number', $operator, "%{$escaped}%");
+                $q->where(function ($q) use ($escaped) {
+                    $q->where('first_name', 'like', "%{$escaped}%")
+                        ->orWhere('last_name', 'like', "%{$escaped}%")
+                        ->orWhere('student_number', 'like', "%{$escaped}%");
                 });
             })
             ->when($request->grade, fn ($q, $grade) => $q->where('grade_level', $grade))
