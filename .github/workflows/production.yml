@@ -73,7 +73,9 @@ jobs:
       - name: Authenticate with Laravel Cloud
         env:
           CLOUD_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
-        run: cloud auth:token --add "$CLOUD_TOKEN" -n
+        run: |
+          mkdir -p ~/.config/cloud
+          printf '{"api_tokens":["%s"]}' "$CLOUD_TOKEN" > ~/.config/cloud/config.json
 
       - name: Deploy to production
         run: cloud deploy "Sunbites API Prod" production -n
