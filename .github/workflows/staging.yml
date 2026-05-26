@@ -52,11 +52,11 @@ jobs:
         run: composer global require laravel/cloud-cli --no-interaction
 
       - name: Deploy to staging
-        run: cloud deploy sunbites-api staging -n
+        run: ~/.composer/vendor/bin/cloud deploy sunbites-api staging -n
         env:
           CLOUD_API_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
 
       - name: Monitor deployment
-        run: cloud deploy:monitor -n
+        run: ~/.composer/vendor/bin/cloud deploy:monitor -n
         env:
           CLOUD_API_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
