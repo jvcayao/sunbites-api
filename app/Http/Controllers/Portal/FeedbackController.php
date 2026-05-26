@@ -56,12 +56,14 @@ class FeedbackController extends Controller
             'message' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
 
-        $branchId = $linkedStudents->firstWhere('id', $validated['student_id'])?->branch_id
+        $studentId = $validated['student_id'] ?? null;
+
+        $branchId = $linkedStudents->firstWhere('id', $studentId)?->branch_id
             ?? $linkedStudents->first()->branch_id;
 
         $feedback = Feedback::create([
             'parent_id' => $parent->id,
-            'student_id' => $validated['student_id'] ?? null,
+            'student_id' => $studentId,
             'branch_id' => $branchId,
             'category' => $validated['category'],
             'rating' => $validated['rating'],
