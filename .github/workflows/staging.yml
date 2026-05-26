@@ -30,6 +30,9 @@ jobs:
       - name: Generate app key
         run: php artisan key:generate
 
+      - name: Check code style (Pint)
+        run: ./vendor/bin/pint --test
+
       - name: Create SQLite database
         run: touch database/database.sqlite
 
