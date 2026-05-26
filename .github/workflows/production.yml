@@ -71,7 +71,9 @@ jobs:
           echo "$HOME/.composer/vendor/bin" >> $GITHUB_PATH
 
       - name: Authenticate with Laravel Cloud
-        run: cloud auth:token --add ${{ secrets.CLOUD_API_TOKEN }} -n
+        env:
+          CLOUD_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
+        run: cloud auth:token --add "$CLOUD_TOKEN" -n
 
       - name: Deploy to production
         run: cloud deploy "Sunbites API Prod" production -n
