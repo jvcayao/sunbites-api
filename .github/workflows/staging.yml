@@ -63,6 +63,3 @@ jobs:
 
       - name: Deploy to staging
         run: cloud deploy "Sunbites API Prod" staging -n
-
-      - name: Monitor deployment
-        run: cloud deploy:monitor -n

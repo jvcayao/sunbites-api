@@ -79,6 +79,3 @@ jobs:
 
       - name: Deploy to production
         run: cloud deploy "Sunbites API Prod" production -n
-
-      - name: Monitor deployment
-        run: cloud deploy:monitor -n

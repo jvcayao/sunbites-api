@@ -22,7 +22,7 @@ return new class extends Migration
             $table->string('soup')->nullable();
             $table->timestamps();
 
-            $table->unique(['branch_id', 'school_month', 'week_number', 'day_of_week']);
+            $table->unique(['branch_id', 'school_month', 'week_number', 'day_of_week'], 'weekly_meal_plans_unique');
         });
     }
 
