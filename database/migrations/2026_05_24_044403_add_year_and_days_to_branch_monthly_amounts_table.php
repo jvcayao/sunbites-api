@@ -11,8 +11,8 @@ return new class extends Migration
         Schema::table('branch_monthly_amounts', function (Blueprint $table) {
             $table->unsignedSmallInteger('year')->after('school_month');
             $table->unsignedSmallInteger('days')->after('year');
-            $table->dropUnique(['branch_id', 'school_month']);
             $table->unique(['branch_id', 'school_month', 'year']);
+            $table->dropUnique(['branch_id', 'school_month']);
         });
     }
 

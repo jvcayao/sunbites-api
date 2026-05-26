@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::table('student_monthly_payments', function (Blueprint $table) {
             $table->unsignedSmallInteger('year')->default(2025)->after('school_month');
-            $table->dropUnique(['student_id', 'school_month']);
             $table->unique(['student_id', 'school_month', 'year']);
+            $table->dropUnique(['student_id', 'school_month']);
         });
 
         // Remove the temporary default now that existing rows have been backfilled
