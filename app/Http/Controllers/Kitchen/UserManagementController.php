@@ -23,9 +23,9 @@ class UserManagementController extends Controller
         $users = User::withTrashed()
             ->with(['roles', 'branches'])
             ->when($request->search, fn ($q, $search) => $q->where(function ($q) use ($search) {
-                $q->where('first_name', 'ilike', "%{$search}%")
-                    ->orWhere('last_name', 'ilike', "%{$search}%")
-                    ->orWhere('email', 'ilike', "%{$search}%");
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             }))
             ->when($request->role, fn ($q, $role) => $q->role($role))
             ->when($request->status, function ($q, $status) {

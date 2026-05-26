@@ -18,8 +18,13 @@
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
-        "maatwebsite/excel": "^3.1",
+        "league/flysystem-aws-s3-v3": "^3.34",
+        "maatwebsite/excel": "4.x-dev",
+        "phpoffice/phpspreadsheet": "^5.3",
+        "resend/resend-laravel": "^1.4",
+        "sentry/sentry-laravel": "^4.25",
         "spatie/laravel-activitylog": "^5.0",
+        "spatie/laravel-flare": "^3.0",
         "spatie/laravel-permission": "^7.4"
     },
     "require-dev": {
@@ -110,5 +115,6 @@
             "php-http/discovery": true
         }
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "dev",
+    "prefer-stable": true
 }

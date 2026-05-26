@@ -1,0 +1,59 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo, pdo_sqlite, sqlite3
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Copy env
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Create SQLite database
+        run: touch database/database.sqlite
+
+      - name: Run tests
+        run: php artisan test --compact
+
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Laravel Cloud CLI
+        run: composer global require laravel/cloud-cli --no-interaction
+
+      - name: Deploy to staging
+        run: cloud deploy sunbites-api staging -n
+        env:
+          CLOUD_API_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
+
+      - name: Monitor deployment
+        run: cloud deploy:monitor -n
+        env:
+          CLOUD_API_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
