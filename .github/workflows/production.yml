@@ -70,12 +70,11 @@ jobs:
           composer global require laravel/cloud-cli --no-interaction
           echo "$HOME/.composer/vendor/bin" >> $GITHUB_PATH
 
+      - name: Authenticate with Laravel Cloud
+        run: cloud auth:token --add ${{ secrets.CLOUD_API_TOKEN }} -n
+
       - name: Deploy to production
         run: cloud deploy "Sunbites API Prod" production -n
-        env:
-          CLOUD_API_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
 
       - name: Monitor deployment
         run: cloud deploy:monitor -n
-        env:
-          CLOUD_API_TOKEN: ${{ secrets.CLOUD_API_TOKEN }}
