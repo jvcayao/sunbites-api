@@ -17,6 +17,14 @@
 │                                                               │
 │  🍽️ Menu Items                                               │
 │                                                               │
+│  ┌──── Add New Item ─────────────────────────────────┐      │
+│  │  Item Name *         Price (₱) *                  │      │
+│  │  [________________]  [________]                   │      │
+│  │  Category *                                        │      │
+│  │  [meal ▾         ]                                │      │
+│  │                              [+ Add Item]         │      │
+│  └────────────────────────────────────────────────────┘      │
+│                                                               │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
 │  │              │  │              │  │              │       │
 │  │ Subscription │  │ Snack A      │  │ Snack B      │       │
@@ -26,16 +34,10 @@
 │  │             │  │             │  │  [snack]     │       │
 │  │ [ON] [✕]   │  │ [ON] [✕]   │  │ [OFF] [✕]   │       │
 │  └──────────────┘  └──────────────┘  └──────────────┘       │
-│                                                               │
-│  ┌──── Add New Item ─────────────────────────────────┐      │
-│  │  Item Name *         Price (₱) *                  │      │
-│  │  [________________]  [________]                   │      │
-│  │  Category *                                        │      │
-│  │  [meal ▾         ]                                │      │
-│  │                              [+ Add Item]         │      │
-│  └────────────────────────────────────────────────────┘      │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+**Layout order:** Add New Item form is always shown at the **top**, followed by the item grid below. This puts the action first so staff can immediately add without scrolling past a long list.
 
 **Item Card Component:**
 ```
@@ -43,8 +45,9 @@
 │  Subscription Meal Tray │  ← font-bold text-sm
 │     ₱135.00             │  ← text-2xl font-extrabold text-primary
 │     [meal]              │  ← text-[10px] uppercase muted badge
+│  ⚠ Not linked           │  ← orange badge when no stock linked
 │                         │
-│  [ON ●]     [✕]        │  ← toggle + delete
+│  [ON ●]  [Link Stock]  [✕]  ← toggle + link stock + delete
 └─────────────────────────┘
 ```
 
@@ -57,10 +60,12 @@
   - drink → `bg-blue-50 text-blue-700`
   - extra → `bg-muted text-muted-foreground`
 - Toggle: shadcn `Switch` — ON = primary color, OFF = gray; instant API call
+- **"Link Stock"** button: small secondary button — opens the Linked Stock panel (inline, below the card) to configure which inventory items are deducted per sale of this menu item
 - Delete `[✕]`: small red button, opens confirmation dialog before delete
 - Unavailable items: card opacity 50%
+- "Not linked" warning: `bg-orange-50 text-orange-700 text-[10px] border border-orange-200 rounded px-2 py-0.5` — shown when `has_inventory_mapping = false`
 
-**Add New Item Form (inline at bottom):**
+**Add New Item Form (at top, above item grid):**
 - Contained in a card with dashed border `border-dashed`
 - Name input: `text-sm`
 - Price: number input with ₱ prefix label
@@ -180,17 +185,17 @@ No Save, Reset, or visibility toggle controls visible in the portal.
 ### Screen: Inventory Tab (POS page → Inventory tab)
 
 ```
-┌───────────────────────────────────────────────────────────┐
-│  📦 Inventory — Antipolo Branch                          │
-├──────────────────────────────────────────────────────────┤
-│  Item Name       Qty    Unit    Threshold   Status  Action│
-├──────────────────────────────────────────────────────────┤
-│  Rice            50     kg      20          [OK ✓]  [Edit]│
-│  Chicken          8     kg      10          [LOW ⚠] [Edit]│
-│  Vegetables      15     kg       5          [OK ✓]  [Edit]│
-│  Bread           30     pcs     20          [OK ✓]  [Edit]│
-│  Juice Boxes      3     boxes   10          [OUT ✕] [Edit]│
-└──────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│  📦 Inventory — Antipolo Branch                                    │
+├────────────────────────────────────────────────────────────────────┤
+│  Item Name          Qty   Unit    Threshold  Status    Action      │
+├────────────────────────────────────────────────────────────────────┤
+│  Juice Tetra Pack   48    piece   20         [OK ✓]    [Adjust]    │
+│  Graham Crackers    12    pack    15         [LOW ⚠]   [Adjust]    │
+│  Bread Roll          0    piece   10         [OUT ✕]   [Adjust]    │
+│  Biscuit            60    pack    20         [OVER ▲]  [Adjust]    │
+│  Banana Cue          5    piece   10         [LOW ⚠]   [Adjust]    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 **Status Badges:**
@@ -198,25 +203,31 @@ No Save, Reset, or visibility toggle controls visible in the portal.
 [OK ✓]   → bg-green-100 text-green-700 border-green-300
 [LOW ⚠]  → bg-yellow-100 text-amber-700 border-yellow-300
 [OUT ✕]  → bg-red-100 text-destructive border-red-300
+[OVER ▲] → bg-orange-100 text-orange-700 border-orange-300
 ```
 
-**Stock Adjustment Modal:**
+**Stock Adjustment Modal (Inventory Tab — POS page):**
 ```
 ┌─────────────────────────────────────────────┐
-│  Adjust Stock: Chicken                 [✕]  │
+│  Adjust Stock: Juice Tetra Pack        [✕]  │
 ├─────────────────────────────────────────────┤
-│  Current Stock: 8 kg                        │
+│  Current Stock: 48 pieces                    │
 │                                              │
 │  Adjustment Type                            │
 │  (●) Add Stock   ( ) Deduct Stock          │
 │                                              │
-│  Quantity to Add (kg) *                     │
-│  [___10___]                                  │
+│  Log Type *                                 │
+│  [Restock ▾     ]  ← Restock / Waste /     │
+│                       Manual only            │
+│                       (Sale is system-only)  │
+│                                              │
+│  Quantity *                                 │
+│  [___24___]                                  │
 │                                              │
 │  Reason *                                    │
-│  [Restocked ▾         ]                     │
+│  [___________________________]              │
 │                                              │
-│  New Total: 18 kg  ← live calculation       │
+│  New Total: 72 pieces  ← live calculation   │
 │                                              │
 │  [Cancel]              [Save Adjustment]    │
 └─────────────────────────────────────────────┘
@@ -226,14 +237,145 @@ No Save, Reset, or visibility toggle controls visible in the portal.
 
 **Route:** `pos.sunbites.com.ph/references/inventory`
 **Role:** Admin, Manager, Supervisor
-
-Same table as POS tab + additional columns and full CRUD:
-- Edit name / unit / threshold per item
-- Delete item (guard: warn if has log history)
-- Inventory log history per item (expandable)
-- "Add Item" inline form at bottom
+**Layout:** Two tabs — **Inventory** and **History**
 
 ```
-│  Item Name       Qty    Unit    Threshold   Status  Actions         │
-│  Rice            50     kg      20          [OK ✓]  [Edit][Log][✕] │
+┌───────────────────────────────────────────────────────────────────┐
+│  References > Inventory                                           │
+│                                                                   │
+│  [Inventory ●]  [History]                                        │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### Tab 1: Inventory
+
+**Layout order:** Add New Item form at the **top**, active items table below, archived items section at the bottom.
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│  [Inventory ●]  [History]                                        │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  ┌──── Add New Inventory Item ──────────────────────────────┐    │
+│  │  Name *               Unit *         Initial Qty *        │    │
+│  │  [________________]  [________]     [____0____]          │    │
+│  │  Low Alert Qty *      Overstock Qty  Cost per Unit (₱)    │    │
+│  │  [________]          [________]     [________]           │    │
+│  │                                          [+ Add Item]     │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                   │
+│  Active Items                                                     │
+│  Item Name     Qty    Unit   Low Alert  Overstock  Cost/Unit  Status   Actions         │
+│  ─────────────────────────────────────────────────────────────────────────────────    │
+│  Juice Tetra   48     piece  20         100        ₱12.00    [OK ✓]   [Edit][History][✕]  │
+│  Graham Crac   12     pack   15         —          —         [LOW ⚠]  [Edit][History][✕]  │
+│  Bread Roll     0     piece  10         —          —         [OUT ✕]  [Edit][History][✕]  │
+│                                                                   │
+│  ▾ Archived Items (collapsed)                                    │
+│    Banana Cue   —     piece  —          —          —          archived  [Unarchive]    │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+- Add form is always visible at the top — no scrolling needed to add a new item
+- Delete `[✕]` blocked if item has log history — show "Archive instead" prompt
+- Archive replaces delete when history exists; archived items in collapsed section at bottom
+- Unarchive button on each archived row
+- If Initial Qty > 0 on creation, a `Restock` log is auto-created on save
+
+**Edit Item Modal** (unchanged):
+```
+┌──── Edit: Juice Tetra Pack ───────────────────────────────────────┐
+│  Name *               Unit *                                        │
+│  [Juice Tetra Pack]  [piece ]                                      │
+│  Low Alert Qty *      Overstock Qty  Cost per Unit (₱)             │
+│  [___20___]          [__100__]      [__12.00__]                   │
+│  [Cancel]                              [Save Changes]              │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Per-Item History Dialog** (modal, opened by `[History]` action button):
+```
+┌──── Stock History: Juice Tetra Pack ──────────────────────────────┐
+│  Date/Time           Type      Change   Stock After  Reason        │
+│  2026-06-01 08:00    Restock   +48      48           Initial stock │
+│  2026-06-02 12:30    Sale      −1       47           Order #001    │
+│  2026-06-03 09:00    Restock   +24      71           Delivery      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### Tab 2: History
+
+Cross-item log view — all stock movements across all inventory items.
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│  [Inventory]  [History ●]                                        │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  From [2026-06-01] To [2026-06-30]  Type [All ▾]  Item [All ▾]  │
+│                                                    [Apply Filters]│
+│                                                                   │
+│  Date/Time           Item               Type      Change  After  │
+│  ────────────────────────────────────────────────────────────     │
+│  2026-06-03 09:00    Juice Tetra Pack   Restock   +24     71     │  ← green row
+│  2026-06-02 12:30    Juice Tetra Pack   Sale      −1      47     │  ← red row
+│  2026-06-02 10:15    Graham Crackers    Waste     −3      9      │  ← red row
+│  2026-06-01 08:00    Bread Roll         Restock   +30     30     │  ← green row
+│                                                                   │
+│  Showing 1–25 of 48 entries   [← Prev]  [Next →]               │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+Row color coding:
+- Green row: `bg-green-50` — Restock (add)
+- Red row: `bg-red-50` — Sale / Waste / Deduct
+- Gray row: `bg-muted/30` — Manual
+
+Tab style:
+- Active tab: `border-b-2 border-primary text-primary font-semibold`
+- Inactive tab: `text-muted-foreground hover:text-foreground`
+
+---
+
+### Screen: Linked Stock Panel (Menu Mgmt tab — per menu item)
+
+**Terminology:** "Linked Stock" replaces "Ingredients" throughout. The linked stock panel shows which inventory items are deducted from stock when this menu item is sold at the POS. It is accessed via the **"Link Stock"** button on each menu item card.
+
+**Route:** Inline panel on `pos.sunbites.com.ph/pos` → Menu Mgmt tab (opens below the card)
+**Role:** Admin, Manager only
+
+```
+┌──── Linked Stock: Subscription Meal Tray ─────────────────────────┐
+│  Inventory Item          Qty Deducted per Sale   Action            │
+│  ──────────────────────────────────────────────────────            │
+│  Juice Tetra Pack        1 piece                 [Remove]          │
+│  Graham Crackers         1 pack                  [Remove]          │
+│                                                                     │
+│  + Link Inventory Item                                              │
+│  [Select inventory item ▾]  Qty: [1]  [Add Link]                  │
+│                                                                     │
+│  ⚠ All menu items must have at least one stock item linked         │
+│    before they can be sold at checkout.                            │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+Label and terminology:
+- Button on card: **"Link Stock"** — opens/closes the panel
+- Panel title: **"Linked Stock: {Menu Item Name}"**
+- Column header: "Qty Deducted per Sale" (not "Qty Used per Sale")
+- Add row action: **"Add Link"**
+- Remove row action: **"Remove"**
+- Warning: "All menu items must have at least one stock item linked before they can be sold at checkout."
+
+Warning badge on card when `has_inventory_mapping = false`:
+```
+│  Subscription Meal Tray  │
+│     ₱135.00              │
+│     [meal]               │
+│  ⚠ Not linked            │  ← orange warning badge (was "Not mapped")
+│  [ON ●]  [Link Stock] [✕]│
 ```

@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\MenuCategory;
 use App\Http\Controllers\Controller;
+use App\Models\InventoryItem;
 use App\Models\PosMenuItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rules\Enum;
 use Spatie\Activitylog\Facades\Activity;
 
@@ -14,7 +16,10 @@ class PosMenuItemController extends Controller
 {
     public function index(): JsonResponse
     {
-        $items = PosMenuItem::orderBy('sort_order')->orderBy('name')->get();
+        $items = PosMenuItem::with('inventoryItems')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get();
 
         return response()->json($items->map(fn (PosMenuItem $item) => $this->formatItem($item)));
     }
@@ -68,10 +73,15 @@ class PosMenuItemController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, price: string, category: string, is_available: bool, sort_order: int}
+     * @return array<string, mixed>
      */
     private function formatItem(PosMenuItem $item): array
     {
+        $inventoryItems = $item->relationLoaded('inventoryItems') ? $item->inventoryItems : collect();
+        $hasMappings = $inventoryItems->isNotEmpty();
+
+        $inventoryStatus = $this->resolveInventoryStatus($inventoryItems, $hasMappings);
+
         return [
             'id' => $item->id,
             'name' => $item->name,
@@ -79,6 +89,33 @@ class PosMenuItemController extends Controller
             'category' => $item->category->value,
             'is_available' => $item->is_available,
             'sort_order' => $item->sort_order,
+            'has_inventory_mapping' => $hasMappings,
+            'inventory_status' => $inventoryStatus,
         ];
+    }
+
+    /**
+     * Returns the worst inventory status among linked items: OUT > LOW > OVER > OK.
+     * Returns null when there is no mapping.
+     *
+     * @param  Collection<int, InventoryItem>  $inventoryItems
+     */
+    private function resolveInventoryStatus(Collection $inventoryItems, bool $hasMappings): ?string
+    {
+        if (! $hasMappings) {
+            return null;
+        }
+
+        $statusPriority = ['OUT' => 4, 'LOW' => 3, 'OVER' => 2, 'OK' => 1];
+        $worst = 'OK';
+
+        foreach ($inventoryItems as $invItem) {
+            $status = $invItem->status;
+            if (($statusPriority[$status] ?? 0) > ($statusPriority[$worst] ?? 0)) {
+                $worst = $status;
+            }
+        }
+
+        return $worst;
     }
 }

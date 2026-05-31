@@ -48,8 +48,9 @@
 │  └─────────────────────────────────────────────────────────────┘ │
 │                                                                  │
 │  ┌── ⚠️ Low Stock Alerts ─────────────────────────────────────┐ │
-│  │  Chicken   8 kg    threshold 10  [LOW ⚠]                  │ │
-│  │  Juice Bxs 3 boxes threshold 10  [OUT ✕]                  │ │
+│  │  Graham Crackers  12 packs  threshold 15  [LOW ⚠]         │ │
+│  │  Bread Roll        0 pieces threshold 10  [OUT ✕]          │ │
+│  │  Banana Cue        5 pieces threshold 10  [LOW ⚠]          │ │
 │  │                       [→ Go to Inventory Management]        │ │
 │  └─────────────────────────────────────────────────────────────┘ │
 │                                                                  │
@@ -197,21 +198,96 @@
 ## Screen: Inventory Report
 
 **Route:** `pos.sunbites.com.ph/reports/inventory`
+**Roles:** Admin, Manager, Supervisor
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│ Inventory Report                           [Export to Excel 📥]  │
-├───────────────────────────────────────────────────────────────────┤
-│  ┌── Summary ─────────────────────────────────────────────────┐  │
-│  │  Out of Stock: 1 item   Below Threshold: 2 items           │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  Item        Stock   Unit   Threshold   Status   Last Restocked  │
-│  Rice        50      kg     20          [OK ✓]   05/01/2026      │
-│  Chicken      8      kg     10          [LOW ⚠]  05/05/2026      │
-│  Juice Bxs    0      boxes  10          [OUT ✕]  04/28/2026      │
-└───────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Inventory Report                                    [Export to Excel 📥]     │
+│                                  (Admin/Manager only — hidden for Supervisor) │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌── Summary ──────────────────────────────────────────────────────────┐    │
+│  │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐        │    │
+│  │  │  OUT of Stock  │  │  Below Alert   │  │  Overstocked   │        │    │
+│  │  │       1        │  │       2        │  │       1        │        │    │
+│  │  │  (red number)  │  │ (amber number) │  │(orange number) │        │    │
+│  │  └────────────────┘  └────────────────┘  └────────────────┘        │    │
+│  │  Overstock card hidden when no items have overstock_threshold set   │    │
+│  └─────────────────────────────────────────────────────────────────────┘    │
+│                                                                              │
+│  ── Current Stock Snapshot ────────────────  Status filter: [All ▾]        │
+│                                                                              │
+│  Item               Stock  Unit   Low Alert  Overstock  Cost/Unit  Status        Last Restocked │
+│  Juice Tetra Pack   48     piece  20         100        ₱12.00     [OK ✓]        05/01/2026     │
+│  Graham Crackers    12     pack   15         —          —          [LOW ⚠]       05/05/2026     │
+│  Bread Roll          0     piece  10         —          —          [OUT ✕]       04/28/2026     │
+│  Biscuit            60     pack   20         50         ₱8.00      [OVER ▲]      05/03/2026     │
+│                                                                              │
+│  ── Movement History ──────────────────────────────────────────────────    │
+│                                                                              │
+│  [Today] [This Week] [This Month●] [Custom: From ____ To ____]              │
+│  Type [All ▾]   Item [All ▾]                                                │
+│                                                                              │
+│  Date/Time           Item               Type       Change  After   Reason   Order │
+│  2026-06-03 09:00    Juice Tetra Pack   [Restock]  +24     72      Delivery  —    │  ← bg-green-50
+│  2026-06-02 12:30    Juice Tetra Pack   [Sale]     −1      48      Order#001 #001 │  ← bg-red-50
+│  2026-06-02 10:15    Graham Crackers    [Waste]    −3      12      Spoilage  —    │  ← bg-red-50
+│  2026-06-01 08:00    Bread Roll         [Restock]  +30     30      Initial   —    │  ← bg-green-50
+│                                                                              │
+│  Showing 1–25 of 48 entries                   [← Prev]  [Next →]            │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+**Summary cards:**
+- OUT count: `text-destructive font-extrabold text-3xl`
+- LOW count: `text-amber-700 font-extrabold text-3xl`
+- OVER count: `text-orange-700 font-extrabold text-3xl` (card hidden when no overstock_threshold configured)
+
+**Status badges in snapshot table:**
+```
+[OK ✓]   → bg-green-100 text-green-700 border-green-300
+[LOW ⚠]  → bg-yellow-100 text-amber-700 border-yellow-300
+[OUT ✕]  → bg-red-100 text-destructive border-red-300
+[OVER ▲] → bg-orange-100 text-orange-700 border-orange-300
+```
+
+**Movement history log type badges:**
+```
+[Restock]  → bg-green-100 text-green-700
+[Sale]     → bg-red-100 text-destructive
+[Waste]    → bg-red-100 text-destructive
+[Manual]   → bg-muted text-muted-foreground
+```
+
+**Row color coding in history table:**
+- Restock rows: `bg-green-50`
+- Sale / Waste rows: `bg-red-50`
+- Manual rows: `bg-muted/30`
+
+```
+│  ── Discrepancy Summary ───────────────────────────────────────────    │
+│  (Manual adjustments only — same date range as Movement History above) │
+│                                                                         │
+│  Item               Adjustments   Net Change   Last Adjusted           │
+│  Graham Crackers    3             −15 packs    2026-06-03              │  ← bg-red-50  (net negative)
+│  Bread Roll         1             +10 pieces   2026-06-01              │  ← bg-green-50 (net positive)
+│                                                                         │
+│  ℹ️  Manual adjustments indicate stock corrections. High frequency or  │
+│     large negative values may suggest unrecorded loss or waste.        │
+│                                                                         │
+│  (Empty state when no manual adjustments in range:)                    │
+│  No manual adjustments recorded for this period.                       │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+**Discrepancy table:**
+- Net negative (quantity_change sum < 0): row `bg-red-50`, net change shown in `text-destructive`
+- Net positive (quantity_change sum > 0): row `bg-green-50`, net change shown in `text-green-700`
+- "# Adjustments" column: high count (≥ 3) shown in `text-amber-700 font-semibold` as a soft warning
+- Info note below table: muted text explaining what manual adjustments indicate
+
+**Export button:** Admin/Manager only — Supervisor sees report but not the export button (enforced server-side too)
+- Export generates three sheets: "Current Stock", "Movement History", "Discrepancy"
 
 ---
 

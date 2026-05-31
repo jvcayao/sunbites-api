@@ -18,6 +18,8 @@ class InventoryLog extends Model
         'quantity_change',
         'stock_after',
         'reason',
+        'item_name_snapshot',
+        'order_id',
         'created_at',
     ];
 
@@ -27,6 +29,7 @@ class InventoryLog extends Model
             'type' => InventoryLogType::class,
             'quantity_change' => 'decimal:2',
             'stock_after' => 'decimal:2',
+            'order_id' => 'integer',
             'created_at' => 'datetime',
         ];
     }
@@ -39,5 +42,10 @@ class InventoryLog extends Model
     public function adjustedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'adjusted_by');
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 }

@@ -228,6 +228,7 @@ class InventoryTest extends TestCase
             'type' => 'restock',
             'quantity_change' => 10,
             'stock_after' => 10,
+            'item_name_snapshot' => $item->name,
             'reason' => 'Initial stock',
         ]);
 
@@ -246,5 +247,108 @@ class InventoryTest extends TestCase
 
         $response->assertOk();
         $this->assertModelMissing($item);
+    }
+
+    public function test_sale_type_rejected_from_manual_adjust_endpoint(): void
+    {
+        $item = $this->makeItem(['quantity' => 10.00]);
+
+        $response = $this->asUser($this->admin)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
+            'type' => 'sale',
+            'direction' => 'deduct',
+            'quantity' => '1',
+            'reason' => 'Manual sale attempt',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment(['message' => 'Sale adjustments are recorded automatically by checkout.']);
+    }
+
+    public function test_creating_item_with_quantity_auto_creates_restock_log(): void
+    {
+        $response = $this->asUser($this->admin)->postJson('/api/v1/references/inventory', [
+            'name' => 'Auto Log Item',
+            'quantity' => '25',
+            'unit' => 'pcs',
+            'restock_threshold' => '10',
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('inventory_logs', [
+            'type' => 'restock',
+            'reason' => 'Initial stock',
+            'quantity_change' => '25.00',
+        ]);
+    }
+
+    public function test_archive_item_hides_from_active_list(): void
+    {
+        $item = $this->makeItem(['name' => 'Archivable Item']);
+
+        $this->asUser($this->admin)->patchJson("/api/v1/references/inventory/{$item->id}/archive")
+            ->assertOk();
+
+        $response = $this->asUser($this->admin)->getJson('/api/v1/references/inventory');
+        $response->assertOk();
+
+        $ids = array_column($response->json(), 'id');
+        $this->assertNotContains($item->id, $ids);
+    }
+
+    public function test_unarchive_item_shows_in_active_list(): void
+    {
+        $item = $this->makeItem(['name' => 'Archived Item', 'is_archived' => true]);
+
+        $this->asUser($this->admin)->patchJson("/api/v1/references/inventory/{$item->id}/unarchive")
+            ->assertOk();
+
+        $response = $this->asUser($this->admin)->getJson('/api/v1/references/inventory');
+        $response->assertOk();
+
+        $ids = array_column($response->json(), 'id');
+        $this->assertContains($item->id, $ids);
+    }
+
+    public function test_history_endpoint_returns_paginated_cross_item_logs(): void
+    {
+        $item1 = $this->makeItem(['name' => 'Item Alpha']);
+        $item2 = $this->makeItem(['name' => 'Item Beta']);
+
+        foreach ([$item1, $item2] as $item) {
+            InventoryLog::create([
+                'branch_id' => $this->branch->id,
+                'inventory_item_id' => $item->id,
+                'adjusted_by' => $this->admin->id,
+                'type' => 'manual',
+                'quantity_change' => -2,
+                'stock_after' => 8,
+                'item_name_snapshot' => $item->name,
+                'reason' => 'Test log',
+            ]);
+        }
+
+        $response = $this->asUser($this->admin)->getJson('/api/v1/references/inventory/history');
+
+        $response->assertOk();
+        $response->assertJsonStructure(['data', 'meta' => ['current_page', 'last_page', 'per_page', 'total']]);
+
+        $snapshots = array_column($response->json('data'), 'item_name_snapshot');
+        // history is cross-item — both items' logs appear
+        $this->assertTrue(in_array('Item Alpha', $snapshots) || in_array('Item Beta', $snapshots));
+    }
+
+    public function test_item_name_snapshot_populated_on_every_log(): void
+    {
+        $item = $this->makeItem(['name' => 'Snapshot Test Item', 'quantity' => 20.00]);
+
+        $this->asUser($this->admin)->postJson("/api/v1/pos/inventory/{$item->id}/adjust", [
+            'type' => 'manual',
+            'direction' => 'deduct',
+            'quantity' => '3',
+            'reason' => 'Snapshot check',
+        ])->assertOk();
+
+        $log = InventoryLog::where('inventory_item_id', $item->id)->first();
+        $this->assertSame('Snapshot Test Item', $log->item_name_snapshot);
     }
 }

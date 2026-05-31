@@ -13,13 +13,13 @@ class BranchSeeder extends Seeder
             [
                 'name' => 'Antipolo Branch',
                 'slug' => 'antipolo',
-                'gcash_number' => '09074984172',
+                'gcash_number' => '+63 907 498 4172',
                 'is_active' => true,
             ],
             [
                 'name' => 'Iloilo Branch',
                 'slug' => 'iloilo',
-                'gcash_number' => '09922761801',
+                'gcash_number' => '+63 907 498 4172',
                 'is_active' => true,
             ],
         ];
