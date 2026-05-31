@@ -188,11 +188,13 @@ Accessible at: `portal.sunbites.com.ph/meal-plan`
 Parents view the canteen's weekly meal schedule. Same data managed by kitchen staff in Spec 04 — read-only.
 
 ### Layout
-- Month tabs: pill buttons for each school month (Jun–Mar)
-- Week tabs: Week 1 / Week 2 / Week 3 / Week 4
-- Meal grid: rows = Monday–Friday, columns = Ulam / Vegetables / Fruit / Soup
-- All cells rendered as plain text (no inputs)
-- Empty cells shown as "—"
+- **Month tabs**: pill buttons for all 10 school months explicitly shown in order — Jun, Jul, Aug, Sep, Oct, Nov, Dec, Jan, Feb, Mar. Horizontally scrollable on mobile. Active month highlighted with primary color fill.
+- **Week tabs**: Week 1 / Week 2 / Week 3 / Week 4
+- **Meal grid**: rows = Monday–Friday; columns = Day, Ulam, Vegetables, Fruit, Soup, Snacks (all 5 always shown)
+  - All cells rendered as plain text (no inputs)
+  - Empty cells shown as "—"
+- **Unpublished week**: when the canteen has not published the selected week (`visible_to_parents = false`), show an informational card — "Meal plan for this week is not yet available." — in place of the table
+- No Save, Reset, or visibility toggle controls visible
 
 ### Branch Scoping
 - Branch derived from the parent's linked student's branch
@@ -317,6 +319,9 @@ Feedback reply and read endpoints are in the POS app under `ability:staff` (defi
 - [ ] Spending breakdown with date range filter (day/week/month view)
 - [ ] Wallet transaction history table
 - [ ] Meal planner read-only page at `portal.sunbites.com.ph/meal-plan` — reads from `weekly_meal_plans`; branch-scoped via linked student; branch selector if multiple branches
+- [ ] Month tabs show all 10 school months (Jun–Mar) as pill buttons, horizontally scrollable on mobile
+- [ ] When selected week is published (`visible_to_parents = true`): render full meal grid with all 5 columns (Ulam, Vegetables, Fruit, Soup, Snacks)
+- [ ] When selected week is unpublished (`visible_to_parents = false`): show "Meal plan for this week is not yet available." card instead of the table
 - [ ] "Meal Plan" link in portal top nav
 - [ ] Feedback form: rating, category, message (`strip_tags()` before storage); student selector
 - [ ] `admin_reply` sanitized with `strip_tags()` before storage; rendered as plain text

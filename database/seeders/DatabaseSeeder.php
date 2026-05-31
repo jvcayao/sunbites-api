@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             BranchSeeder::class,
             PosMenuItemSeeder::class,
             WeeklyMealPlanSeeder::class,
+            MealPlannerWeekVisibilitySeeder::class,
             InventoryItemSeeder::class,
             SystemConfigurationSeeder::class,
         ]);
