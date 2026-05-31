@@ -5,6 +5,7 @@ namespace Tests\Feature\Portal;
 use App\Jobs\WalletAlertJob;
 use App\Mail\WalletAlertMail;
 use App\Models\Branch;
+use App\Models\InventoryItem;
 use App\Models\ParentUser;
 use App\Models\PosMenuItem;
 use App\Models\Student;
@@ -97,6 +98,8 @@ class WalletAlertTest extends TestCase
             'price' => 45,
             'is_available' => true,
         ]);
+        $invItem = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 999]);
+        $menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
 
         $this->withHeaders(['X-Branch-Id' => $this->branch->id])
             ->postJson('/api/v1/pos/checkout', [
@@ -119,6 +122,8 @@ class WalletAlertTest extends TestCase
             'price' => 45,
             'is_available' => true,
         ]);
+        $invItem = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 999]);
+        $menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
 
         $this->withHeaders(['X-Branch-Id' => $this->branch->id])
             ->postJson('/api/v1/pos/checkout', [

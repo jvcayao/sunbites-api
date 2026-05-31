@@ -14,6 +14,7 @@ use App\Http\Controllers\Kitchen\EnrollmentController;
 use App\Http\Controllers\Kitchen\FeedbackController;
 use App\Http\Controllers\Kitchen\InlineReloadController;
 use App\Http\Controllers\Kitchen\InventoryController;
+use App\Http\Controllers\Kitchen\InventoryIngredientController;
 use App\Http\Controllers\Kitchen\InventoryReportController;
 use App\Http\Controllers\Kitchen\MealPlannerController;
 use App\Http\Controllers\Kitchen\ParentController;
@@ -78,9 +79,21 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/pos/inventory/{item}/adjust', [InventoryController::class, 'adjust']);
         Route::get('/references/inventory', [InventoryController::class, 'index']);
         Route::post('/references/inventory', [InventoryController::class, 'store']);
+        // NOTE: /history must be defined before /{item} to avoid route conflict
+        Route::get('/references/inventory/history', [InventoryController::class, 'history']);
         Route::put('/references/inventory/{item}', [InventoryController::class, 'update']);
         Route::delete('/references/inventory/{item}', [InventoryController::class, 'destroy']);
         Route::get('/references/inventory/{item}/logs', [InventoryController::class, 'logs']);
+        // Ingredient mapping — read access for admin|manager|supervisor
+        Route::get('/references/menu-items/{item}/ingredients', [InventoryIngredientController::class, 'index']);
+    });
+
+    // Inventory archive/unarchive + ingredient mutations — admin, manager only
+    Route::middleware('role:admin|manager')->group(function () {
+        Route::patch('/references/inventory/{item}/archive', [InventoryController::class, 'archive']);
+        Route::patch('/references/inventory/{item}/unarchive', [InventoryController::class, 'unarchive']);
+        Route::post('/references/menu-items/{item}/ingredients', [InventoryIngredientController::class, 'attach']);
+        Route::delete('/references/menu-items/{item}/ingredients/{inventoryItem}', [InventoryIngredientController::class, 'detach']);
     });
 
     // Branch management + System configuration — admin only

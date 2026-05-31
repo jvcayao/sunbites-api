@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Enums\CreditTransactionType;
+use App\Enums\InventoryLogType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Models\Branch;
+use App\Models\InventoryItem;
+use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PosMenuItem;
@@ -46,6 +49,13 @@ class PosVoidTest extends TestCase
             'branch_id' => $this->branch->id,
             'price' => 135.00,
         ]);
+
+        // Checkout requires inventory mapping — attach a well-stocked item
+        $invItem = InventoryItem::factory()->create([
+            'branch_id' => $this->branch->id,
+            'quantity' => 9999,
+        ]);
+        $this->menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
     }
 
     private function asAdmin(): static
@@ -214,5 +224,45 @@ class PosVoidTest extends TestCase
         $response = $this->asAdmin()->postJson("/api/v1/pos/transactions/{$order->id}/void", []);
 
         $response->assertUnprocessable()->assertJsonValidationErrors(['void_reason']);
+    }
+
+    public function test_void_restores_inventory_stock(): void
+    {
+        $invItem = InventoryItem::factory()->create([
+            'branch_id' => $this->branch->id,
+            'quantity' => 44,
+            'name' => 'Bread Roll',
+        ]);
+
+        $order = $this->createCashOrder();
+
+        // Simulate the sale log that checkout would have created
+        InventoryLog::create([
+            'branch_id' => $this->branch->id,
+            'inventory_item_id' => $invItem->id,
+            'order_id' => $order->id,
+            'adjusted_by' => $this->admin->id,
+            'type' => InventoryLogType::Sale->value,
+            'quantity_change' => '-4.00',
+            'stock_after' => '44.00',
+            'item_name_snapshot' => 'Bread Roll',
+            'reason' => 'Order #'.$order->receipt_number,
+        ]);
+
+        $this->asAdmin()->postJson("/api/v1/pos/transactions/{$order->id}/void", [
+            'void_reason' => 'Wrong order.',
+        ])->assertOk();
+
+        $this->assertDatabaseHas('inventory_items', [
+            'id' => $invItem->id,
+            'quantity' => '48.00',
+        ]);
+
+        $this->assertDatabaseHas('inventory_logs', [
+            'inventory_item_id' => $invItem->id,
+            'type' => 'restock',
+            'quantity_change' => '4.00',
+            'item_name_snapshot' => 'Bread Roll',
+        ]);
     }
 }

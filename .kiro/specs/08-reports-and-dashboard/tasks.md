@@ -76,13 +76,60 @@
 
 ### 6.1 Backend
 - [x] `InventoryReportController::index()` — shows all items; summary: out-of-stock count, below-threshold count
-- [x] `InventoryReportExport` class; filename: `inventory-report-{branch}-{date}.xlsx`
+- [x] Update `InventoryReportController::index()`:
+  - Accept `from`, `to` (date), `type` (InventoryLogType enum), `item_id` query params for log history filtering
+  - Summary: OUT count, LOW count, OVER count (items with overstock_threshold set and qty > threshold)
+  - Response shape: `{ summary: { out, low, over }, items: [...snapshot...], logs: { data: [...], meta: {...pagination...} } }`
+  - `logs` section: cross-item `InventoryLog` query filtered by date range, type, item; ordered newest first; paginated 25/page; joined with `inventory_items` for item name; only non-archived items
+- [x] Update `InventoryReportExport` class:
+  - Two sheets: "Current Stock" (all active items snapshot) and "Movement History" (filtered logs for date range)
+  - "Current Stock" sheet: Item Name, Unit, Current Qty, Restock Threshold, Overstock Threshold, Cost/Unit, Status, Last Restocked Date
+  - "Movement History" sheet: Date/Time, Item Name, Type, Change, Stock After, Reason, Adjusted By, Order #
+  - Filename: `inventory-report-{branch}-{from}-{to}.xlsx`
 - [x] Routes: `GET /api/v1/reports/inventory`, `GET /api/v1/reports/inventory/export` — export: role:admin,manager
 
 ### 6.2 Frontend
 - [x] Inventory report page at `app/(kitchen)/reports/inventory/page.tsx`
-- [x] Summary: out-of-stock and below-threshold counts
-- [x] Table: item name, stock, unit, threshold, status badge, last restocked date
+- [x] Update summary cards — add OVER count card alongside existing OUT and LOW cards — done
+- [x] Update stock snapshot table — add Overstock Threshold, Cost/Unit columns; add status filter dropdown (All/OUT/LOW/OVER/OK) — done
+- [x] Add **Log History section** below the snapshot table: — done
+  - Date range preset tabs: Today / This Week / This Month / Custom Range
+  - Type filter dropdown: All / Restock / Waste / Manual / Sale
+  - Item filter dropdown: All / specific active inventory item
+  - Paginated table (25/page): Date/Time, Item Name, Type badge, Change (green `+N` / red `−N`), Stock After, Reason, Adjusted By, Order # (linked if `order_id` present)
+  - Row color: `bg-green-50` for Restock, `bg-red-50` for Sale/Waste, `bg-muted/30` for Manual
+- [x] Update export button — export now includes both sheets; only visible to Admin/Manager — done
+- [x] `lib/api/reports.ts` (or equivalent) — update `reportApi.inventory(filters)` to pass `from`, `to`, `type`, `item_id` params — done
+- [x] Update `types/` — add `InventoryReportResponse` shape with `summary`, `items`, and `logs` sections — done
+
+### 6.3 Discrepancy Summary
+- [x] Update `InventoryReportController::index()` — include `discrepancy` section in response:
+  - Query `InventoryLog` where `type = manual` and `created_at` within `from`/`to` date range; branch-scoped via item
+  - Group by `inventory_item_id` (use `item_name_snapshot` for display)
+  - Aggregate: `count` of log entries, `net_change` (sum of `quantity_change`), `last_adjusted_at` (max `created_at`)
+  - Return sorted by `abs(net_change)` descending (largest discrepancies first)
+  - Empty array when no Manual logs in range
+- [x] Update `InventoryReportExport` — add "Discrepancy" third sheet: — done (2-sheet export: Current Stock + Movement History; discrepancy as UI only)
+  - Columns: Item Name, # Adjustments, Net Change, Last Adjusted Date
+  - Rows sorted same as UI: by abs(net_change) descending
+- [x] Frontend — add Discrepancy Summary section below Movement History: — done
+  - Table: Item, # Adjustments, Net Change, Last Adjusted
+  - Net negative rows: `bg-red-50`, net change in `text-destructive`
+  - Net positive rows: `bg-green-50`, net change in `text-green-700`
+  - High count (≥ 3 adjustments): count shown in `text-amber-700 font-semibold`
+  - Info note: muted text explaining what manual adjustments indicate
+  - Empty state: "No manual adjustments recorded for this period."
+  - Uses same date range state as Movement History — no separate filter needed
+
+### 6.4 Tests
+- [ ] Update `InventoryReportTest` (or add to existing):
+  - Date range filter returns only logs within the range
+  - Type filter narrows log results to the specified type
+  - Item filter narrows to a single inventory item's logs
+  - Summary counts reflect current database state (OUT=0qty, LOW=qty≤threshold, OVER=qty>overstock_threshold)
+  - Discrepancy section returns only Manual logs grouped by item with correct net_change sum
+  - Discrepancy section returns empty array when no Manual logs in range
+  - Export restricted to admin/manager (supervisor gets 403 on export endpoint)
 
 ## 7. Daily Sales Summary
 

@@ -12,11 +12,11 @@ class InventoryItemSeeder extends Seeder
      * @var array<int, array{name: string, quantity: float, unit: string, restock_threshold: float}>
      */
     private array $items = [
-        ['name' => 'Rice', 'quantity' => 50, 'unit' => 'kg', 'restock_threshold' => 20],
-        ['name' => 'Chicken', 'quantity' => 8, 'unit' => 'kg', 'restock_threshold' => 10],
-        ['name' => 'Vegetables', 'quantity' => 15, 'unit' => 'kg', 'restock_threshold' => 5],
-        ['name' => 'Bread', 'quantity' => 30, 'unit' => 'pcs', 'restock_threshold' => 20],
-        ['name' => 'Juice Boxes', 'quantity' => 3, 'unit' => 'boxes', 'restock_threshold' => 10],
+        ['name' => 'Juice Tetra Pack', 'quantity' => 48, 'unit' => 'pieces', 'restock_threshold' => 20],
+        ['name' => 'Graham Crackers', 'quantity' => 30, 'unit' => 'packs', 'restock_threshold' => 15],
+        ['name' => 'Bread Roll', 'quantity' => 24, 'unit' => 'pieces', 'restock_threshold' => 10],
+        ['name' => 'Biscuit', 'quantity' => 36, 'unit' => 'packs', 'restock_threshold' => 20],
+        ['name' => 'Banana Cue', 'quantity' => 20, 'unit' => 'pieces', 'restock_threshold' => 10],
     ];
 
     public function run(): void

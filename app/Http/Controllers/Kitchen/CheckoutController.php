@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\CreditTransactionType;
 use App\Enums\EnrollmentStatus;
+use App\Enums\InventoryLogType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\StudentType;
@@ -11,6 +12,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Jobs\WalletAlertJob;
 use App\Models\CreditTransaction;
+use App\Models\InventoryItem;
+use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\PosMenuItem;
 use App\Models\Student;
@@ -51,7 +54,38 @@ class CheckoutController extends Controller
         }
 
         $menuItemIds = collect($validated['items'])->pluck('pos_menu_item_id')->unique()->values();
-        $menuItems = PosMenuItem::findMany($menuItemIds)->keyBy('id');
+        $menuItems = PosMenuItem::with('inventoryItems')->findMany($menuItemIds)->keyBy('id');
+
+        // Pre-checkout: ensure every cart item has at least one inventory mapping
+        foreach ($validated['items'] as $cartItem) {
+            /** @var PosMenuItem $menuItem */
+            $menuItem = $menuItems[$cartItem['pos_menu_item_id']];
+            if ($menuItem->inventoryItems->isEmpty()) {
+                return response()->json([
+                    'message' => 'One or more items are not configured for inventory tracking. Please contact your administrator.',
+                ], 422);
+            }
+        }
+
+        // Pre-checkout: aggregate deductions and verify sufficient stock
+        $deductions = [];
+        foreach ($validated['items'] as $cartItem) {
+            /** @var PosMenuItem $menuItem */
+            $menuItem = $menuItems[$cartItem['pos_menu_item_id']];
+            foreach ($menuItem->inventoryItems as $invItem) {
+                $units = $invItem->pivot->quantity_used * $cartItem['quantity'];
+                $deductions[$invItem->id] = ($deductions[$invItem->id] ?? 0) + $units;
+            }
+        }
+
+        $loadedInventoryItems = $menuItems->flatMap->inventoryItems->keyBy('id');
+
+        foreach ($deductions as $invItemId => $unitsToDeduct) {
+            $invItem = $loadedInventoryItems[$invItemId];
+            if ((float) $invItem->quantity - $unitsToDeduct < 0) {
+                return response()->json(['message' => $invItem->name.' is out of stock.'], 422);
+            }
+        }
 
         $subtotal = collect($validated['items'])->sum(fn ($item) => $menuItems[$item['pos_menu_item_id']]->price * $item['quantity']);
 
@@ -162,6 +196,31 @@ class CheckoutController extends Controller
                     'quantity' => $item['quantity'],
                     'line_total' => $menuItem->price * $item['quantity'],
                 ]);
+            }
+
+            // Inventory deduction — runs inside the same DB transaction
+            $branchId = app('active_branch')->id;
+            foreach ($validated['items'] as $cartItem) {
+                /** @var PosMenuItem $menuItem */
+                $menuItem = $menuItems[$cartItem['pos_menu_item_id']];
+                foreach ($menuItem->inventoryItems as $invItem) {
+                    $deduction = $invItem->pivot->quantity_used * $cartItem['quantity'];
+                    $newQty = max(0, (float) $invItem->quantity - $deduction);
+
+                    InventoryItem::where('id', $invItem->id)->update(['quantity' => $newQty]);
+
+                    InventoryLog::create([
+                        'branch_id' => $branchId,
+                        'inventory_item_id' => $invItem->id,
+                        'order_id' => $order->id,
+                        'adjusted_by' => $request->user()->id,
+                        'type' => InventoryLogType::Sale,
+                        'quantity_change' => -$deduction,
+                        'stock_after' => $newQty,
+                        'item_name_snapshot' => $invItem->name,
+                        'reason' => 'Order #'.$receiptNumber,
+                    ]);
+                }
             }
 
             if ($student) {
