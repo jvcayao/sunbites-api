@@ -53,16 +53,24 @@
 
 **QR Scan field (auto-focused on page load):**
 ```
-  📷 SCAN QR / ENTER ID
-  ┌─────────────────────────────────────────┐ [Scan]
-  │  Scan QR code or enter student ID...   │
-  └─────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Scan QR code or type student name / number…               │
+  └─────────────────────────────────────────────────────────────┘
+  Press [Enter] to search  —  Walk-in customer
 ```
 - `id="pos-qr-input"` — auto-focused on mount via `useEffect`
-- Detects QR scan: input filled in <100ms → auto-triggers lookup
-- Manual entry: debounced 300ms
-- Spinner shown during lookup
 - `F1` keyboard shortcut refocuses this field
+
+**Global Scan Detection (document-level listener):**
+- A `keydown` event listener on `document` captures all keystrokes, not just when the input is focused
+- Characters arriving < 100ms apart → accumulated in a hidden `scanBufferRef` (a React ref, never rendered)
+- Characters arriving > 100ms apart → go into the visible input field (manual typing path)
+- On `Enter`: if `scanBufferRef` has content matching `/^SB-[A-Za-z0-9]{12}$/` → fire QR lookup silently; **clear buffer**; input field stays empty
+- On `Enter` in visible input (manual path) → fire name/number search as before
+- QR code string is **never displayed** in the input box — only the resolved student appears on screen
+- If the input already has text when the global listener detects a fast-key sequence, it discards the input text and uses the buffer (scanner takes priority)
+
+**Manual entry:** cashier types in the visible input → debounced 300ms → name/number search dropdown as before
 
 **Name Search field (below OR divider):**
 ```
@@ -135,17 +143,32 @@
 
 **Item Cards (3–4 per row, responsive):**
 ```
+  ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+  │  Subscription        │  │  Snack A             │  │  Snack C             │
+  │  Meal Tray           │  │  (Bread/Pastry)      │  │  (Juice/Water)       │
+  │                      │  │                      │  │                      │
+  │  ₱135.00             │  │  ₱15.00              │  │  ₱15.00              │
+  │  [MEAL]              │  │  [SNACK]             │  │  [DRINK]             │
+  │                      │  │  ⚠ Low Stock         │  │  ✕ Out of Stock      │
+  └──────────────────────┘  └──────────────────────┘  └──────────────────────┘
+       (normal)                  (LOW — clickable)          (OUT — disabled)
+
   ┌──────────────────────┐
-  │  Subscription        │
-  │  Meal Tray           │  ← font-bold text-sm
+  │  Special Snack       │
   │                      │
-  │  ₱135.00             │  ← text-xl font-extrabold text-primary
-  │  [MEAL]              │  ← category badge
+  │  ₱30.00              │
+  │  [SNACK]             │
+  │  ⚠ Not Mapped        │
   └──────────────────────┘
+       (unmapped — disabled)
 ```
 - Click: adds to Zustand cart; card background becomes `bg-primary/10` if already in cart
 - Quantity counter badge on card top-right when qty > 0: `text-[10px] bg-primary text-primary-foreground rounded-full`
-- Unavailable items: hidden from grid by default
+- Unavailable items (`is_available = false`): hidden from grid by default
+- **Inventory status on cards** (driven by `inventory_status` + `has_inventory_mapping` from API):
+  - `OUT`: card at `opacity-40 cursor-not-allowed`; click disabled; no cart add; badge: `bg-red-50 text-destructive text-[10px]` — "✕ Out of Stock"
+  - `LOW`: card clickable; warning badge: `bg-yellow-50 text-amber-700 border-yellow-300 text-[10px]` — "⚠ Low Stock"
+  - `has_inventory_mapping = false`: card at `opacity-60 cursor-not-allowed`; click disabled; badge: `bg-orange-50 text-orange-700 text-[10px]` — "⚠ Not Mapped"
 
 ---
 
@@ -299,6 +322,7 @@
 │  Customer: Sofia Reyes                          │
 │  Amount: ₱135.00 (Wallet)                      │
 │  Wallet will be refunded ₱135.00               │
+│  Inventory stock will be restored.             │
 │                                                 │
 │  Void Reason *                                  │
 │  [___________________________]                  │
@@ -306,6 +330,7 @@
 │  [Cancel]               [Confirm Void]         │
 └────────────────────────────────────────────────┘
 ```
+- "Inventory stock will be restored." line shown on all voids (stock was always deducted at checkout)
 
 ---
 
@@ -352,6 +377,54 @@
 - Greyed out and disabled if `credit_balance + shortfall > ₱300`
 - Disabled message: "Credit limit reached (₱300). Reload wallet to continue."
 - `bg-orange-50 border-orange-200` card; red tint if limit reached
+
+---
+
+## Modal: Change Student (QR scanned while student already selected)
+
+Shown when a QR scan is detected and `selectedStudent !== null`. The new student's lookup fires in the background; this dialog appears with the result.
+
+```
+┌────────────────────────────────────────────────────┐
+│  🔄 Switch Student?                          [✕]  │
+├────────────────────────────────────────────────────┤
+│  A new QR code was scanned.                        │
+│                                                    │
+│  Current:  Maria Santos  (Grade 3)                 │
+│  New:      Juan dela Cruz  (Grade 5 — Enrolled ✅) │
+│                                                    │
+│  Switch to the new student?                        │
+│                                                    │
+│  [No, Keep Current]        [Yes, Switch]           │
+└────────────────────────────────────────────────────┘
+```
+
+- "Yes, Switch" button: `bg-primary text-primary-foreground` — replaces current student with the new one; closes dialog
+- "No, Keep Current" button: `variant="outline"` — dismisses dialog; current student unchanged
+- If new student is not enrolled: show Student Not Eligible dialog instead (see below) — do not show Switch dialog
+
+---
+
+## Modal: Student Not Found (QR lookup returns no match)
+
+Shown when a QR scan lookup returns no student record. Uses a dialog — **not** an inline error — so it is visible regardless of what the cashier was doing when the scan happened.
+
+```
+┌────────────────────────────────────────────────────┐
+│  🔍 Student Not Found                        [✕]  │
+├────────────────────────────────────────────────────┤
+│                                                    │
+│  No student was found matching this QR code.       │
+│  Please try scanning again or search by name.      │
+│                                                    │
+│                   [Close]                          │
+└────────────────────────────────────────────────────┘
+```
+
+- Single "Close" button dismisses the dialog
+- Current state is fully preserved — if a student was already selected, they remain selected
+- Dialog also closes on click-outside (`onOpenChange`)
+- Never show the raw QR code value in this dialog
 
 ---
 

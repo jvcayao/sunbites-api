@@ -142,15 +142,37 @@ Roles: Admin, Manager (Supervisor excluded)
 Accessible at: `pos.sunbites.com.ph/reports/inventory`
 Roles: Admin, Manager, Supervisor
 
-### Summary
-- Items currently out of stock
-- Items below alert threshold
+### Summary Cards
+- Items currently out of stock (count)
+- Items below restock threshold (count)
+- Items overstocked / above overstock threshold (count, shown only when overstock_threshold is configured on any item)
 
-### Table
-- Item name, Unit, Current Stock, Alert Threshold, Status, Last Restocked Date
+### Stock Snapshot Table
+- Item name, Unit, Current Stock, Restock Threshold, Overstock Threshold, Cost/Unit, Status badge (OUT/LOW/OVER/OK), Last Restocked Date
+- Filterable by status (All / OUT / LOW / OVER / OK)
+- Archived items excluded
+
+### Log History Table (below snapshot table)
+- Full adjustment trail across all inventory items for the selected date range
+- **Date Range Filters**: preset buttons (Today, This Week, This Month, Custom Range) — `from` and `to` params sent to backend
+- **Additional Filters**: Type (All / Restock / Waste / Manual / Sale), Item (All / specific item)
+- Columns: Date/Time, Item Name, Type badge, Change (±qty with unit), Stock After, Reason, Adjusted By, Order # (linked, shown for Sale/Void logs)
+- Color coding: Restock rows = green, Sale/Waste rows = red, Manual rows = neutral
+- Paginated 25 per page, newest first
+
+### Discrepancy Summary (below Movement History)
+- Groups all `Manual` type log entries by item for the selected date range
+- Purpose: highlights items with unexplained stock corrections — high manual adjustment activity signals unrecorded loss, miscounting, or theft
+- Columns: Item Name, # of Manual Adjustments, Net Units Adjusted (sum of `quantity_change`), Last Adjusted Date
+- Net negative = red (potential unrecorded loss); net positive = green (overcorrection)
+- Empty state: "No manual adjustments recorded for this period." when no Manual logs exist in range
+- Uses the same `from`/`to` date range as the Movement History section above
 
 ### Export
-- Excel export
+- Excel export covers the stock snapshot, filtered log history, AND discrepancy summary
+- Filename: `inventory-report-{branch}-{from}-{to}.xlsx`
+- Three sheets: "Current Stock" (snapshot), "Movement History" (filtered logs), "Discrepancy" (manual adjustment summary)
+- Export restricted to Admin/Manager (Supervisor excluded) — enforced server-side
 
 ---
 
@@ -340,7 +362,10 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Sales report at `pos.sunbites.com.ph/reports/sales` with all filters and summary panel
 - [ ] Student report at `pos.sunbites.com.ph/reports/students` with filters and summary
 - [ ] Wallet report at `pos.sunbites.com.ph/reports/wallet` (Admin/Manager only)
-- [ ] Inventory report at `pos.sunbites.com.ph/reports/inventory`
+- [ ] Inventory report at `pos.sunbites.com.ph/reports/inventory` — stock snapshot + log history with date range filter
+- [ ] Inventory report summary cards: OUT count, LOW count, OVER count (when applicable)
+- [ ] Inventory report log history table: date range filter (preset + custom), type filter, item filter; paginated 25/page
+- [ ] Inventory report export: two-sheet Excel — "Current Stock" snapshot + "Movement History" filtered logs; restricted to Admin/Manager server-side
 - [ ] Daily summary at `pos.sunbites.com.ph/reports/daily-summary` (printable, `@media print` hides UI chrome)
 - [ ] Excel exports for all 4 reports via maatwebsite/excel
 - [ ] Export restricted to Admin and Manager — enforced server-side in `ReportPolicy::export()`, not just frontend button

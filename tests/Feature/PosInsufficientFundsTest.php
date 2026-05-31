@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\CreditTransactionType;
 use App\Models\Branch;
+use App\Models\InventoryItem;
 use App\Models\PosMenuItem;
 use App\Models\Student;
 use App\Models\User;
@@ -37,6 +38,9 @@ class PosInsufficientFundsTest extends TestCase
             'price' => 135.00,
             'is_available' => true,
         ]);
+
+        $invItem = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 9999]);
+        $this->menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
     }
 
     private function asCashier(): static

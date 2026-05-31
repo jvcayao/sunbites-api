@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\CreditTransactionType;
+use App\Enums\InventoryLogType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Models\CreditTransaction;
+use App\Models\InventoryItem;
+use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\Student;
+use App\Models\SystemConfiguration;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -121,13 +125,38 @@ class TransactionController extends Controller
                 ]);
             }
 
+            // Inventory restoration — re-stock items deducted during checkout
+            $saleLogs = InventoryLog::where('order_id', $order->id)
+                ->where('type', InventoryLogType::Sale->value)
+                ->get();
+
+            foreach ($saleLogs as $saleLog) {
+                $invItem = InventoryItem::lockForUpdate()->find($saleLog->inventory_item_id);
+                if ($invItem) {
+                    $restoredQty = (float) $invItem->quantity + abs((float) $saleLog->quantity_change);
+                    $invItem->update(['quantity' => $restoredQty]);
+
+                    InventoryLog::create([
+                        'branch_id' => $order->branch_id,
+                        'inventory_item_id' => $invItem->id,
+                        'order_id' => $order->id,
+                        'adjusted_by' => $request->user()->id,
+                        'type' => InventoryLogType::Restock,
+                        'quantity_change' => abs((float) $saleLog->quantity_change),
+                        'stock_after' => $restoredQty,
+                        'item_name_snapshot' => $saleLog->item_name_snapshot,
+                        'reason' => 'Void: Order #'.$order->receipt_number,
+                    ]);
+                }
+            }
+
             if ($student) {
                 $student->refresh();
 
                 $previousTotalSpent = (float) $student->total_spent + (float) $order->total;
                 $newTotalSpent = max(0, (float) $student->total_spent - (float) $order->total);
 
-                $threshold = config('sunbites.loyalty_point_threshold', 1000);
+                $threshold = SystemConfiguration::getValue('loyalty_point_threshold', 1000);
                 $previousPoints = floor($previousTotalSpent / $threshold);
                 $newPoints = floor($newTotalSpent / $threshold);
                 $pointsToRemove = max(0, (int) ($previousPoints - $newPoints));

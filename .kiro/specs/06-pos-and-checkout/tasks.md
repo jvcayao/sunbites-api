@@ -35,13 +35,42 @@
   - `POST /api/v1/pos/students/lookup`
 
 ### 4.2 Frontend — QR / Student Search Input
-- [ ] Auto-focused on page load via `useEffect`; `id="pos-qr-input"`, `autocomplete="off"`
-- [ ] Scan detection: inter-keystroke time < 100ms → suppress debounce (scanner in progress)
-- [ ] On `Enter`: if value matches `/^SB-[A-Za-z0-9]{12}$/` → QR lookup; else → name/number search via `useMutation`
-- [ ] Manual typing: debounced 300ms → name/number search dropdown
-- [ ] `onBlur` re-focus with 50ms delay (handles scanner models that steal focus)
-- [ ] Input cleared and re-focused after successful student selection
+- [x] Auto-focused on page load via `useEffect`; `id="pos-qr-input"`, `autocomplete="off"`
+- [x] `onBlur` re-focus with 50ms delay (handles scanner models that steal focus)
+
+#### 4.2a Global QR Scanner Detection (document-level — focus independent)
+- [x] `useEffect` attaches a `keydown` listener to `document` on mount; removes on unmount
+- [x] Hidden `scanBufferRef` (React ref, `useRef<string>("")`) accumulates characters arriving < 100ms apart — never rendered in the UI
+- [x] `lastKeyTimeRef` tracks the timestamp of the previous keydown event for inter-keystroke timing
+- [x] On each `keydown` in the global listener:
+  - If `event.key.length === 1` (printable character) and inter-keystroke time < 100ms → append to `scanBufferRef`; suppress default only if the target is NOT the visible input
+  - If `event.key === "Enter"` and `scanBufferRef.current` matches `/^SB-[A-Za-z0-9]{12}$/` → fire QR lookup; clear buffer; do NOT populate the visible input
+  - If `event.key === "Enter"` and buffer does not match QR pattern → clear buffer (discard); fall through to normal input Enter handling
+- [x] Raw QR string is **never written to the visible input** — the visible input's `value` state is only set by manual typing
+
+#### 4.2b Change Student Dialog
+- [x] State: `pendingQrStudent: PosStudent | null` — holds the newly scanned student while the dialog is open
+- [x] When a global QR lookup succeeds AND `selectedStudent !== null`:
+  - Set `pendingQrStudent` with the result → opens Change Student dialog
+  - Do NOT replace `selectedStudent` yet
+- [x] Change Student dialog shows: current student name, new student name + grade + enrollment status badge
+- [x] "Yes, Switch" → call `onStudentSelected(pendingQrStudent)`; clear `pendingQrStudent`
+- [x] "No, Keep Current" / close → clear `pendingQrStudent`; current student unchanged
+- [x] If the pending student is not enrolled → skip the Switch dialog entirely; show "Student Not Eligible" dialog instead
+
+#### 4.2c Student Not Found Dialog
+- [x] State: `showNotFoundDialog: boolean`
+- [x] When a global QR lookup returns no match (API error or empty result) → set `showNotFoundDialog = true`
+- [x] Dialog: title "Student Not Found"; body "No student was found matching this QR code. Please try scanning again or search by name."; single "Close" button
+- [x] Dialog closes on button click or click-outside (`onOpenChange`)
+- [x] **Never show inline input error for QR lookup failures** — only the dialog
+- [x] Current state (selected student or empty) is fully preserved when dialog closes
+
+#### 4.2d Manual Search (unchanged from existing)
+- [ ] Manual typing in visible input: debounced 300ms → name/number search dropdown
+- [ ] On `Enter` in visible input: if value matches QR pattern → QR lookup; else → name/number search
 - [ ] Search results dropdown: minimal data only (name, grade, status); ineligible students grayed with ⛔ badge; no wallet balance shown in dropdown
+- [ ] Input cleared and re-focused after successful student selection
 - [ ] Selected student card: photo, name, grade, status, wallet balance (shown after confirmed), points (decorative), credit owed badge (red, when > 0)
 - [ ] `[Walk-In]` button switches to walk-in mode
 - [ ] `[Clear ✕]` button on selected student card clears Zustand student state
@@ -54,6 +83,10 @@
 - [ ] Click item → adds to Zustand cart; quantity badge top-right when qty > 0 (`bg-primary text-primary-foreground rounded-full`)
 - [ ] Unavailable items hidden from grid by default
 - [ ] Item search bar (debounced, searches across all categories); `F2` shortcut focuses search
+- [ ] **Inventory status on cards** (from `inventory_status` field in menu items response):
+  - OUT items (`inventory_status = "OUT"`): card shown at `opacity-40`; click disabled; no cart add
+  - LOW items (`inventory_status = "LOW"`): show warning badge `bg-yellow-50 text-amber-700 border-yellow-300 text-[10px]` — "Low Stock"
+  - Unmapped items (`has_inventory_mapping = false`): show orange badge `bg-orange-50 text-orange-700 text-[10px]` — "Not Mapped"; click disabled
 
 ## 6. Cart
 
@@ -73,8 +106,10 @@
 ### 7.1 Backend
 - [ ] `CheckoutController::store()`
   - [ ] Validate cart items not empty; validate payment method requirements
-  - [ ] For wallet payment: wrap in `DB::transaction()` with `Student::lockForUpdate()` — prevents double-spend race condition
-  - [ ] Re-validate balance inside the lock
+  - [x] **Pre-checkout inventory mapping check** — for each cart item, verify `pos_menu_item_inventory` has at least one row; if any item is unmapped, return 422: "One or more items are not configured for inventory tracking. Please contact your administrator."
+  - [x] **Pre-checkout stock check** — for each cart item, sum up total units to deduct across linked inventory items; if any inventory item's `quantity - deduction < 0`, return 422: "[Item Name] is out of stock."
+  - [ ] Wrap all of the following in `DB::transaction()`:
+  - [ ] For wallet payment: `Student::lockForUpdate()` — prevents double-spend race condition; re-validate balance inside the lock
   - [ ] Sanitize `notes` with `strip_tags()` before storage
   - [ ] GCash reference validation: alphanumeric, max 50 chars
   - [ ] Auto-generate `receipt_number`: branch prefix + year + padded sequence (e.g. `ANT-2025-001001`)
@@ -82,6 +117,10 @@
   - [ ] Wallet payment: `withdraw()` via bavix
   - [ ] Credit used: insert `credit_transactions` (type=Charged); atomically increment `student.credit_balance` in same `DB::transaction()`
   - [ ] Update `student.total_spent` += order total; recalculate `student.points`; set `order.points_earned`
+  - [x] **Inventory deduction** (inside the same transaction) — for each `OrderItem`:
+    - For each linked `InventoryItem` via pivot: `deduction = pivot.quantity_used × order_item.quantity`
+    - Update `inventory_item.quantity -= deduction` (floor at 0)
+    - Create `InventoryLog`: `type=sale`, `quantity_change=-deduction`, `stock_after=new_qty`, `item_name_snapshot=$item->name`, `order_id=$order->id`, `adjusted_by=$cashier->id`, `reason="Order #{$receipt_number}"`
   - [ ] Log `pos.order_created` (properties: receipt_number, total, payment_method, student_id or "walk-in", cashier_id, is_credit)
   - [ ] Log `pos.discount_applied` if discount > 0
 - [ ] Route under `auth:sanctum` + `ability:staff`:
@@ -115,7 +154,12 @@
 
 ### 9.1 Backend
 - [ ] `TransactionController::index()` — branch-scoped, filtered by date (default today), payment method, student search; paginated
-- [ ] `TransactionController::void()` — Admin/Manager/Supervisor only; requires reason; reverses wallet via `refund()`; if `is_credit`: insert `credit_transactions` (type=Voided) + atomically decrement `student.credit_balance`; reverses `total_spent`/`points`; logs `pos.order_voided`
+- [ ] `TransactionController::void()` — Admin/Manager/Supervisor only; requires reason; inside `DB::transaction()`:
+  - [ ] Reverses wallet via `refund()` (if wallet payment)
+  - [ ] If `is_credit`: insert `credit_transactions` (type=Voided) + atomically decrement `student.credit_balance`
+  - [ ] Reverses `total_spent`/`points`
+  - [x] **Inventory restoration** — query `InventoryLog` where `order_id = order.id` and `type = sale`; for each log: restore `inventory_item.quantity += abs(quantity_change)`; create new `InventoryLog`: `type=restock`, `quantity_change=+restored_amount`, `stock_after=new_qty`, `item_name_snapshot=original_log.item_name_snapshot`, `order_id=order.id`, `adjusted_by=voiding_user->id`, `reason="Void: Order #{$receipt_number}"`
+  - [ ] Logs `pos.order_voided`
 - [ ] Routes under `auth:sanctum` + `ability:staff`:
   - `GET /api/v1/pos/transactions`
   - `POST /api/v1/pos/transactions/{order}/void` — role:admin,manager,supervisor
@@ -142,7 +186,15 @@
 
 ## 12. Tests
 - [ ] `PosCheckoutTest` — cash checkout creates order; gcash checkout with/without reference; wallet checkout with sufficient balance; receipt number generation; points calculation on threshold
+- [x] Update `PosCheckoutTest`:
+  - [x] Checkout blocked when cart item has no inventory mapping (422 with correct error message)
+  - [x] Checkout blocked when linked inventory item is OUT (422 with item name in error)
+  - [x] Successful checkout deducts correct inventory quantities and creates `sale` InventoryLog entries with `order_id`, `item_name_snapshot`, `adjusted_by = cashier_id`
+  - [ ] Checkout with LOW inventory proceeds (warns but does not block)
 - [ ] `PosWalletLockTest` — concurrent wallet checkout with `lockForUpdate()` prevents double-spend; balance re-validated inside lock
 - [ ] `PosStudentLookupTest` — QR lookup returns full student data including wallet; search returns minimal data only (no wallet/credit); non-enrolled student returns blocking error
 - [ ] `PosVoidTest` — void reverses wallet via refund(); void of credit order inserts Voided credit_transaction and decrements credit_balance; total_spent/points restored; cashier cannot void (403)
+- [x] Update `PosVoidTest`:
+  - [x] Void restores inventory stock — `InventoryLog` records with `type=restock` created for each deducted item, quantities restored
+  - [ ] Void inventory restoration runs inside same transaction — if restoration fails, wallet refund also rolls back
 - [ ] `PosInsufficientFundsTest` — inline reload locked to exact shortfall; credit use inserts Charged credit_transaction; credit limit enforcement blocks use when exceeded

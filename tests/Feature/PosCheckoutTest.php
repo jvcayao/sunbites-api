@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
+use App\Models\InventoryItem;
 use App\Models\PosMenuItem;
 use App\Models\Student;
 use App\Models\User;
@@ -36,6 +37,13 @@ class PosCheckoutTest extends TestCase
             'price' => 135.00,
             'is_available' => true,
         ]);
+
+        // All checkout tests require at least one inventory mapping per spec
+        $invItem = InventoryItem::factory()->create([
+            'branch_id' => $this->branch->id,
+            'quantity' => 9999,
+        ]);
+        $this->menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
     }
 
     private function asCashier(): static
@@ -313,5 +321,68 @@ class PosCheckoutTest extends TestCase
         $response = $this->postJson('/api/v1/pos/checkout', $this->cartPayload());
 
         $response->assertUnauthorized();
+    }
+
+    public function test_checkout_blocked_when_cart_item_has_no_inventory_mapping(): void
+    {
+        // Create a fresh menu item with no inventory mapping
+        $unmappedItem = PosMenuItem::factory()->create([
+            'branch_id' => $this->branch->id,
+            'price' => 50.00,
+            'is_available' => true,
+        ]);
+
+        $response = $this->asCashier()->postJson('/api/v1/pos/checkout', [
+            'items' => [['pos_menu_item_id' => $unmappedItem->id, 'quantity' => 1]],
+            'payment_method' => 'cash',
+            'amount_tendered' => 100,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonFragment([
+            'message' => 'One or more items are not configured for inventory tracking. Please contact your administrator.',
+        ]);
+    }
+
+    public function test_checkout_blocked_when_linked_inventory_item_is_out_of_stock(): void
+    {
+        $invItem = InventoryItem::factory()->create([
+            'branch_id' => $this->branch->id,
+            'quantity' => 0,
+        ]);
+        $this->menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
+
+        $response = $this->asCashier()->postJson('/api/v1/pos/checkout', $this->cartPayload());
+
+        $response->assertStatus(422);
+        $this->assertStringContainsString('out of stock', $response->json('message'));
+    }
+
+    public function test_successful_checkout_deducts_inventory_and_creates_sale_log(): void
+    {
+        $invItem = InventoryItem::factory()->create([
+            'branch_id' => $this->branch->id,
+            'quantity' => 48,
+            'name' => 'Juice Tetra Pack',
+        ]);
+        $this->menuItem->inventoryItems()->attach($invItem->id, ['quantity_used' => 1]);
+
+        $response = $this->asCashier()->postJson('/api/v1/pos/checkout', $this->cartPayload([
+            'items' => [['pos_menu_item_id' => $this->menuItem->id, 'quantity' => 2]],
+        ]));
+
+        $response->assertCreated();
+
+        $this->assertDatabaseHas('inventory_items', [
+            'id' => $invItem->id,
+            'quantity' => '46.00',
+        ]);
+
+        $this->assertDatabaseHas('inventory_logs', [
+            'inventory_item_id' => $invItem->id,
+            'type' => 'sale',
+            'quantity_change' => '-2.00',
+            'item_name_snapshot' => 'Juice Tetra Pack',
+        ]);
     }
 }

@@ -55,7 +55,7 @@ Menu Mgmt and Inventory tabs are covered in Spec 04.
 
 ### Registered Student via QR
 Two methods to identify a student — both use the **same single input field**:
-1. **QR Scan** — cashier places cursor in the input (auto-focused on load); USB scanner emits the QR value as rapid keystrokes and sends `Enter`. No separate scan button needed.
+1. **QR Scan** — USB scanner emits the QR value as rapid keystrokes followed by `Enter`. The scanner fires even without the input box being focused — the document-level listener captures it globally.
 2. **Manual Lookup** — cashier types student name or student number as fallback; debounced search shows a dropdown of matches.
 
 **Hardware Requirement (USB QR Scanner):**
@@ -63,7 +63,9 @@ Two methods to identify a student — both use the **same single input field**:
 - Scanner must be configured to append **Enter (CR) as a suffix** after each scan
 - No drivers or browser extensions required — scanner appears as a keyboard to the browser
 
-**Scan Detection Logic (frontend):**
+**Scan Detection Logic (frontend) — Global Listener:**
+
+The component attaches a `keydown` listener to `document` (not just the input element) so the scanner works regardless of which element currently has focus. When the sequence matches a QR scan, the value is processed silently without ever being shown to the user.
 
 | Signal | Scanner | Human typing |
 |---|---|---|
@@ -71,11 +73,29 @@ Two methods to identify a student — both use the **same single input field**:
 | Value format on Enter | Matches `SB-[A-Za-z0-9]{12}` exactly | Name or student number (no prefix) |
 
 Behavior:
-- On `Enter` key: immediately fire lookup with current value
-- While typing (no Enter): if inter-keystroke time < 100ms, suppress debounce (scanner in progress); if > 100ms, debounce 300ms and fire name/number search
-- If value on Enter matches QR regex `/^SB-[A-Za-z0-9]{12}$/` → use QR lookup path; otherwise → use name/number search path
-- `onBlur`: re-focus after 50ms to recover from scanner models that send a focus-steal event
-- `autocomplete="off"` on the input
+- A hidden ref (`scanBufferRef`) accumulates characters typed at < 100ms intervals — these chars do **not** appear in the visible input field
+- On `Enter` key: if the buffer matches `/^SB-[A-Za-z0-9]{12}$/`, fire QR lookup immediately using the buffered value; clear the buffer; do **not** populate the input box
+- If Enter fires but the buffer does not match the QR pattern, treat the buffer as a manual name/number search and fire lookup; clear buffer
+- When the cashier types manually into the visible input (keystrokes > 100ms apart), the normal input field handles the value — debounced 300ms → name/number search dropdown
+- `onBlur` on the visible input: re-focus after 50ms to recover from scanner models that send a focus-steal event
+- `autocomplete="off"` on the visible input
+
+**QR Value Security:**
+- The raw QR code string (`SB-XXXXXXXXXXXX`) is **never shown** in the visible input field
+- The scan buffer is kept in a React ref only and is cleared immediately after use
+- Only the resolved student's name and details appear on screen after a successful lookup
+
+**Change Student Dialog (QR scanned while student already selected):**
+- If a QR scan is detected and `selectedStudent !== null`, the system fires the QR lookup in the background
+- If the lookup resolves a student (even the same one): show a confirmation dialog — "Switch Student?" with the new student's name, grade, and enrollment status
+- Dialog options: **"Yes, Switch"** (replaces selected student) / **"No, Keep Current"** (dismisses dialog; current student retained)
+- If the new QR resolves to a non-enrolled student, show the Student Not Found / Not Eligible dialog instead
+
+**Student Not Found Dialog (QR lookup returns no match):**
+- When a QR scan lookup returns no matching student, show a modal dialog — "Student Not Found"
+- Dialog text: "No student was found matching this QR code. Please try scanning again or search by name."
+- Single **"Close"** button — dismisses dialog; current state (selected student or empty) is retained unchanged
+- Inline input error is **not** used for QR lookup failures — always use the dialog
 
 **Backend Lookup Endpoint (`POST /api/v1/pos/students/lookup`):**
 Single endpoint with a `type` parameter routing to two distinct lookup strategies:
@@ -89,7 +109,8 @@ Single endpoint with a `type` parameter routing to two distinct lookup strategie
 **After student is identified:**
 - Student name, grade, photo, wallet balance, points, and credit balance shown in cart panel
 - **Enrollment status check at student selection** — if status is not `enrolled`, show blocking error and prevent adding items to cart
-- Input field cleared and re-focused after successful selection
+- Visible input field cleared and re-focused after successful selection
+- Scan buffer always cleared immediately regardless of lookup outcome
 
 ---
 
@@ -188,7 +209,24 @@ Processing steps:
 8. Clear cart (Zustand store reset on frontend)
 9. Return order data for receipt modal
 
-**Stock decrement at checkout is not implemented in this phase.** Inventory items track raw kitchen ingredients and have no link to `pos_menu_items`. Inventory is managed manually via the Inventory tab. Stock auto-decrement at POS is a Phase 2 feature.
+**Inventory deduction at checkout:**
+Checkout automatically deducts inventory stock for every item sold. Each `pos_menu_item` must be mapped to one or more `inventory_items` via the `pos_menu_item_inventory` pivot before it can be sold.
+
+Pre-checkout inventory validation (runs before any payment processing):
+1. **Mapping check** — if any item in the cart has no inventory mapping (`has_inventory_mapping = false`), reject the entire order with a clear error: "One or more items are not configured for inventory tracking. Please contact your administrator."
+2. **Stock check** — if any linked inventory item's quantity would go below 0 for the cart quantities requested, reject the order with: "[Item Name] is out of stock."
+
+On successful order creation (inside the existing `DB::transaction()`):
+- For each `OrderItem`, multiply `quantity_used` from the pivot by the cart item quantity to get total units to deduct
+- Deduct from each `inventory_item.quantity` (floor at 0; negative stock not allowed)
+- Create one `InventoryLog` per deducted inventory item:
+  - `type = sale`
+  - `quantity_change` = negative deduction amount
+  - `stock_after` = quantity after deduction
+  - `item_name_snapshot` = inventory item name at time of sale
+  - `order_id` = the new order's id
+  - `adjusted_by` = `$cashier->id` (the authenticated user)
+  - `reason` = "Order #{receipt_number}"
 
 ### Receipt Modal
 After successful checkout:
@@ -270,7 +308,15 @@ Located on the POS page under the "Transaction History" tab.
 - Voiding a credit order (`is_credit = true`): also decrements `student.credit_balance` by `order.credit_amount` via `credit_transactions` insert (type=Voided) + atomic `credit_balance` update
 - Voiding reverses the `total_spent` increment and recalculates `points`
 - Voided orders shown with a strikethrough "VOIDED" badge
-- No stock restoration on void — inventory not decremented at checkout
+- **Inventory restoration on void** — for each `InventoryLog` entry where `order_id = order.id` and `type = sale`, create a new `Restock` log per inventory item:
+  - `type = restock`
+  - `quantity_change` = the original `quantity_change` converted to positive (restoring the deducted stock)
+  - `stock_after` = current quantity after restoration
+  - `item_name_snapshot` = item name at time of void
+  - `order_id` = voided order's id (for traceability)
+  - `adjusted_by` = user performing the void
+  - `reason` = "Void: Order #{receipt_number}"
+- Inventory restoration runs inside the same `DB::transaction()` as the wallet refund and credit reversal
 
 ---
 
@@ -312,9 +358,14 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Category tab navigation on item grid (meal/snack/drink/extra)
 - [ ] Item search across categories (debounced, `F2` shortcut)
 - [ ] QR/student input: auto-focused on page load and after every completed order; `autocomplete="off"`; `onBlur` re-focus with 50ms delay
-- [ ] Scan detection: inter-keystroke timing < 100ms suppresses debounce; `Enter` always fires immediate lookup
-- [ ] On `Enter`: if value matches `/^SB-[A-Za-z0-9]{12}$/` → QR lookup; otherwise → name/number search
+- [ ] **Global document-level `keydown` listener** — QR scanner captured even when the input is not focused; characters buffered in a hidden ref (`scanBufferRef`), never shown in the visible input
+- [ ] **QR value never displayed in input** — raw `SB-XXXXXXXXXXXX` string is captured silently in the ref buffer; only the student's name/details appear on screen after successful lookup
+- [ ] Scan detection: inter-keystroke timing < 100ms → characters go into hidden buffer; > 100ms → characters go into visible input (manual typing)
+- [ ] On global `Enter` with buffer matching `/^SB-[A-Za-z0-9]{12}$/` → fire QR lookup; clear buffer; input field unchanged
+- [ ] On `Enter` in visible input (manual mode) → name/number search
 - [ ] `POST /api/v1/pos/students/lookup` with `type: qr|search` — QR returns full student data; search returns minimal data only (id, full_name, grade_level, photo_path, enrollment_status — no wallet/credit/points)
+- [ ] **Change Student dialog** — shown when QR scan fires and a student is already selected; displays new student's name + grade; "Yes, Switch" replaces current; "No, Keep Current" dismisses
+- [ ] **Student Not Found dialog** — shown (not inline error) when QR lookup returns no match; text: "No student was found matching this QR code."; single "Close" button; current state preserved
 - [ ] Input cleared and re-focused after student is successfully selected
 - [ ] Walk-in / registered toggle
 - [ ] Enrollment status check at student selection time — blocks non-enrolled students immediately on select
@@ -331,13 +382,18 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Credit unavailable for walk-in customers
 - [ ] Wallet payment checkout wrapped in `DB::transaction()` with `lockForUpdate()` on student
 - [ ] Re-validate balance inside the lock before processing
-- [ ] Checkout creates Order and OrderItems with name/price snapshots; no stock decrement (Phase 2)
+- [ ] Checkout creates Order and OrderItems with name/price snapshots
+- [ ] Pre-checkout inventory mapping check — reject order if any cart item has no inventory mapping; error: "One or more items are not configured for inventory tracking"
+- [ ] Pre-checkout stock check — reject order if any linked inventory item would go below 0; error: "[Item Name] is out of stock"
+- [ ] On successful checkout: deduct linked inventory items inside `DB::transaction()`; create `Sale` InventoryLog per item with `order_id`, `item_name_snapshot`, `adjusted_by = cashier_id`, `reason = "Order #{receipt_number}"`
+- [ ] POS menu grid reflects inventory status: OUT items greyed out and unselectable; LOW items show warning badge (driven by `inventory_status` field on menu items response)
 - [ ] Auto-generated receipt number: branch prefix + year + padded sequence (e.g. `ANT-2025-001001`)
 - [ ] Update `student.total_spent` and recalculate `student.points`; set `order.points_earned`
 - [ ] Zustand cart cleared on successful order completion
 - [ ] Receipt modal: optional print button; conditionally shows credit lines, points earned
 - [ ] Transaction history tab: date filter, payment method filter, student search
 - [ ] Void: reverses wallet via `refund()`; credit balance restoration via `credit_transactions` (type=Voided) + atomic `credit_balance` update; total_spent/points recalculation
+- [ ] Void: restore inventory stock — for each `InventoryLog` where `order_id = order.id` and `type = sale`, create reversal `Restock` log with positive quantity, `order_id`, `adjusted_by = voiding user`, `reason = "Void: Order #{receipt_number}"`; runs inside same `DB::transaction()`
 - [ ] Void blocked for Cashiers (403)
 - [ ] Order notes sanitized with `strip_tags()` server-side before storage
 - [ ] POS keyboard shortcuts: F1, F2, Ctrl+Enter, Escape, Alt+W, Alt+S, Alt+1/2/3, Delete
