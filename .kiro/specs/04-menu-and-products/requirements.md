@@ -61,7 +61,7 @@ Roles: Admin, Manager only.
 ## Part 2 — Weekly Meal Planner
 
 ### Purpose
-The weekly meal planner is the canteen's **food calendar** — what is being cooked and served each school day. It is structured by school month, week number (1–4), and day of week (Mon–Fri). Each day has 4 meal categories: Ulam, Vegetables, Fruit, Soup.
+The weekly meal planner is the canteen's **food calendar** — what is being cooked and served each school day. It is structured by school month, week number (1–4), and day of week (Mon–Fri). Each day has 5 meal categories: Ulam, Vegetables, Fruit, Soup, Snacks.
 
 This is **not** related to the POS. It is informational: parents see what their child is eating, admin plans the kitchen work.
 
@@ -86,6 +86,16 @@ The subscription amount per month = school days × ₱135 daily rate.
 - **Vegetables** — vegetable side dish
 - **Fruit** — fresh fruit
 - **Soup** — soup or broth
+- **Snacks** — afternoon or recess snack item
+
+### Week Visibility (Publish/Unpublish)
+Each week within a month has a **parent portal visibility toggle** (per branch, per school_month, per week_number). This controls whether parents can see that specific week's meal plan in the portal.
+
+- When toggled **ON (Published)**: parents can view that week's full meal plan in the portal
+- When toggled **OFF (Unpublished)**: parents see "Meal plan not yet available" for that week
+- Toggle is only editable by Admin and Manager; requires a confirmation dialog before applying
+- Default: **visible (published)** — all weeks are visible unless explicitly hidden
+- Supervisor and Cashier can see the current publish state but cannot change it
 
 ### Data Model
 ```
@@ -100,21 +110,35 @@ weekly_meal_plans
   vegetables        (string, nullable)
   fruit             (string, nullable)
   soup              (string, nullable)
+  snacks            (string, nullable)
   created_at, updated_at
 
   UNIQUE KEY: (branch_id, school_month, week_number, day_of_week)
+
+meal_planner_week_visibility
+  id
+  branch_id         (FK → branches)
+  school_month      (enum: june, july, august, september, october,
+                           november, december, january, february, march)
+  week_number       (tinyint: 1, 2, 3, 4)
+  visible_to_parents (boolean, default true)
+  updated_at
+
+  UNIQUE KEY: (branch_id, school_month, week_number)
 ```
+
+Seeded with all 40 week combinations (10 months × 4 weeks) set to `visible_to_parents = true` per branch on initial setup.
 
 Upsert on save: `updateOrCreate` keyed on the unique constraint.
 
 ### Default Meals (seeded per branch)
-| Day | Ulam | Vegetables | Fruit | Soup |
-|---|---|---|---|---|
-| Monday | Chicken Adobo | Chopsuey | Mango | Nilaga Soup |
-| Tuesday | Pork Sinigang | Pinakbet | Banana | Miso Soup |
-| Wednesday | Fish Tinola | Laing | Apple | Sinigang Broth |
-| Thursday | Beef Kaldereta | Ginisang Gulay | Orange | Chicken Broth |
-| Friday | Chicken Inasal | Ampalaya | Watermelon | Corn Soup |
+| Day | Ulam | Vegetables | Fruit | Soup | Snacks |
+|---|---|---|---|---|---|
+| Monday | Chicken Adobo | Chopsuey | Mango | Nilaga Soup | Graham Crackers |
+| Tuesday | Pork Sinigang | Pinakbet | Banana | Miso Soup | Bread Roll |
+| Wednesday | Fish Tinola | Laing | Apple | Sinigang Broth | Biscuit |
+| Thursday | Beef Kaldereta | Ginisang Gulay | Orange | Chicken Broth | Banana Cue |
+| Friday | Chicken Inasal | Ampalaya | Watermelon | Corn Soup | Puto |
 
 Same default week applied to all 4 weeks × all 10 months on initial seed.
 
@@ -125,9 +149,12 @@ Roles: Admin and Manager only (edit); Supervisor and Cashier (read-only).
 ### Meal Planner UI
 - **Month tabs**: pill buttons (Jun–Mar), active month highlighted
 - **Week tabs**: Week 1 / Week 2 / Week 3 / Week 4
-- **Meal grid table**: rows = Mon–Fri, columns = Ulam / Vegetables / Fruit / Soup
+- **Week visibility toggle**: shown between the week tabs and the meal grid; controls whether the currently selected week is visible to parents in the portal
+  - Admin/Manager: interactive toggle with confirmation dialog before applying
+  - Supervisor/Cashier: read-only badge showing current state (Published / Unpublished)
+- **Meal grid table**: rows = Mon–Fri, columns = Ulam / Vegetables / Fruit / Soup / Snacks
   - Each cell is an editable text input (Admin/Manager) or plain text (others)
-  - Column headers use the primary color background
+  - Column headers use the primary color background — no per-column eye icons
 - **Save Week** button: single API call upserts all 5 rows (Mon–Fri)
 - **Reset to Defaults** button: restores default pattern with confirmation prompt
 - On save: toast success — *"Week {N} of {Month} menu saved."*
@@ -198,15 +225,21 @@ Roles: Admin, Manager, Supervisor
 
 **Weekly Meal Planner**
 - [ ] `weekly_meal_plans` table with unique constraint on `(branch_id, school_month, week_number, day_of_week)`
+- [ ] `snacks` column (nullable string) added to `weekly_meal_plans`
 - [ ] `HasBranch` trait applied
-- [ ] Default week seeded for all months × 4 weeks per branch
-- [ ] `GET /api/v1/references/meal-planner` — returns week data for given month + week + active branch
-- [ ] `PATCH /api/v1/references/meal-planner` — upserts all 5 rows (Admin, Manager only)
-- [ ] `POST /api/v1/references/meal-planner/reset` — restores default pattern (Admin, Manager only)
-- [ ] Meal Planner page in POS app: month tabs + week tabs + editable grid (Admin/Manager) or read-only (Supervisor/Cashier)
+- [ ] Default week seeded for all months × 4 weeks per branch (includes default Snacks values)
+- [ ] `meal_planner_week_visibility` table: `(branch_id, school_month, week_number, visible_to_parents)`; unique key on `(branch_id, school_month, week_number)`
+- [ ] Seeder: all 40 week combinations seeded as `visible_to_parents = true` per branch
+- [ ] `GET /api/v1/references/meal-planner` — returns week data for given month + week + active branch (includes `snacks` field + `visible_to_parents` boolean for current week)
+- [ ] `PATCH /api/v1/references/meal-planner` — upserts all 5 rows including `snacks` (Admin, Manager only)
+- [ ] `POST /api/v1/references/meal-planner/reset` — restores default pattern including `snacks` (Admin, Manager only)
+- [ ] `PATCH /api/v1/references/meal-planner/week-visibility` — sets `visible_to_parents` for the given month + week (Admin, Manager only); requires confirmation on frontend
+- [ ] Meal Planner page in POS app: month tabs + week tabs + week visibility toggle + editable grid (Admin/Manager) or read-only (Supervisor/Cashier)
+- [ ] Grid includes Snacks as 5th column with `bg-purple-50` cell background; no per-column eye icons
+- [ ] Week visibility toggle shown between week tabs and grid; Admin/Manager can toggle; Supervisor/Cashier see read-only badge
+- [ ] Toggling week visibility prompts confirmation: "Publish [Month] — Week [N] to Parents?" or "Hide [Month] — Week [N] from Parents?"
 - [ ] Toast on save: success message referencing which month/week was saved
-- [ ] Parent portal read-only view of meal planner (same layout, plain text cells)
-- [ ] `GET /api/v1/portal/meal-planner` — read-only endpoint for parent portal
+- [ ] `GET /api/v1/portal/meal-planner` — read-only endpoint; returns week data only if `visible_to_parents = true` for that week; returns a "not published" indicator otherwise
 
 **Inventory**
 - [ ] `inventory_items` table and `inventory_logs` table

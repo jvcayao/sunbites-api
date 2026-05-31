@@ -2,32 +2,30 @@
 
 namespace App\Models;
 
-use App\Enums\DayOfWeek;
 use App\Enums\SchoolMonth;
 use App\Models\Concerns\HasBranch;
 use Illuminate\Database\Eloquent\Model;
 
-class WeeklyMealPlan extends Model
+class MealPlannerWeekVisibility extends Model
 {
     use HasBranch;
+
+    public const CREATED_AT = null;
+
+    protected $table = 'meal_planner_week_visibility';
 
     protected $fillable = [
         'branch_id',
         'school_month',
         'week_number',
-        'day_of_week',
-        'ulam',
-        'vegetables',
-        'fruit',
-        'soup',
-        'snacks',
+        'visible_to_parents',
     ];
 
     protected function casts(): array
     {
         return [
             'school_month' => SchoolMonth::class,
-            'day_of_week' => DayOfWeek::class,
+            'visible_to_parents' => 'boolean',
         ];
     }
 }

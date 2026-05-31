@@ -55,15 +55,15 @@ class MealPlannerTest extends TestCase
         return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
-    /** @return array<int, array{day: string, ulam: string, vegetables: string, fruit: string, soup: string}> */
+    /** @return array<int, array{day: string, ulam: string, vegetables: string, fruit: string, soup: string, snacks: string}> */
     private function validRows(): array
     {
         return [
-            ['day' => 'monday', 'ulam' => 'Adobo', 'vegetables' => 'Chopsuey', 'fruit' => 'Mango', 'soup' => 'Sinigang'],
-            ['day' => 'tuesday', 'ulam' => 'Sinigang', 'vegetables' => 'Pinakbet', 'fruit' => 'Banana', 'soup' => 'Miso'],
-            ['day' => 'wednesday', 'ulam' => 'Tinola', 'vegetables' => 'Laing', 'fruit' => 'Apple', 'soup' => 'Broth'],
-            ['day' => 'thursday', 'ulam' => 'Kaldereta', 'vegetables' => 'Gulay', 'fruit' => 'Orange', 'soup' => 'Clear'],
-            ['day' => 'friday', 'ulam' => 'Inasal', 'vegetables' => 'Ampalaya', 'fruit' => 'Watermelon', 'soup' => 'Corn'],
+            ['day' => 'monday', 'ulam' => 'Adobo', 'vegetables' => 'Chopsuey', 'fruit' => 'Mango', 'soup' => 'Sinigang', 'snacks' => 'Graham Crackers'],
+            ['day' => 'tuesday', 'ulam' => 'Sinigang', 'vegetables' => 'Pinakbet', 'fruit' => 'Banana', 'soup' => 'Miso', 'snacks' => 'Bread Roll'],
+            ['day' => 'wednesday', 'ulam' => 'Tinola', 'vegetables' => 'Laing', 'fruit' => 'Apple', 'soup' => 'Broth', 'snacks' => 'Biscuit'],
+            ['day' => 'thursday', 'ulam' => 'Kaldereta', 'vegetables' => 'Gulay', 'fruit' => 'Orange', 'soup' => 'Clear', 'snacks' => 'Banana Cue'],
+            ['day' => 'friday', 'ulam' => 'Inasal', 'vegetables' => 'Ampalaya', 'fruit' => 'Watermelon', 'soup' => 'Corn', 'snacks' => 'Puto'],
         ];
     }
 
@@ -72,7 +72,15 @@ class MealPlannerTest extends TestCase
         $response = $this->asUser($this->cashier)->getJson('/api/v1/references/meal-planner');
 
         $response->assertOk();
-        $response->assertJsonStructure(['grid']);
+        $response->assertJsonStructure(['days', 'visible_to_parents']);
+    }
+
+    public function test_get_response_includes_visible_to_parents_flag(): void
+    {
+        $response = $this->asUser($this->admin)->getJson('/api/v1/references/meal-planner');
+
+        $response->assertOk();
+        $this->assertTrue($response->json('visible_to_parents'));
     }
 
     public function test_admin_can_save_meal_plan(): void
@@ -91,6 +99,46 @@ class MealPlannerTest extends TestCase
             'day_of_week' => 'monday',
             'ulam' => 'Adobo',
         ]);
+    }
+
+    public function test_admin_can_save_meal_plan_with_snacks(): void
+    {
+        $response = $this->asUser($this->admin)->patchJson('/api/v1/references/meal-planner', [
+            'month' => 'june',
+            'week' => 1,
+            'rows' => $this->validRows(),
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('weekly_meal_plans', [
+            'branch_id' => $this->branch->id,
+            'day_of_week' => 'monday',
+            'snacks' => 'Graham Crackers',
+        ]);
+        $this->assertDatabaseHas('weekly_meal_plans', [
+            'branch_id' => $this->branch->id,
+            'day_of_week' => 'friday',
+            'snacks' => 'Puto',
+        ]);
+    }
+
+    public function test_get_response_includes_snacks_field_per_day(): void
+    {
+        WeeklyMealPlan::withoutBranch()->create([
+            'branch_id' => $this->branch->id,
+            'school_month' => 'june',
+            'week_number' => 1,
+            'day_of_week' => 'monday',
+            'snacks' => 'Graham Crackers',
+        ]);
+
+        $response = $this->asUser($this->admin)->getJson('/api/v1/references/meal-planner?month=june&week=1');
+
+        $response->assertOk();
+        $grid = $response->json('days');
+        $mondayRow = collect($grid)->firstWhere('day', 'monday');
+        $this->assertArrayHasKey('snacks', $mondayRow);
+        $this->assertSame('Graham Crackers', $mondayRow['snacks']);
     }
 
     public function test_manager_can_save_meal_plan(): void
@@ -152,6 +200,38 @@ class MealPlannerTest extends TestCase
         ]);
     }
 
+    public function test_reset_restores_default_snacks_values(): void
+    {
+        WeeklyMealPlan::withoutBranch()->create([
+            'branch_id' => $this->branch->id,
+            'school_month' => 'june',
+            'week_number' => 1,
+            'day_of_week' => 'monday',
+            'snacks' => 'Custom Snack',
+        ]);
+
+        $this->asUser($this->admin)->postJson('/api/v1/references/meal-planner/reset', [
+            'month' => 'june',
+            'week' => 1,
+        ]);
+
+        $this->assertDatabaseHas('weekly_meal_plans', [
+            'branch_id' => $this->branch->id,
+            'day_of_week' => 'monday',
+            'snacks' => 'Graham Crackers',
+        ]);
+        $this->assertDatabaseHas('weekly_meal_plans', [
+            'branch_id' => $this->branch->id,
+            'day_of_week' => 'tuesday',
+            'snacks' => 'Bread Roll',
+        ]);
+        $this->assertDatabaseHas('weekly_meal_plans', [
+            'branch_id' => $this->branch->id,
+            'day_of_week' => 'friday',
+            'snacks' => 'Puto',
+        ]);
+    }
+
     public function test_upsert_updates_existing_record(): void
     {
         WeeklyMealPlan::withoutBranch()->create([
@@ -190,7 +270,7 @@ class MealPlannerTest extends TestCase
         $response = $this->asUser($this->admin)->getJson('/api/v1/references/meal-planner');
 
         $response->assertOk();
-        $grid = $response->json('grid');
+        $grid = $response->json('days');
         $ulams = array_column($grid, 'ulam');
         $this->assertNotContains('Other Branch Ulam', $ulams);
     }

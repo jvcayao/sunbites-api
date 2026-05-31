@@ -24,6 +24,8 @@ class ParentProvisioningTest extends TestCase
 
     private Student $student;
 
+    private User $staffUser;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -33,14 +35,14 @@ class ParentProvisioningTest extends TestCase
         $this->branch = Branch::factory()->create();
         $this->student = Student::factory()->create(['branch_id' => $this->branch->id]);
         // Create a staff user so FK on parent_student.linked_by is satisfiable
-        User::factory()->create();
+        $this->staffUser = User::factory()->create();
     }
 
     public function test_provision_creates_new_parent_and_sends_welcome_mail(): void
     {
         Mail::fake();
 
-        $this->service->provision('new@example.com', 'Maria Dela Cruz', $this->student->id, 1);
+        $this->service->provision('new@example.com', 'Maria Dela Cruz', $this->student->id, $this->staffUser->id);
 
         $this->assertDatabaseHas('parents', ['email' => 'new@example.com', 'first_name' => 'Maria', 'email_verified_at' => null]);
         $this->assertDatabaseHas('parent_student', ['student_id' => $this->student->id]);
@@ -62,7 +64,7 @@ class ParentProvisioningTest extends TestCase
 
         $student2 = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $this->service->provision('existing@example.com', 'Maria Dela Cruz', $student2->id, 1);
+        $this->service->provision('existing@example.com', 'Maria Dela Cruz', $student2->id, $this->staffUser->id);
 
         Mail::assertNothingQueued();
         $this->assertDatabaseHas('parent_student', ['parent_id' => $existing->id, 'student_id' => $student2->id]);
@@ -72,8 +74,8 @@ class ParentProvisioningTest extends TestCase
     {
         Mail::fake();
 
-        $this->service->provision('idempotent@example.com', 'Test Parent', $this->student->id, 1);
-        $this->service->provision('idempotent@example.com', 'Test Parent', $this->student->id, 1);
+        $this->service->provision('idempotent@example.com', 'Test Parent', $this->student->id, $this->staffUser->id);
+        $this->service->provision('idempotent@example.com', 'Test Parent', $this->student->id, $this->staffUser->id);
 
         $this->assertDatabaseCount('parent_student', 1);
         Mail::assertQueued(ParentWelcomeMail::class, 1);
@@ -85,8 +87,8 @@ class ParentProvisioningTest extends TestCase
 
         $student2 = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $this->service->provision('parent@example.com', 'Multi Parent', $this->student->id, 1);
-        $this->service->provision('parent@example.com', 'Multi Parent', $student2->id, 1);
+        $this->service->provision('parent@example.com', 'Multi Parent', $this->student->id, $this->staffUser->id);
+        $this->service->provision('parent@example.com', 'Multi Parent', $student2->id, $this->staffUser->id);
 
         $parent = ParentUser::where('email', 'parent@example.com')->first();
         $this->assertCount(2, $parent->students);
@@ -95,7 +97,7 @@ class ParentProvisioningTest extends TestCase
 
     public function test_detach_student_removes_pivot_link(): void
     {
-        $this->service->provision('detach@example.com', 'Detach Parent', $this->student->id, 1);
+        $this->service->provision('detach@example.com', 'Detach Parent', $this->student->id, $this->staffUser->id);
 
         $parent = ParentUser::where('email', 'detach@example.com')->first();
         $this->assertDatabaseHas('parent_student', ['parent_id' => $parent->id, 'student_id' => $this->student->id]);

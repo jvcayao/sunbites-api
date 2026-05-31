@@ -66,11 +66,11 @@
 
 ### 8.3 Frontend (`~/sunbites-portal`)
 - [x] Fix Zustand auth store — remove `persist` middleware and sessionStorage; token stored in memory only
-- [ ] `lib/api/auth.ts` — add `forgotPassword(email)` and `resetPassword(token, email, password, passwordConfirmation)` methods
-- [ ] Login page — handle `account_not_activated` error: show message "Your account has not been activated yet. Check your email or contact the canteen."
-- [ ] Forgot password page at `app/(auth)/forgot-password/page.tsx` — email input, generic success message on submit
-- [ ] Activate/reset password page at `app/(auth)/activate/page.tsx` — reads `?token=&email=` from URL, password + confirm password fields, calls `resetPassword` on submit, redirects to login on success
-- [ ] Remove register page (`app/(auth)/register/` if it exists — replace with redirect to login or "Contact the canteen to get access")
+- [x] `lib/api/auth.ts` — add `forgotPassword(email)` and `resetPassword(token, email, password, passwordConfirmation)` methods — done: implemented in `lib/api/portal.ts` as `portalAuthApi.forgotPassword/resetPassword`
+- [x] Login page — handle `account_not_activated` error: show message "Your account has not been activated yet. Check your email or contact the canteen."
+- [x] Forgot password page at `app/(auth)/forgot-password/page.tsx` — email input, generic success message on submit
+- [x] Activate/reset password page at `app/(auth)/activate/page.tsx` — reads `?token=&email=` from URL, password + confirm password fields, calls `resetPassword` on submit, redirects to login on success
+- [x] Remove register page (`app/(auth)/register/` if it exists — replace with redirect to login or "Contact the canteen to get access") — no register page exists
 
 ## 9. Portal Profile
 
@@ -81,8 +81,8 @@
 - [x] Routes: `GET|PATCH /api/v1/portal/profile`, `POST /api/v1/portal/profile/photo`
 
 ### 9.2 Frontend
-- [ ] `lib/api/profile.ts` — `profileApi.show()`, `profileApi.update(payload)`, `profileApi.uploadPhoto(file)`
-- [ ] Profile page at `app/(portal)/profile/page.tsx`: editable fields, photo upload with preview, password change section
+- [x] `lib/api/profile.ts` — `profileApi.show()`, `profileApi.update(payload)`, `profileApi.uploadPhoto(file)` — done: implemented as `profileApi` in `lib/api/portal.ts`
+- [x] Profile page at `app/(portal)/profile/page.tsx`: editable fields, photo upload with preview, password change section
 
 ## 10. Linked Students
 
@@ -91,8 +91,8 @@
 - [x] Route: `GET /api/v1/portal/students`
 
 ### 10.2 Frontend
-- [ ] `types/parent.ts` — `LinkedStudent` interface
-- [ ] `lib/api/portal-students.ts` — `portalStudentApi.list()`
+- [x] `types/parent.ts` — `LinkedStudent` interface — done: implemented as `StudentSummary` in `types/portal.ts`
+- [x] `lib/api/portal-students.ts` — `portalStudentApi.list()` — done: implemented as `studentsApi.list()` in `lib/api/portal.ts`
 
 ## 11. Parent Dashboard
 
@@ -101,7 +101,7 @@
 - [x] Route: `GET /api/v1/portal/dashboard`
 
 ### 11.2 Frontend
-- [ ] Dashboard page at `app/(portal)/dashboard/page.tsx` — student tabs, wallet balance card, spending summary, today's purchases
+- [x] Dashboard page at `app/(portal)/dashboard/page.tsx` — student tabs, wallet balance card, spending summary, today's purchases
 
 ## 12. Child Activity
 
@@ -110,7 +110,7 @@
 - [x] Route: `GET /api/v1/portal/students/{student}/activity`
 
 ### 12.2 Frontend
-- [ ] Activity page at `app/(portal)/students/[id]/activity/page.tsx`
+- [x] Activity page at `app/(portal)/students/[id]/activity/page.tsx` — done: implemented as "Activity" tab inside `app/(portal)/students/[id]/page.tsx`
 
 ## 13. Wallet (Portal)
 
@@ -120,19 +120,33 @@
 - [x] Routes: `GET /api/v1/portal/students/{student}/wallet`, `PATCH /api/v1/portal/students/{student}/wallet/alert`
 
 ### 13.2 Frontend
-- [ ] Wallet page at `app/(portal)/students/[id]/wallet/page.tsx`:
-  - [ ] Current wallet balance card
-  - [ ] Transaction history list (type, amount, date) via `useQuery`
-  - [ ] "Alert Setting" section: number input "Alert me when balance drops below ₱___"; pre-filled with current `wallet_alert_threshold` from pivot; save via `useMutation` → `PATCH /api/v1/portal/students/{student}/wallet/alert`; set to 0 to disable
+- [x] Wallet page at `app/(portal)/students/[id]/wallet/page.tsx` — done: implemented as "Wallet" tab inside `app/(portal)/students/[id]/page.tsx`
+  - [x] Current wallet balance card
+  - [x] Transaction history list (type, amount, date) via `useQuery`
+  - [x] "Alert Setting" section: number input "Alert me when balance drops below ₱___"; pre-filled with current `wallet_alert_threshold` from pivot; save via `useMutation` → `PATCH /api/v1/portal/students/{student}/wallet/alert`; set to 0 to disable
 
 ## 14. Meal Planner (Portal)
 
 ### 14.1 Backend
 - [x] `Portal\MealPlannerController::show()` — read-only; derives branch from linked student; rejects request if parent has no linked students
+- [x] Update `Portal\MealPlannerController::show()` to use `meal_planner_week_visibility`:
+  - If `visible_to_parents = false` for the requested month+week: return `{ visible_to_parents: false, days: [] }`
+  - If `visible_to_parents = true` (or no record = default true): return `{ visible_to_parents: true, days: [...] }` with all 5 category fields including snacks
 - [x] Route: `GET /api/v1/portal/meal-planner`
 
 ### 14.2 Frontend
-- [ ] Meal planner page at `app/(portal)/meal-plan/page.tsx`
+- [x] Meal planner page at `app/(portal)/meal-plan/page.tsx`
+  - [x] Month tab row: all 10 school months rendered as pill buttons in order (Jun → Mar); `overflow-x-auto flex gap-2` container; `whitespace-nowrap` pills; active = `bg-primary text-primary-foreground`
+  - [x] Week tabs: Week 1–4
+  - [x] All 5 columns always shown (Ulam, Vegetables, Fruit, Soup, Snacks); Snacks cell bg = `bg-purple-50`
+  - [x] Empty cells display "—"
+  - [x] No Save, Reset, or visibility toggle controls
+  - [x] Update to use new response shape `{ visible_to_parents: boolean, days: [] }`:
+    - When `visible_to_parents = false`: hide table, show "Meal plan for this week is not yet available." card (`bg-muted rounded-xl p-6 text-center text-muted-foreground`)
+    - When `visible_to_parents = true`: render full meal grid with all 5 columns (no dynamic column logic needed anymore)
+  - [x] Remove `category_visibility` map handling and dynamic column logic — columns are now fixed; `COLUMNS` constant replaces `CATEGORY_CONFIG`; `MealGrid` no longer accepts `categoryVisibility` prop
+  - [x] Update `types/portal.ts` — removed `CategoryVisibility` and old `MealPlanResponse`; new `MealPlanResponse` shape is `{ visible_to_parents: boolean; days: MealPlanDay[] }`; `lib/api/portal.ts` unchanged (same method signature, new return type flows through)
+  - [ ] Branch selector shown above month tabs when parent has students in multiple branches — TODO: pending backend multi-branch response support
 
 ## 15. Feedback
 
@@ -146,11 +160,11 @@
 - [x] Kitchen routes: `GET /api/v1/references/feedback`, `PATCH /api/v1/references/feedback/{feedback}/mark-read`, `POST /api/v1/references/feedback/{feedback}/reply`
 
 ### 15.2 Frontend (Portal)
-- [ ] `app/(portal)/feedback/page.tsx`: star rating, category select, student selector, feedback list
+- [x] `app/(portal)/feedback/page.tsx`: star rating, category select, student selector, feedback list
 
 ### 15.3 Frontend (POS)
-- [ ] `app/(kitchen)/references/feedback/page.tsx`: list with filters, mark-read, reply dialog
-- [ ] Add "Feedback" to References navigation
+- [x] `app/(kitchen)/references/feedback/page.tsx`: list with filters, mark-read, reply dialog
+- [x] Add "Feedback" to References navigation
 
 ## 16. Wallet Alert
 
@@ -199,8 +213,8 @@
 - [x] `FeedbackReplyMail` — admin reply notification
 
 ## 21. Portal Layout Updates (`~/sunbites-portal`)
-- [ ] Verify nav links: Dashboard, Meal Plan, Feedback route correctly
-- [ ] Remove any "Link a Student" or "Register" links from portal nav
+- [x] Verify nav links: Dashboard, Meal Plan, Feedback route correctly — all 4 links present and correctly routed in `portal-layout.tsx`
+- [x] Remove any "Link a Student" or "Register" links from portal nav — no such links exist
 
 ## 22. Tests
 - [x] `PortalAuthTest` — login/logout/forgot-password/reset-password/ability scoping
