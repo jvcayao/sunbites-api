@@ -79,27 +79,28 @@
 ### Screen: Meal Planner Editor (Admin/Manager)
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│ References > Meal Planner               [💾 Save Week] [↺ Reset] │
-├───────────────────────────────────────────────────────────────┤
-│                                                               │
-│  ┌── Month ────────────────────────────────────────────┐     │
-│  │ [Jun●] [Jul] [Aug] [Sep] [Oct] [Nov] [Dec] [Jan] [Feb] [Mar] │
-│  └─────────────────────────────────────────────────────┘     │
-│                                                               │
-│  Week:  [Week 1●]  [Week 2]  [Week 3]  [Week 4]              │
-│  ────────────────────────── June — Week 1 ─────────          │
-│                                                               │
-│  ┌────────┬────────────────┬──────────────┬────────┬───────┐ │
-│  │ Day    │ Ulam           │ Vegetables   │ Fruit  │ Soup  │ │
-│  ├────────┼────────────────┼──────────────┼────────┼───────┤ │
-│  │ Monday │ [Chicken Adobo]│ [Chopsuey  ] │ [Mango]│[Nilaga│ │
-│  │ Tuesday│ [Pork Sinigang]│ [Pinakbet  ] │ [Banana│[Miso S│ │
-│  │ Wednes │ [Fish Tinola  ]│ [Laing     ] │ [Apple ]│[Sinig│ │
-│  │ Thursd │ [Beef Kaldereta│ [Ginisang G] │ [Orange│[Chicke│ │
-│  │ Friday │ [Chicken Inasal│ [Ampalaya  ] │ [Waterm│[Corn S│ │
-│  └────────┴────────────────┴──────────────┴────────┴───────┘ │
-└───────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ References > Meal Planner                  [💾 Save Week] [↺ Reset]  │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌── Month ──────────────────────────────────────────────────────┐  │
+│  │ [Jun●] [Jul] [Aug] [Sep] [Oct] [Nov] [Dec] [Jan] [Feb] [Mar] │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+│  Week:  [Week 1●]  [Week 2]  [Week 3]  [Week 4]                     │
+│                                                                      │
+│  ── June — Week 1 ──────────────── [● Visible to Parents]  (Admin)  │
+│                                                                      │
+│  ┌────────┬──────────────┬────────────┬────────┬───────┬──────────┐ │
+│  │ Day    │ Ulam         │ Vegetables │ Fruit  │ Soup  │ Snacks   │ │
+│  ├────────┼──────────────┼────────────┼────────┼───────┼──────────┤ │
+│  │ Monday │[Chicken Adobo│[Chopsuey ] │[Mango ]│[Nilaga│[Crackers]│ │
+│  │ Tuesday│[Pork Sinigang│[Pinakbet ] │[Banana]│[Miso S│[Bread   ]│ │
+│  │ Wednes │[Fish Tinola ]│[Laing    ] │[Apple ]│[Sinig │[Biscuit ]│ │
+│  │ Thursd │[Beef Kaldera │[Ginisang G]│[Orange]│[Chicke│[Banana C]│ │
+│  │ Friday │[Chicken Inas │[Ampalaya ] │[Waterm]│[Corn S│[Puto    ]│ │
+│  └────────┴──────────────┴────────────┴────────┴───────┴──────────┘ │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 **Month Tabs:**
@@ -110,18 +111,41 @@
 
 **Week Tabs:**
 - Active week: `bg-primary/10 text-primary border-primary font-bold`
-- Current month+week indicator: small pill right-aligned `text-xs font-semibold bg-muted`
+
+**Week Visibility Toggle (between week tabs and grid):**
+- Shown as a row: `── [Month] — Week [N] ──────── [● Visible to Parents]`
+- **Admin/Manager**: interactive — clicking opens the confirmation dialog
+  - Published state: green pill badge `bg-green-100 text-green-700 border-green-300` — "● Visible to Parents"
+  - Unpublished state: muted pill badge `bg-muted text-muted-foreground` — "○ Hidden from Parents"
+- **Supervisor/Cashier**: same badge but read-only, no click interaction
+- Badge updates optimistically on confirm; reverts on API error
+
+**Week Visibility Confirmation Dialog:**
+```
+┌──────────────────────────────────────────────────┐
+│  Hide June — Week 1 from Parents?                │
+│                                                  │
+│  Parents will no longer see this week's meal     │
+│  plan in the portal.                             │
+│                                                  │
+│  [Cancel]              [Yes, Hide It]            │
+└──────────────────────────────────────────────────┘
+```
+- When publishing: "Publish June — Week 1 to Parents?" / "Parents will be able to see this week's meal plan." / confirm button = `bg-primary text-white` / "Yes, Publish It"
+- When hiding: "Hide June — Week 1 from Parents?" / confirm button = `bg-destructive text-white` / "Yes, Hide It"
 
 **Meal Grid Table:**
-- Column headers (Day, Ulam, Vegetables, Fruit, Soup): `bg-primary text-primary-foreground text-sm font-semibold px-3 py-2`
+- Column headers (Day, Ulam, Vegetables, Fruit, Soup, Snacks): `bg-primary text-primary-foreground text-sm font-semibold px-3 py-2`
+- No per-column eye icons — column headers are plain labels only
 - "Day" column: `bg-muted text-primary font-bold text-sm` — non-editable
 - Cell backgrounds:
   - Ulam cells: `bg-orange-50`
   - Vegetables cells: `bg-green-50`
   - Fruit cells: `bg-blue-50`
   - Soup cells: `bg-sky-50`
+  - Snacks cells: `bg-purple-50`
 - Inputs: `text-sm p-1.5 border border-input rounded-lg w-full`
-- Table min-width: 640px (horizontal scroll on mobile)
+- Table min-width: 800px (horizontal scroll on mobile)
 
 **Save Week Button:** `bg-green-600 text-white` — saves all 5 rows via single PATCH request
 
@@ -131,14 +155,23 @@
 
 ## Part 2b: Meal Planner Read-Only (Parent Portal View)
 
-Same grid table but all `<input>` replaced with plain `<td>` text. Same color-coded cell backgrounds.
+Same grid table but all `<input>` replaced with plain `<td>` text. Same color-coded cell backgrounds. All 5 columns always shown (Day, Ulam, Vegetables, Fruit, Soup, Snacks).
 
+**Published week:**
 ```
-│  Monday │ Chicken Adobo  │ Chopsuey     │ Mango  │ Nilaga │
-│  Tuesday│ Pork Sinigang  │ Pinakbet     │ Banana │ Miso S │
+│  Monday │ Chicken Adobo  │ Chopsuey     │ Mango  │ Nilaga │ Crackers │
+│  Tuesday│ Pork Sinigang  │ Pinakbet     │ Banana │ Miso S │ Bread    │
 ```
 
-No Save / Reset buttons visible.
+**Unpublished week** (visible_to_parents = false for that week):
+```
+  ┌────────────────────────────────────────────────┐
+  │  Meal plan for this week is not yet available. │
+  └────────────────────────────────────────────────┘
+```
+Shown in place of the table when the selected week is not published.
+
+No Save, Reset, or visibility toggle controls visible in the portal.
 
 ---
 

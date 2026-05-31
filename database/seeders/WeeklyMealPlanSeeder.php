@@ -11,14 +11,14 @@ use Illuminate\Database\Seeder;
 class WeeklyMealPlanSeeder extends Seeder
 {
     /**
-     * @var array<string, array{ulam: string, vegetables: string, fruit: string, soup: string}>
+     * @var array<string, array{ulam: string, vegetables: string, fruit: string, soup: string, snacks: string}>
      */
     private array $defaultWeek = [
-        'monday' => ['ulam' => 'Chicken Adobo', 'vegetables' => 'Chopsuey', 'fruit' => 'Mango', 'soup' => 'Nilaga Soup'],
-        'tuesday' => ['ulam' => 'Pork Sinigang', 'vegetables' => 'Pinakbet', 'fruit' => 'Banana', 'soup' => 'Miso Soup'],
-        'wednesday' => ['ulam' => 'Fish Tinola', 'vegetables' => 'Laing', 'fruit' => 'Apple', 'soup' => 'Sinigang Broth'],
-        'thursday' => ['ulam' => 'Beef Kaldereta', 'vegetables' => 'Ginisang Gulay', 'fruit' => 'Orange', 'soup' => 'Chicken Broth'],
-        'friday' => ['ulam' => 'Chicken Inasal', 'vegetables' => 'Ampalaya', 'fruit' => 'Watermelon', 'soup' => 'Corn Soup'],
+        'monday' => ['ulam' => 'Chicken Adobo', 'vegetables' => 'Chopsuey', 'fruit' => 'Mango', 'soup' => 'Nilaga Soup', 'snacks' => 'Graham Crackers'],
+        'tuesday' => ['ulam' => 'Pork Sinigang', 'vegetables' => 'Pinakbet', 'fruit' => 'Banana', 'soup' => 'Miso Soup', 'snacks' => 'Bread Roll'],
+        'wednesday' => ['ulam' => 'Fish Tinola', 'vegetables' => 'Laing', 'fruit' => 'Apple', 'soup' => 'Sinigang Broth', 'snacks' => 'Biscuit'],
+        'thursday' => ['ulam' => 'Beef Kaldereta', 'vegetables' => 'Ginisang Gulay', 'fruit' => 'Orange', 'soup' => 'Chicken Broth', 'snacks' => 'Banana Cue'],
+        'friday' => ['ulam' => 'Chicken Inasal', 'vegetables' => 'Ampalaya', 'fruit' => 'Watermelon', 'soup' => 'Corn Soup', 'snacks' => 'Puto'],
     ];
 
     public function run(): void

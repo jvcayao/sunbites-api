@@ -282,22 +282,38 @@ After submission:
 **Route:** `portal.sunbites.com.ph/meal-plan`
 **Layout:** `PortalLayout`
 
-Same layout as Meal Planner Editor (month tabs + week tabs + grid) but all cells are plain text — no inputs, no Save/Reset buttons. Same color-coded column backgrounds.
+Same layout as Meal Planner Editor (month tabs + week tabs + grid) but all cells are plain text — no inputs, no Save/Reset/toggle buttons. Same color-coded column backgrounds. All 5 columns always shown.
 
 ```
-  [Jun●] [Jul] [Aug] [Sep] ... [Mar]
+  [Jun●] [Jul] [Aug] [Sep] [Oct] [Nov] [Dec] [Jan] [Feb] [Mar]
+  ← horizontally scrollable on mobile; all 10 months always shown →
+
   Week: [Week 1●] [Week 2] [Week 3] [Week 4]
 
-  ┌──────┬────────────────┬──────────────┬────────┬──────────┐
-  │ Day  │ Ulam           │ Vegetables   │ Fruit  │ Soup     │
-  ├──────┼────────────────┼──────────────┼────────┼──────────┤
-  │ Mon  │ Chicken Adobo  │ Chopsuey     │ Mango  │ Nilaga   │
-  │ Tue  │ Pork Sinigang  │ Pinakbet     │ Banana │ Miso     │
-  │ Wed  │ Fish Tinola    │ Laing        │ Apple  │ Sinigang │
-  │ Thu  │ Beef Kaldereta │ Ginisang G.  │ Orange │ Chicken  │
-  │ Fri  │ Chicken Inasal │ Ampalaya     │ Waterm.│ Corn     │
-  └──────┴────────────────┴──────────────┴────────┴──────────┘
+  Published week:
+  ┌──────┬────────────────┬──────────────┬────────┬──────────┬──────────┐
+  │ Day  │ Ulam           │ Vegetables   │ Fruit  │ Soup     │ Snacks   │
+  ├──────┼────────────────┼──────────────┼────────┼──────────┼──────────┤
+  │ Mon  │ Chicken Adobo  │ Chopsuey     │ Mango  │ Nilaga   │ Crackers │
+  │ Tue  │ Pork Sinigang  │ Pinakbet     │ Banana │ Miso     │ Bread    │
+  │ Wed  │ Fish Tinola    │ Laing        │ Apple  │ Sinigang │ Biscuit  │
+  │ Thu  │ Beef Kaldereta │ Ginisang G.  │ Orange │ Chicken  │ Banana C │
+  │ Fri  │ Chicken Inasal │ Ampalaya     │ Waterm.│ Corn     │ Puto     │
+  └──────┴────────────────┴──────────────┴────────┴──────────┴──────────┘
+
+  Unpublished week (visible_to_parents = false):
+  ┌─────────────────────────────────────────────────────────────────┐
+  │  📅  Meal plan for this week is not yet available.              │
+  └─────────────────────────────────────────────────────────────────┘
+  Card: bg-muted, rounded-xl, p-6, centered text, text-muted-foreground
 ```
+
+**Month Tab Row:**
+- Overflow container: `overflow-x-auto` with `flex gap-2 pb-1`
+- All 10 months rendered as pill buttons in school year order: Jun → Jul → Aug → Sep → Oct → Nov → Dec → Jan → Feb → Mar
+- Active: `bg-primary text-primary-foreground border-primary`
+- Inactive: `bg-background text-foreground border-border`
+- `text-xs font-semibold rounded-full border-2 px-3 py-1 whitespace-nowrap`
 
 ---
 

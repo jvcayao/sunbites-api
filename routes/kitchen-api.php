@@ -63,9 +63,10 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/pos/transactions/{order}/void', [TransactionController::class, 'void']);
     });
 
-    // Meal Planner — view for all staff; edit/reset for admin, manager only
+    // Meal Planner — view for all staff; edit/reset/visibility for admin, manager only
     Route::get('/references/meal-planner', [MealPlannerController::class, 'show']);
     Route::middleware('role:admin|manager')->group(function () {
+        Route::patch('/references/meal-planner/week-visibility', [MealPlannerController::class, 'updateWeekVisibility']);
         Route::patch('/references/meal-planner', [MealPlannerController::class, 'update']);
         Route::post('/references/meal-planner/reset', [MealPlannerController::class, 'reset']);
     });

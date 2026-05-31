@@ -130,7 +130,7 @@ class StudentContactTest extends TestCase
             'password' => Hash::make('password'),
             'email_verified_at' => now(),
         ]);
-        $oldParent->students()->attach($this->student->id, ['linked_at' => now(), 'linked_by' => 1, 'wallet_alert_threshold' => 0]);
+        $oldParent->students()->attach($this->student->id, ['linked_at' => now(), 'linked_by' => $this->manager->id, 'wallet_alert_threshold' => 0]);
 
         $this->asManager()
             ->putJson("/api/v1/students/{$this->student->id}/contacts/{$contact->id}", [
@@ -168,7 +168,7 @@ class StudentContactTest extends TestCase
             'password' => null,
             'email_verified_at' => null,
         ]);
-        $parent->students()->attach($this->student->id, ['linked_at' => now(), 'linked_by' => 1, 'wallet_alert_threshold' => 0]);
+        $parent->students()->attach($this->student->id, ['linked_at' => now(), 'linked_by' => $this->manager->id, 'wallet_alert_threshold' => 0]);
 
         $this->asManager()
             ->deleteJson("/api/v1/students/{$this->student->id}/contacts/{$contact->id}")

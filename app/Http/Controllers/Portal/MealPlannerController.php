@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Portal;
 use App\Enums\DayOfWeek;
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Models\MealPlannerWeekVisibility;
 use App\Models\WeeklyMealPlan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,6 +43,16 @@ class MealPlannerController extends Controller
         $month = $validated['month'] ?? SchoolMonth::June->value;
         $week = (int) ($validated['week'] ?? 1);
 
+        $visibleToParents = MealPlannerWeekVisibility::withoutBranch()
+            ->where('branch_id', $branchId)
+            ->where('school_month', $month)
+            ->where('week_number', $week)
+            ->value('visible_to_parents') ?? true;
+
+        if (! $visibleToParents) {
+            return response()->json(['visible_to_parents' => false, 'days' => []]);
+        }
+
         $plans = WeeklyMealPlan::withoutBranch()
             ->where('branch_id', $branchId)
             ->where('school_month', $month)
@@ -59,9 +70,10 @@ class MealPlannerController extends Controller
                 'vegetables' => $plan?->vegetables ?? '',
                 'fruit' => $plan?->fruit ?? '',
                 'soup' => $plan?->soup ?? '',
+                'snacks' => $plan?->snacks ?? '',
             ];
         });
 
-        return response()->json(['grid' => $grid]);
+        return response()->json(['visible_to_parents' => true, 'days' => $grid]);
     }
 }
