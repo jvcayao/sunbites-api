@@ -4,11 +4,14 @@
 
 ### 1.1 Database
 - [x] Migration: `pos_menu_items` table — `branch_id` (FK), `name`, `price` (decimal 8,2), `category` (enum: meal/snack/drink/extra), `is_available` (bool, default true), `sort_order` (int, default 0), timestamps
+- [x] Migration: add `is_subscription_item` (boolean, nullable, default null) to `pos_menu_items`; set all existing rows to `false` in the same migration
 - [x] Factory: `PosMenuItemFactory`
+- [x] Factory: add `subscriptionEligible()` state (`is_subscription_item = true`) and `notSubscriptionEligible()` state (`is_subscription_item = false`) to `PosMenuItemFactory`; update default `definition()` to set `is_subscription_item = false`
 
 ### 1.2 Model
 - [x] `PosMenuItem` model with `HasBranch` trait, `LogsActivity` trait
 - [x] `$logAttributes` allowlist: `name`, `price`, `category`, `is_available`, `sort_order`
+- [x] Add `is_subscription_item` to `$fillable`, `$casts` (as `?bool`), and `$logAttributes`
 - [x] `$recordEvents = ['created', 'updated', 'deleted']`
 
 ### 1.3 Seeder
@@ -24,13 +27,17 @@
 
 ### 1.4 Backend
 - [x] `PosMenuItemController`
-  - [x] `index()` — returns all items for active branch
+  - [x] `index()` — returns all items for active branch (now includes `is_subscription_item` in `formatItem()` response)
   - [x] `store()` — validates name/price/category; creates item; logs `menu.item_created`
+  - [x] `store()` — add `is_subscription_item` to validation rules (`nullable|boolean`) and creation
+  - [x] `update()` — add `is_subscription_item` to validation rules (`nullable|boolean`) and update
+  - [x] `formatItem()` private method — add `is_subscription_item` field to returned array
   - [x] `toggleAvailability()` — flips `is_available`; logs `menu.item_toggled`
   - [x] `destroy()` — deletes with confirmation; logs `menu.item_deleted`
 - [x] Routes under `auth:sanctum` + `ability:staff` + `role:admin|manager`:
   - `GET /api/v1/pos/menu-items`
   - `POST /api/v1/pos/menu-items`
+  - `PUT /api/v1/pos/menu-items/{item}`
   - `POST /api/v1/pos/menu-items/{item}/toggle`
   - `DELETE /api/v1/pos/menu-items/{item}`
 - [x] `PosMenuItemPolicy` — Admin/Manager can manage; all staff roles can view
@@ -45,7 +52,7 @@
 - [x] Category badge colors: meal=`bg-primary/10 text-primary`, snack=`bg-amber-50 text-amber-700`, drink=`bg-blue-50 text-blue-700`, extra=`bg-muted text-muted-foreground`
 - [x] Inline "Add New Item" form (dashed border card): name input, ₱ price input, category Select, `[+ Add Item]` button with inline validation errors
 - [x] **Layout change**: Move "Add New Item" form to the **top** of the Menu Mgmt tab; item cards grid displayed below the form — currently form is at bottom, needs to be moved up
-- [ ] **Terminology change**: Rename all "Ingredients" / "Ingredient" / "Not mapped" labels to **"Linked Stock"** / "Link Stock" / "Not linked":
+- [x] **Terminology change**: Rename all "Ingredients" / "Ingredient" / "Not mapped" labels to **"Linked Stock"** / "Link Stock" / "Not linked":
   - Card button: "Link Stock" (was "Ingredients")
   - Panel title: "Linked Stock: {name}" (was "Ingredients: ...")
   - Warning badge on card: "Not linked" (was "Not mapped")

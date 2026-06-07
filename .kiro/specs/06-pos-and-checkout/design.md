@@ -124,8 +124,30 @@
   │  └────────────────┘  └────────────┘                │
   │                                                     │
   │  ⚠️ Credit Owed: ₱85.00   (shown when credit > 0)  │
+  │                                                     │
+  │  Daily Subscription  (shown for subscription type) │
+  │  Meal   1/1 ✗   Snack  0/1 ✓                       │
+  │  Drink  0/1 ✓   Extra  0/1 ✓                       │
   └─────────────────────────────────────────────────────┘
 ```
+
+**Subscription Limit Alert (shown immediately when any daily limit is already met):**
+```
+  ┌────────────────────────────────────────────────────────┐
+  │  ⚠ Maria has already received their daily meal today. │
+  │  Subscription payment is blocked for Meal.            │
+  └────────────────────────────────────────────────────────┘
+```
+- Alert: `border border-red-300 bg-red-50 text-red-700 rounded-md px-3 py-2 text-sm`
+- Appears immediately below student name — above wallet/points row — and must be visible without scrolling
+- One alert per exceeded category; if multiple categories exceeded, show combined message
+
+**Daily Subscription Status row (always shown for subscription students):**
+- Label: `text-xs font-semibold text-muted-foreground uppercase tracking-wide` — "Daily Subscription"
+- Per-category pill: category name + used/limit counter
+  - Remaining > 0: `text-green-700` + ✓ icon
+  - Limit reached (used ≥ limit): `text-red-600 font-semibold` + ✗ icon
+- Grid: 2 columns (Meal + Snack on first row, Drink + Extra on second)
 
 - Points: decorative display only
 - Credit owed badge: `bg-red-50 text-destructive text-xs font-semibold`
@@ -144,23 +166,23 @@
 **Item Cards (3–4 per row, responsive):**
 ```
   ┌──────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
-  │  Subscription        │  │  Snack A             │  │  Snack C             │
-  │  Meal Tray           │  │  (Bread/Pastry)      │  │  (Juice/Water)       │
-  │                      │  │                      │  │                      │
+  │ [🔵 SUB]             │  │  Snack A             │  │  Snack C             │
+  │  Subscription        │  │  (Bread/Pastry)      │  │  (Juice/Water)       │
+  │  Meal Tray           │  │                      │  │                      │
   │  ₱135.00             │  │  ₱15.00              │  │  ₱15.00              │
   │  [MEAL]              │  │  [SNACK]             │  │  [DRINK]             │
   │                      │  │  ⚠ Low Stock         │  │  ✕ Out of Stock      │
   └──────────────────────┘  └──────────────────────┘  └──────────────────────┘
-       (normal)                  (LOW — clickable)          (OUT — disabled)
+       (subscription badge)      (LOW — clickable)          (OUT — disabled)
 
-  ┌──────────────────────┐
-  │  Special Snack       │
-  │                      │
-  │  ₱30.00              │
-  │  [SNACK]             │
-  │  ⚠ Not Mapped        │
-  └──────────────────────┘
-       (unmapped — disabled)
+  ┌──────────────────────┐  ┌──────────────────────┐
+  │  Special Snack       │  │  Mystery Item        │
+  │                      │  │                      │
+  │  ₱30.00              │  │  ₱25.00              │
+  │  [SNACK]             │  │  [SNACK]             │
+  │  ⚠ Not Mapped        │  │  ⚙ Not Set Up        │
+  └──────────────────────┘  └──────────────────────┘
+       (unmapped — disabled)    (is_subscription_item=null — disabled for all)
 ```
 - Click: adds to Zustand cart; card background becomes `bg-primary/10` if already in cart
 - Quantity counter badge on card top-right when qty > 0: `text-[10px] bg-primary text-primary-foreground rounded-full`
@@ -169,6 +191,11 @@
   - `OUT`: card at `opacity-40 cursor-not-allowed`; click disabled; no cart add; badge: `bg-red-50 text-destructive text-[10px]` — "✕ Out of Stock"
   - `LOW`: card clickable; warning badge: `bg-yellow-50 text-amber-700 border-yellow-300 text-[10px]` — "⚠ Low Stock"
   - `has_inventory_mapping = false`: card at `opacity-60 cursor-not-allowed`; click disabled; badge: `bg-orange-50 text-orange-700 text-[10px]` — "⚠ Not Mapped"
+- **Subscription status on cards** (driven by `is_subscription_item` from API):
+  - `is_subscription_item = null`: card at `opacity-40 cursor-not-allowed`; click disabled for **all** payment methods; badge: `bg-gray-100 text-gray-500 text-[10px]` — "⚙ Not Set Up"
+  - `is_subscription_item = true`: show blue badge top-left: `bg-blue-50 text-blue-700 border-blue-200 text-[10px]` — "🔵 SUB"; clickable for all payment methods
+  - `is_subscription_item = false` + subscription payment selected: card at `opacity-40 cursor-not-allowed`; click disabled; no additional badge (item simply not available under this payment method)
+  - Disable priority order: `is_subscription_item = null` > `OUT` > `has_inventory_mapping = false` > subscription-payment-blocked
 
 ---
 
@@ -224,10 +251,11 @@
 
 **Payment Method Selector:**
 ```
-  [💵 Cash ●]   [📱 GCash]   [👛 Wallet]
+  [💵 Cash ●]   [📱 GCash]   [👛 Wallet]   [📋 Subscription]
 ```
 - Pill buttons, active = `bg-primary text-primary-foreground`
 - Wallet button disabled (grayed) for Walk-In customers
+- Subscription button only visible when selected student has `student_type = subscription`; hidden for walk-in and non-subscription students
 
 **Cash panel:**
 - "Amount Tendered" input
@@ -245,6 +273,21 @@
   After:  ₱285.00   ✓
 ```
 - Green if sufficient. If insufficient: red "Insufficient balance" — triggers Insufficient Funds Modal
+
+**Subscription panel:**
+```
+  📋 Subscription Payment
+  ──────────────────────────────────
+  Meal   1/1  ✗ Limit reached
+  Snack  0/1  ✓ Available
+  ──────────────────────────────────
+  ⚠ Daily meal limit reached.
+  Remove meal items or switch to Cash/Wallet.
+```
+- Shown only when subscription payment is selected
+- Per-category status mirrors the student card display
+- If any cart category exceeds its remaining limit: show warning and disable Confirm button
+- If all cart categories are within limits: show normal confirm button
 
 ---
 
@@ -281,6 +324,7 @@
 - Print button triggers `window.print()` with receipt-optimized CSS — optional
 - "New Order": clears Zustand cart state and student selection, closes modal, re-focuses QR field
 - Credit and points lines are **conditionally rendered** — hidden when not applicable
+- **Subscription payment** — receipt shows "Payment Method: 📋 Subscription" only in the payment section; no tendered/change/wallet remaining fields rendered; total still shown at actual item prices
 
 ---
 
@@ -306,9 +350,10 @@
 
 **Payment method badges:**
 ```
-[Cash]   → bg-green-50 text-green-700
-[GCash]  → bg-blue-50 text-blue-700
-[Wallet] → bg-purple-50 text-purple-700
+[Cash]         → bg-green-50 text-green-700
+[GCash]        → bg-blue-50 text-blue-700
+[Wallet]       → bg-purple-50 text-purple-700
+[Subscription] → bg-teal-50 text-teal-700
 ```
 
 **Voided row:** strikethrough text, `[VOIDED]` badge `bg-muted text-muted-foreground`, row slightly dimmed
@@ -331,6 +376,8 @@
 └────────────────────────────────────────────────┘
 ```
 - "Inventory stock will be restored." line shown on all voids (stock was always deducted at checkout)
+- **For subscription orders** — replace "Wallet will be refunded ₱X" with "Daily allowance will be restored." (no wallet refund; allowance is restored automatically because the voided order is excluded from the daily count)
+- For cash/GCash voids — no refund line shown (no wallet deduction occurred)
 
 ---
 

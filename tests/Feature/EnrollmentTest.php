@@ -65,7 +65,7 @@ class EnrollmentTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function subscriptionFields(array $overrides = []): array
+    protected function subscriptionFields(array $overrides = []): array
     {
         return array_merge([
             'student_type' => StudentType::Subscription->value,
@@ -176,6 +176,27 @@ class EnrollmentTest extends TestCase
 
         $this->assertDatabaseHas('students', ['allergies' => 'alert("xss")Peanuts']);
         $this->assertDatabaseHas('students', ['notes' => 'Bold note']);
+    }
+
+    public function test_subscription_enrollment_returns_subscription_period(): void
+    {
+        $response = $this->asManager()->postJson('/api/v1/enrollment', $this->validPayload(
+            array_merge(['student_number' => 'TEST-2025-010'], $this->subscriptionFields())
+        ));
+
+        $response->assertCreated();
+        $response->assertJsonPath('subscription_period', 'June 2025 – March 2026');
+    }
+
+    public function test_non_subscription_enrollment_returns_null_subscription_period(): void
+    {
+        $response = $this->asManager()->postJson('/api/v1/enrollment', $this->validPayload([
+            'student_number' => 'TEST-2025-011',
+            'student_type' => 'non_subscription',
+        ]));
+
+        $response->assertCreated();
+        $response->assertJsonPath('subscription_period', null);
     }
 
     public function test_cashier_cannot_enroll_student(): void

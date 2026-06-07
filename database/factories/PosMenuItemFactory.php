@@ -24,11 +24,17 @@ class PosMenuItemFactory extends Factory
             'category' => $this->faker->randomElement(MenuCategory::cases())->value,
             'is_available' => true,
             'sort_order' => 0,
+            'is_subscription_item' => false,
         ];
     }
 
     public function unavailable(): static
     {
         return $this->state(['is_available' => false]);
+    }
+
+    public function subscriptionEligible(): static
+    {
+        return $this->state(['is_subscription_item' => true]);
     }
 }
