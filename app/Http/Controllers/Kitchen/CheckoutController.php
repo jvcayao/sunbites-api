@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\CreditTransactionType;
 use App\Enums\EnrollmentStatus;
 use App\Enums\InventoryLogType;
+use App\Enums\MenuCategory;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Jobs\WalletAlertJob;
+use App\Models\BranchSubscriptionConfig;
 use App\Models\CreditTransaction;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
@@ -113,6 +115,29 @@ class CheckoutController extends Controller
 
                 if ($paymentMethod === PaymentMethod::Subscription && $student->student_type !== StudentType::Subscription) {
                     abort(422, 'This payment method is only available for subscription students.');
+                }
+
+                if ($paymentMethod === PaymentMethod::Subscription) {
+                    $ineligible = $menuItems->filter(fn ($item) => $item->is_subscription_item !== true);
+                    if ($ineligible->isNotEmpty()) {
+                        abort(422, 'Item "'.$ineligible->first()->name.'" is not eligible for subscription payment.');
+                    }
+
+                    $todayUsed = $student->todaySubscriptionUsageByCategory();
+
+                    $config = BranchSubscriptionConfig::forBranch(app('active_branch')->id);
+
+                    $requestedByCategory = collect($validated['items'])
+                        ->groupBy(fn ($item) => $menuItems[$item['pos_menu_item_id']]->category->value)
+                        ->map(fn ($items) => collect($items)->sum('quantity'));
+
+                    foreach ($requestedByCategory as $category => $requestedQty) {
+                        $used = $todayUsed[$category] ?? 0;
+                        $limit = $config->limitForCategory(MenuCategory::from($category));
+                        if ($used + $requestedQty > $limit) {
+                            abort(422, "Daily {$category} limit of {$limit} reached for this student.");
+                        }
+                    }
                 }
 
                 if ($paymentMethod === PaymentMethod::Wallet) {

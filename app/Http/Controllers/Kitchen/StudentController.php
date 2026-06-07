@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Spatie\Activitylog\Models\Activity;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentController extends Controller
 {
@@ -38,11 +39,15 @@ class StudentController extends Controller
         if ($request->type === 'subscription' && $request->month) {
             $month = $request->month;
             $paymentStatus = $request->payment_status;
+            $year = $request->year;
 
-            $query->whereHas('monthlyPayments', function ($q) use ($month, $paymentStatus) {
+            $query->whereHas('monthlyPayments', function ($q) use ($month, $paymentStatus, $year) {
                 $q->where('school_month', $month);
                 if ($paymentStatus) {
                     $q->where('status', $paymentStatus);
+                }
+                if ($year) {
+                    $q->where('year', $year);
                 }
             });
         }
@@ -123,6 +128,38 @@ class StudentController extends Controller
         });
 
         return response()->json(new StudentResource($student->fresh()));
+    }
+
+    public function uploadPhoto(Request $request, Student $student): JsonResponse
+    {
+        $request->validate([
+            'photo' => ['required', 'file', 'mimes:jpeg,png,webp', 'max:2048'],
+        ]);
+
+        if ($student->photo_path) {
+            Storage::disk('private')->delete($student->photo_path);
+        }
+
+        $student->photo_path = $request->file('photo')->store('photos/students', 'private');
+        $student->save();
+
+        activity('students')
+            ->causedBy($request->user())
+            ->performedOn($student)
+            ->log('students.photo_updated');
+
+        return response()->json(new StudentResource($student->fresh()));
+    }
+
+    public function photo(Student $student): StreamedResponse
+    {
+        abort_unless(
+            $student->photo_path && Storage::disk('private')->exists($student->photo_path),
+            404,
+            'Photo not found.'
+        );
+
+        return Storage::disk('private')->response($student->photo_path);
     }
 
     public function destroy(Request $request, Student $student): JsonResponse

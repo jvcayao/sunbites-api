@@ -141,6 +141,7 @@ Cart is managed entirely **client-side in Zustand** on the POS Next.js frontend.
 | Cash | ✅ | ✅ |
 | GCash | ✅ | ✅ |
 | Student Wallet | ✅ (enrolled students with wallet) | ❌ |
+| Subscription | ✅ (enrolled subscription students only) | ❌ |
 
 ### Discount
 - Admin and Manager only can apply a discount
@@ -155,6 +156,49 @@ Cart is managed entirely **client-side in Zustand** on the POS Next.js frontend.
    - **Reload Wallet** — inline top-up locked to the exact shortfall. Cashier collects cash/GCash from parent, system deposits the exact shortfall, immediately proceeds to checkout. Reload is logged with cashier ID and linked order context.
    - **Use Credit** — available only if `credit_balance + shortfall ≤ CREDIT_LIMIT (₱300)`. Deducts shortfall as credit; sets `is_credit = true` on the order; increments `credit_balance`.
 5. On confirm: `withdraw()` from student wallet via `bavix/laravel-wallet`
+
+### Subscription Payment
+
+Subscription payment is a method exclusive to enrolled subscription-type students. It covers the cost of pre-configured subscription-eligible menu items within the student's daily allowance.
+
+**Eligibility:**
+- Only available when the selected student has `student_type = subscription`
+- Only available for items with `is_subscription_item = true` — all cart items must be subscription-eligible; if any item is not eligible, the order is rejected (422) with a clear message
+- Items with `is_subscription_item = null` (unconfigured) are greyed out and unselectable for everyone — not just for subscription orders
+
+**Daily Category Limits:**
+- Each branch configures independent daily limits per category: `meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit` (stored in `branch_subscription_configs`)
+- Limits default to `1` per category if no config exists yet (auto-created on first access via `forBranch()`)
+- Each category limit is checked independently — a student can get 1 meal and 1 snack; filling the meal limit does not block snacks
+- If adding the current cart items for a category would exceed the daily limit, the entire order is rejected (422) with the exceeded category and limit in the error message
+
+**Daily Usage Counting:**
+- Only `orders` with `status = completed` AND `payment_method = subscription` AND `created_at = today` are counted toward the limit
+- Voided subscription orders are automatically excluded (they have `status = voided`) — voiding an order restores the student's daily allowance without any extra logic
+
+**Cashier Notification (Immediate Alert):**
+- When a subscription student is scanned/selected, immediately show a prominent red alert banner in the student card area if ANY of their daily category limits are already met for today
+- Alert text: "[Student Name] has already received their daily [category] today. Subscription payment is blocked for [category]."
+- The daily status (used/limit per category) is always shown below the student info for subscription students — even when no limits are exceeded
+- The checkout button must be disabled if subscription payment is selected and the cart would exceed any daily limit
+
+**Order Total & Accounting:**
+- Subscription orders record the **actual item prices** as the order total (not ₱0) — this keeps billing and sales reports accurate
+- No money is collected from the student; the subscription covers the cost
+- `total_spent` is updated and loyalty points are earned normally (same as cash/wallet orders)
+- `amount_tendered`, `change_amount`, and `reference_number` are all null for subscription orders
+- Receipt shows "Payment Method: Subscription" only — no tendered/change/wallet balance section
+
+**Discount:**
+- Discount block is **hidden and disabled** when subscription payment is selected — discount does not apply to subscription orders
+
+**Reporting:**
+- Subscription orders appear in Sales and Billing reports as their own payment method line (alongside Cash, GCash, Wallet)
+- No special exclusion — they contribute to daily revenue totals at their recorded price
+
+**Configuration Admin UI:**
+- Admin and Manager can view and edit the branch subscription config via a dedicated References page
+- Per-category limits: integer, min 0, max 10
 
 ### Inline POS Wallet Reload
 - Triggered from Insufficient Funds Modal → "Reload Wallet" option
@@ -253,7 +297,7 @@ orders
   student_id          (nullable, FK → students)
   cashier_id          (FK → users)
   receipt_number      (string, unique)
-  payment_method      (enum: cash, gcash, wallet)
+  payment_method      (enum: cash, gcash, wallet, subscription)
   subtotal            (decimal)
   discount_amount     (decimal, default 0)
   discount_reason     (string, nullable)
@@ -279,6 +323,15 @@ order_items
   price               (decimal — snapshot of price at time of order)
   quantity            (int)
   line_total          (decimal)
+
+branch_subscription_configs
+  id
+  branch_id           (FK → branches, unique)
+  meal_daily_limit    (tinyint unsigned, default 1)
+  snack_daily_limit   (tinyint unsigned, default 1)
+  drink_daily_limit   (tinyint unsigned, default 1)
+  extra_daily_limit   (tinyint unsigned, default 1)
+  created_at, updated_at
 ```
 
 ---
@@ -330,7 +383,7 @@ Located on the POS page under the "Transaction History" tab.
 | `Escape` | Clear student selection |
 | `Alt + W` | Select Walk-In mode |
 | `Alt + S` | Select Student mode |
-| `Alt + 1/2/3` | Select payment method (Cash/GCash/Wallet) |
+| `Alt + 1/2/3/4` | Select payment method (Cash/GCash/Wallet/Subscription — Subscription only active when eligible) |
 | `Delete` | Remove last cart item (Admin/Manager/Supervisor only) |
 
 ---
@@ -343,10 +396,13 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 |---|---|---|---|
 | GET | `/api/v1/pos/menu-items` | all staff | Available menu items for active branch |
 | POST | `/api/v1/pos/students/lookup` | all staff | QR or name/number student lookup |
+| GET | `/api/v1/pos/students/{student}` | all staff | Full student data including daily subscription status |
 | POST | `/api/v1/pos/checkout` | all staff | Submit cart and create order |
 | POST | `/api/v1/pos/inline-reload` | all staff | Inline wallet reload (shortfall only) |
 | GET | `/api/v1/pos/transactions` | all staff | Transaction history with filters |
 | POST | `/api/v1/pos/transactions/{order}/void` | admin, manager, supervisor | Void a transaction |
+| GET | `/api/v1/pos/subscription-config` | admin, manager | Get branch subscription daily limits |
+| PUT | `/api/v1/pos/subscription-config` | admin, manager | Update branch subscription daily limits |
 
 ---
 
@@ -370,8 +426,8 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Walk-in / registered toggle
 - [ ] Enrollment status check at student selection time — blocks non-enrolled students immediately on select
 - [ ] Cart item CRUD in Zustand: add, update quantity, remove, clear
-- [ ] Payment method selector: Cash, GCash, Student Wallet — Wallet disabled for walk-in
-- [ ] Discount input restricted to Admin/Manager with reason required
+- [ ] Payment method selector: Cash, GCash, Student Wallet, Subscription — Wallet and Subscription disabled for walk-in; Subscription only shown when student has `student_type = subscription`
+- [ ] Discount input restricted to Admin/Manager with reason required; discount block hidden when subscription payment is selected
 - [ ] Cash: tendered amount + live change calculation; Confirm disabled until tendered ≥ total
 - [ ] GCash: optional reference number field — alphanumeric max 50 chars, server-side validated if provided
 - [ ] Wallet: balance + "After" preview; red state if insufficient
@@ -396,9 +452,27 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [ ] Void: restore inventory stock — for each `InventoryLog` where `order_id = order.id` and `type = sale`, create reversal `Restock` log with positive quantity, `order_id`, `adjusted_by = voiding user`, `reason = "Void: Order #{receipt_number}"`; runs inside same `DB::transaction()`
 - [ ] Void blocked for Cashiers (403)
 - [ ] Order notes sanitized with `strip_tags()` server-side before storage
-- [ ] POS keyboard shortcuts: F1, F2, Ctrl+Enter, Escape, Alt+W, Alt+S, Alt+1/2/3, Delete
+- [ ] POS keyboard shortcuts: F1, F2, Ctrl+Enter, Escape, Alt+W, Alt+S, Alt+1/2/3/4, Delete
 - [ ] `OrderPolicy`: create (all roles), void (admin/manager/supervisor), view (all roles)
 - [ ] Log `pos.order_created` (properties: receipt_number, total, payment_method, student_id or "walk-in", cashier_id, is_credit)
 - [ ] Log `pos.order_voided` (properties: receipt_number, amount, void_reason, voided_by, payment_method)
 - [ ] Log `pos.discount_applied` when discount > 0 (properties: discount_type, amount, reason, receipt_number)
 - [ ] Log `wallet.inline_reload` on inline reload (properties: amount, payment_method, cashier_id, order context)
+
+### Subscription Feature Requirements
+- [ ] `branch_subscription_configs` table with per-branch per-category daily limits (`meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit`; all default 1; unique per branch)
+- [ ] `BranchSubscriptionConfig::forBranch(int $branchId)` — `firstOrCreate()` with default limits; same lazy-create pattern as `BranchMonthlyAmount::resolveAmount()`
+- [ ] `orders.payment_method` enum extended to include `subscription`
+- [ ] `POST /api/v1/pos/checkout` with `payment_method = subscription`: reject 422 if any cart item has `is_subscription_item !== true`; reject 422 if adding requested quantities would exceed a category's daily limit
+- [ ] Daily limit check counts only `status = completed` subscription orders from today (voided orders excluded automatically — no extra void-restoration logic needed)
+- [ ] `GET /api/v1/pos/students/{student}` and `POST /api/v1/pos/students/lookup?type=qr` include `subscription_daily_status` in response for subscription students (null for non-subscription)
+- [ ] `subscription_daily_status` shape: `{ meal: { used, limit, remaining }, snack: {...}, drink: {...}, extra: {...} }`
+- [ ] POS frontend: subscription payment method button available only when selected student has `student_type = subscription`
+- [ ] POS frontend: when subscription student is loaded, show per-category daily status in student card
+- [ ] POS frontend: show prominent red alert banner in student card if any daily category limit is already met today; banner must be visible without scrolling
+- [ ] POS frontend: checkout button disabled when `payment_method = subscription` and any requested category quantity would exceed its daily limit
+- [ ] POS frontend: `CartItem` type includes `category` field to enable front-end limit checking
+- [ ] POS frontend: items with `is_subscription_item = null` greyed out and unselectable for all payment methods
+- [ ] POS frontend: items with `is_subscription_item = true` show a blue "Subscription" badge on their card
+- [ ] POS frontend: for subscription payment, items with `is_subscription_item !== true` are additionally greyed out and unselectable
+- [ ] Admin/Manager References page: `GET/PUT /api/v1/pos/subscription-config` for per-category daily limit configuration (integer, min 0, max 10 per category)

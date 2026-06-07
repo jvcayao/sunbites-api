@@ -18,16 +18,27 @@ These are the items that appear on the POS screen for cashiers to add to a custo
 ```
 pos_menu_items
   id
-  branch_id        (FK → branches)
-  name             (string)                        — e.g. "Subscription Meal Tray"
-  price            (decimal 8,2)
-  category         (enum: meal, snack, drink, extra)
-  is_available     (boolean, default true)
-  sort_order       (int, default 0)
+  branch_id              (FK → branches)
+  name                   (string)                        — e.g. "Subscription Meal Tray"
+  price                  (decimal 8,2)
+  category               (enum: meal, snack, drink, extra)
+  is_available           (boolean, default true)
+  is_subscription_item   (boolean, nullable)             — null = not configured; true = subscription-eligible; false = not eligible
+  sort_order             (int, default 0)
   created_at, updated_at
 ```
 
 **No** SKU, barcode, VAT, description, image, stock tracking, min/max cart, or discount fields.
+
+### Subscription Eligibility Flag (`is_subscription_item`)
+
+Each menu item must be explicitly configured for its subscription eligibility before it is fully usable on the POS:
+
+- `null` (not configured) — item is **greyed out and not selectable** for anyone on the POS, similar to unmapped inventory items. This is the default for any newly created item.
+- `true` (subscription-eligible) — item is covered by the subscription plan. Subscription students can redeem it via subscription payment. A blue "Subscription" badge is displayed on the card. Anyone can still purchase it with cash/GCash/wallet.
+- `false` (not eligible) — item is a regular item, available for all payment methods. Not covered by subscription. No badge shown.
+
+Existing items at migration time are set to `false` (not eligible) to preserve current POS behaviour — admins can then mark specific items as `true`.
 
 ### Default Items (seeded per branch)
 | Name | Price | Category |
@@ -46,7 +57,8 @@ Roles: Admin, Manager only.
 
 ### Menu Mgmt UI (POS sub-tab)
 - Grid of item cards: name (bold), price (large), category label (small, muted), availability toggle, delete button
-- "Add New Item" inline form: name input + price input + category dropdown + Add button
+- "Add New Item" inline form: name input + price input + category dropdown + **Subscription Eligible select** + Add button
+- **Subscription Eligible select options**: "Not configured" (null) | "Yes — covered by subscription" (true) | "No — regular only" (false)
 - Toggle availability: instant API call, no page reload
 - Delete: confirmation before removing
 - No edit modal — items are simple enough to delete and re-add if name/price changes
@@ -55,6 +67,8 @@ Roles: Admin, Manager only.
 - Items grouped by category tab (meal | snack | drink | extra)
 - Only `is_available = true` items shown as clickable
 - Unavailable items hidden from POS grid by default
+- Items with `is_subscription_item = null` are greyed out and not selectable for anyone (mandatory setup required)
+- Items with `is_subscription_item = true` show a blue "Subscription" badge on the card
 
 ---
 
@@ -239,19 +253,24 @@ Each POS menu item optionally maps to one or more inventory items via `pos_menu_
 ## Requirements
 
 **POS Menu Items**
-- [ ] `pos_menu_items` table with `branch_id`, `name`, `price`, `category`, `is_available`, `sort_order`
+- [ ] `pos_menu_items` table with `branch_id`, `name`, `price`, `category`, `is_available`, `is_subscription_item` (nullable boolean), `sort_order`
 - [ ] `HasBranch` trait applied
-- [ ] `LogsActivity` trait applied with `$logAttributes` allowlist: `name`, `price`, `category`, `is_available`, `sort_order`
-- [ ] Default items seeded per branch (7 items as listed)
-- [ ] API endpoints: list, create, toggle availability, delete — under `role:admin,manager`
-- [ ] `GET /api/v1/pos/menu-items` — returns all items for active branch
-- [ ] `POST /api/v1/pos/menu-items` — create
+- [ ] `LogsActivity` trait applied with `$logAttributes` allowlist: `name`, `price`, `category`, `is_available`, `is_subscription_item`, `sort_order`
+- [ ] Default items seeded per branch (7 items as listed) with `is_subscription_item = false`
+- [ ] Migration for new items: `is_subscription_item` nullable boolean, default null; existing rows updated to `false`
+- [ ] API endpoints: list, create, update, toggle availability, delete — under `role:admin,manager`
+- [ ] `GET /api/v1/pos/menu-items` — returns all items for active branch including `is_subscription_item`
+- [ ] `POST /api/v1/pos/menu-items` — create (accepts `is_subscription_item: nullable boolean`)
+- [ ] `PUT /api/v1/pos/menu-items/{item}` — update (accepts `is_subscription_item: nullable boolean`)
 - [ ] `POST /api/v1/pos/menu-items/{item}/toggle` — flip is_available
 - [ ] `DELETE /api/v1/pos/menu-items/{item}` — delete
 - [ ] Menu Mgmt sub-tab on POS page in POS app (Admin/Manager only)
 - [ ] **Layout: "Add New Item" form shown at the top; item cards grid displayed below** — staff can add without scrolling past the list
 - [ ] Item cards with availability toggle (instant), "Link Stock" button (opens inline Linked Stock panel), and delete (with confirmation)
-- [ ] Inline "Add New Item" form: name + price + category + Add button
+- [ ] Inline "Add New Item" form: name + price + category + **Subscription Eligible select** (Not configured / Yes / No) + Add button
+- [ ] Items with `is_subscription_item = null` greyed out and not selectable on POS (for all customers)
+- [ ] Items with `is_subscription_item = true` show blue "Subscription" badge on POS item card
+- [ ] `PosMenuItemFactory`: add `subscriptionEligible()` and `notSubscriptionEligible()` states; default definition sets `is_subscription_item = false`
 
 **Weekly Meal Planner**
 - [ ] `weekly_meal_plans` table with unique constraint on `(branch_id, school_month, week_number, day_of_week)`
