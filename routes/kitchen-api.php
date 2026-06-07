@@ -25,6 +25,7 @@ use App\Http\Controllers\Kitchen\StudentContactController;
 use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\StudentReportController;
+use App\Http\Controllers\Kitchen\SubscriptionConfigController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
 use App\Http\Controllers\Kitchen\UserManagementController;
@@ -50,6 +51,10 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::put('/pos/menu-items/{item}', [PosMenuItemController::class, 'update']);
         Route::post('/pos/menu-items/{item}/toggle', [PosMenuItemController::class, 'toggleAvailability']);
         Route::delete('/pos/menu-items/{item}', [PosMenuItemController::class, 'destroy']);
+
+        // Subscription config — admin/manager only
+        Route::get('/pos/subscription-config', [SubscriptionConfigController::class, 'show']);
+        Route::put('/pos/subscription-config', [SubscriptionConfigController::class, 'update']);
     });
 
     // POS — student lookup, checkout, transactions — all staff
@@ -129,6 +134,8 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
 
         Route::get('/students', [StudentController::class, 'index']);
         Route::get('/students/{student}', [StudentController::class, 'show']);
+        Route::get('/students/{student}/photo', [StudentController::class, 'photo']);
+        Route::post('/students/{student}/photo', [StudentController::class, 'uploadPhoto']);
         Route::put('/students/{student}', [StudentController::class, 'update']);
         Route::delete('/students/{student}', [StudentController::class, 'destroy']);
         Route::post('/students/{student}/regenerate-qr', [StudentController::class, 'regenerateQr']);

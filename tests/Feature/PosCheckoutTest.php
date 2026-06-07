@@ -32,7 +32,7 @@ class PosCheckoutTest extends TestCase
         $this->cashier->assignRole('cashier');
         $this->cashier->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
-        $this->menuItem = PosMenuItem::factory()->create([
+        $this->menuItem = PosMenuItem::factory()->subscriptionEligible()->create([
             'branch_id' => $this->branch->id,
             'price' => 135.00,
             'is_available' => true,

@@ -30,6 +30,7 @@ class PosMenuItemController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0', 'max:9999.99'],
             'category' => ['required', new Enum(MenuCategory::class)],
+            'is_subscription_item' => ['nullable', 'boolean'],
         ]);
 
         $item = PosMenuItem::create($validated);
@@ -43,6 +44,7 @@ class PosMenuItemController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'price' => ['required', 'numeric', 'min:0', 'max:9999.99'],
             'category' => ['required', new Enum(MenuCategory::class)],
+            'is_subscription_item' => ['nullable', 'boolean'],
         ]);
 
         $item->update($validated);
@@ -91,6 +93,7 @@ class PosMenuItemController extends Controller
             'sort_order' => $item->sort_order,
             'has_inventory_mapping' => $hasMappings,
             'inventory_status' => $inventoryStatus,
+            'is_subscription_item' => $item->is_subscription_item,
         ];
     }
 

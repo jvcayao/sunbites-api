@@ -48,7 +48,7 @@
 - [x] Update `EnrollmentController::index()` — also return the subscription period preview data: for each school month, the effective `days` and `amount` for the default range (June [current year] → March [current year + 1]), resolved from `branch_monthly_amounts` or config fallback
 - [x] Update `EnrollmentController::store()` validation — add `subscription_start_month` (enum SchoolMonth, required if subscription), `subscription_start_year` (int, 4 digits), `subscription_end_month` (enum SchoolMonth, required if subscription), `subscription_end_year` (int, 4 digits); validate end is not before start
 - [x] Update `EnrollmentController::seedMonthlyPayments()` — replace fixed 10-month loop with a range-based loop from start month+year to end month+year; for each month, look up `branch_monthly_amounts` by `(branch_id, school_month, year)`, fall back to `daily_meal_rate × default_days` from config; each row now includes `year` column
-- [ ] Update enrollment response to include `subscription_period` (e.g. `"June 2025 – March 2026"`) for the success screen
+- [x] Update enrollment response to include `subscription_period` (e.g. `"June 2025 – March 2026"`) for the success screen
 
 ### 3.2 Frontend
 - [x] Enrollment form page at `app/(kitchen)/enrollment/page.tsx`
@@ -70,7 +70,7 @@
   - [x] Client-side validation: end must not be before start chronologically; error shown when invalid
   - [x] Live preview: month count preview shown when both start and end are selected
   - [x] Pass `subscription_start_month`, `subscription_start_year`, `subscription_end_month`, `subscription_end_year` in the POST payload for subscription enrollments
-- [ ] Update enrollment success screen — show "Period: June 2025 – March 2026" row for subscription students
+- [x] Update enrollment success screen — show "Period: June 2025 – March 2026" row for subscription students
 
 ## 4. Student List
 
@@ -80,7 +80,7 @@
 - [x] Routes under `auth:sanctum` + `ability:staff` + `role:admin,manager,supervisor`:
   - `GET /api/v1/students`
   - `PATCH /api/v1/students/{student}/status`
-- [ ] Update `StudentController::index()` subscription payment filter — add `year` parameter alongside `month` and `payment_status` for the subscription tab filter
+- [x] Update `StudentController::index()` subscription payment filter — add `year` parameter alongside `month` and `payment_status` for the subscription tab filter
 
 ### 4.2 Frontend
 - [x] Student list page at `app/(kitchen)/students/page.tsx`
@@ -96,8 +96,8 @@
   - [x] Checkbox column for multi-select; floating action bar when ≥1 selected: `[🖨️ Print QR Codes]` `[✕ Clear Selection]`
   - [x] Batch QR print preview modal: 2 or 4 cards per row selector, `[🖨️ Print All]` button
   - [x] Print layout (`@media print`): 4 cards per row on A4, no sidebar/topbar/chrome
-- [ ] Update subscription tab filters — add Year dropdown alongside Month and Paid/Unpaid dropdowns
-- [ ] Update month payment badge labels — include abbreviated year (e.g. "Jun '25 ✓" instead of "Jun ✓")
+- [x] Update subscription tab filters — add Year dropdown alongside Month and Paid/Unpaid dropdowns
+- [x] Update month payment badge labels — include abbreviated year (e.g. "Jun '25 ✓" instead of "Jun ✓")
 
 ## 5. Student Detail Page
 
@@ -122,7 +122,7 @@
   - [x] **Order History tab**: paginated orders via `useQuery`, newest first
   - [x] **Payment tab**: for subscription — month grid with paid/unpaid toggle via `useMutation`; for non-subscription — "no subscription" message
   - [x] **Logs tab**: activity_log entries where `subject = Student`; read-only, newest first
-  - [ ] **Contacts tab**: each contact row shows a portal account status badge — "Activated" (green) when `email_verified_at` is set, "Pending Activation" (amber) when parent record exists but not yet activated, "No Email" (muted) when contact has no email; badge fetched from linked `parents` table via contact email match
+  - [x] **Contacts tab**: each contact row shows a portal account status badge — "Activated" (green) when `email_verified_at` is set, "Pending Activation" (amber) when parent record exists but not yet activated, "No Email" (muted) when contact has no email; badge fetched from linked `parents` table via contact email match
 - [x] Update Payment tab — group payment rows by year (year as section header); show "Month Year" (e.g. "June 2025") instead of "Month" in each payment card
 - [x] Add `[+ Add Subscription Period]` button to Payment tab (admin/manager/supervisor only) — opens the Add Subscription Period dialog
 
@@ -232,5 +232,5 @@
 - [x] `EnrollmentTest` — updated: subscription seeding test asserts `year` column; partial range (Aug–Dec = 5 rows); end-before-start rejected (422)
 - [x] `BranchMonthlyAmountTest` (new, 7 tests) — full CRUD coverage: list, configured/default display, create, upsert (idempotent), update by ID, delete, cashier 403
 - [x] `PaymentRangeTest` (new, 4 tests) — happy path, skip-existing, end-before-start 422, cashier 403
-- [ ] `PaymentControllerTest` — update existing toggle and record tests to assert `year` is in response/request
-- [ ] Update `EnrollmentTest` factory states — `StudentFactory::subscriptionPayload()` should accept optional subscription period fields
+- [x] `PaymentControllerTest` — update existing toggle and record tests to assert `year` is in response/request
+- [x] Update `EnrollmentTest` factory states — `StudentFactory::subscriptionPayload()` should accept optional subscription period fields

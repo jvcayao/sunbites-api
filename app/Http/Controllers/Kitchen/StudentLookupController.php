@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\MenuCategory;
+use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
+use App\Models\BranchSubscriptionConfig;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -106,6 +109,32 @@ class StudentLookupController extends Controller
             'total_spent' => $student->total_spent,
             'credit_balance' => $student->credit_balance,
             'wallet_balance' => $student->wallet?->balanceFloat ?? 0,
+            'subscription_daily_status' => $student->student_type === StudentType::Subscription
+                ? $this->buildDailyStatus($student)
+                : null,
         ];
+    }
+
+    /**
+     * @return array<string, array<string, int>>
+     */
+    private function buildDailyStatus(Student $student): array
+    {
+        $todayUsed = $student->todaySubscriptionUsageByCategory();
+
+        $config = BranchSubscriptionConfig::forBranch($student->branch_id);
+
+        $result = [];
+        foreach (MenuCategory::cases() as $category) {
+            $used = (int) ($todayUsed[$category->value] ?? 0);
+            $limit = $config->limitForCategory($category);
+            $result[$category->value] = [
+                'used' => $used,
+                'limit' => $limit,
+                'remaining' => max(0, $limit - $used),
+            ];
+        }
+
+        return $result;
     }
 }

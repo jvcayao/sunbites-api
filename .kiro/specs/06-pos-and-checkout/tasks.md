@@ -1,9 +1,10 @@
 # Tasks 06 — POS & Checkout
 
 ## 1. Database
-- [ ] Migration: `orders` table — `branch_id` (FK), `student_id` (nullable FK), `cashier_id` (FK → users), `receipt_number` (string, unique), `payment_method` (enum: cash/gcash/wallet), `subtotal` (decimal), `discount_amount` (decimal, default 0), `discount_reason` (nullable), `total` (decimal), `amount_tendered` (nullable), `change_amount` (nullable), `reference_number` (nullable), `notes` (text, nullable), `is_credit` (bool, default false), `credit_amount` (decimal, default 0), `points_earned` (int, default 0), `status` (enum: completed/voided), `voided_at` (nullable), `voided_by` (nullable FK), `void_reason` (nullable), timestamps
+- [ ] Migration: `orders` table — `branch_id` (FK), `student_id` (nullable FK), `cashier_id` (FK → users), `receipt_number` (string, unique), `payment_method` (enum: cash/gcash/wallet/subscription), `subtotal` (decimal), `discount_amount` (decimal, default 0), `discount_reason` (nullable), `total` (decimal), `amount_tendered` (nullable), `change_amount` (nullable), `reference_number` (nullable), `notes` (text, nullable), `is_credit` (bool, default false), `credit_amount` (decimal, default 0), `points_earned` (int, default 0), `status` (enum: completed/voided), `voided_at` (nullable), `voided_by` (nullable FK), `void_reason` (nullable), timestamps
 - [ ] Migration: `order_items` table — `order_id` (FK), `pos_menu_item_id` (FK), `name` (snapshot), `price` (snapshot), `quantity`, `line_total`
 - [ ] `inventory_logs` table already defined in Spec 04 (no duplicate migration needed)
+- [ ] Migration: `branch_subscription_configs` table — `branch_id` (FK → branches, unique), `meal_daily_limit` (tinyint unsigned, default 1), `snack_daily_limit` (tinyint unsigned, default 1), `drink_daily_limit` (tinyint unsigned, default 1), `extra_daily_limit` (tinyint unsigned, default 1), timestamps
 
 ## 2. Models
 - [ ] `Order` model with `HasBranch` trait
@@ -11,6 +12,12 @@
 - [ ] `Order::items()` hasMany relationship
 - [ ] `Order::student()` belongsTo relationship
 - [ ] `Order::cashier()` belongsTo User relationship
+- [ ] `BranchSubscriptionConfig` model:
+  - [ ] `$fillable`: `branch_id`, `meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit`
+  - [ ] `branch()` belongsTo relationship
+  - [ ] `static forBranch(int $branchId): self` — `firstOrCreate(['branch_id' => $branchId], [defaults all limits = 1])`
+  - [ ] `limitForCategory(MenuCategory $category): int` — match on `MenuCategory` enum to correct limit field
+- [ ] `BranchSubscriptionConfigFactory` — default definition with all limits = 1, `branch_id = Branch::factory()`
 
 ## 3. POS Page Structure
 
@@ -31,8 +38,17 @@
   - `type: "qr"` — exact match on `students.qr_code`, branch-scoped; returns full student data (wallet balance, credit, points)
   - `type: "search"` — partial match on name or student_number, branch-scoped, limit 8; returns minimal data only: `id`, `full_name`, `grade_level`, `photo_path`, `enrollment_status` — NO wallet/credit/points in list
 - [ ] Enrollment status check — if not `enrolled`, return error payload that frontend uses to block cart
-- [ ] Route under `auth:sanctum` + `ability:staff`:
+- [ ] `fullStudentData(Student $student)` private method — add `subscription_daily_status` field:
+  - For `student_type = subscription`: call `buildDailyStatus($student)` returning `{ meal: {used, limit, remaining}, snack: {...}, drink: {...}, extra: {...} }`
+  - For non-subscription students: `subscription_daily_status => null`
+- [ ] `buildDailyStatus(Student $student): array` private helper:
+  - Query today's completed subscription orders for this student (same query as checkout: `status = completed`, `payment_method = subscription`, `whereDate = today`)
+  - Use `OrderItem::menuItem()` relationship (NOT `posMenuItem()`) to group by `category->value`
+  - Load `BranchSubscriptionConfig::forBranch($student->branch_id)` for limits
+  - Return per-category array keyed by `MenuCategory` value (meal, snack, drink, extra)
+- [ ] Routes under `auth:sanctum` + `ability:staff`:
   - `POST /api/v1/pos/students/lookup`
+  - `GET /api/v1/pos/students/{student}`
 
 ### 4.2 Frontend — QR / Student Search Input
 - [x] Auto-focused on page load via `useEffect`; `id="pos-qr-input"`, `autocomplete="off"`
@@ -74,6 +90,7 @@
 - [ ] Selected student card: photo, name, grade, status, wallet balance (shown after confirmed), points (decorative), credit owed badge (red, when > 0)
 - [ ] `[Walk-In]` button switches to walk-in mode
 - [ ] `[Clear ✕]` button on selected student card clears Zustand student state
+- [ ] Update `PosStudent` type (`types/order.ts`) to include `subscription_daily_status: { meal: {used, limit, remaining}, snack: {...}, drink: {...}, extra: {...} } | null`
 
 ## 5. Menu Item Grid
 
@@ -87,6 +104,12 @@
   - OUT items (`inventory_status = "OUT"`): card shown at `opacity-40`; click disabled; no cart add
   - LOW items (`inventory_status = "LOW"`): show warning badge `bg-yellow-50 text-amber-700 border-yellow-300 text-[10px]` — "Low Stock"
   - Unmapped items (`has_inventory_mapping = false`): show orange badge `bg-orange-50 text-orange-700 text-[10px]` — "Not Mapped"; click disabled
+- [ ] **Subscription status on cards** (from `is_subscription_item` field in menu items response):
+  - `is_subscription_item = null`: card at `opacity-40 cursor-not-allowed`; click disabled for ALL payment methods; badge: `bg-gray-100 text-gray-500 text-[10px]` — "⚙ Not Set Up"
+  - `is_subscription_item = true`: show blue badge `bg-blue-50 text-blue-700 border-blue-200 text-[10px]` — "SUB" top-left; card otherwise normal
+  - `is_subscription_item = false` + subscription payment method active: card at `opacity-40 cursor-not-allowed`; click disabled (not eligible for subscription)
+- [ ] **Update `CartItem` type** (`lib/store/cart.ts`): add `category: MenuCategory` field — required for front-end subscription limit checking
+- [ ] Wherever cart items are created from `PosMenuItem` clicks, include the `category` field from the menu item
 
 ## 6. Cart
 
@@ -95,11 +118,16 @@
 - [ ] All cart mutations (add/update/remove/clear) update Zustand store only — no API calls until checkout
 - [ ] Order notes text field (optional)
 - [ ] Subtotal, discount section (Admin/Manager only — hidden for others), total display
-- [ ] Payment method selector: `[💵 Cash]` `[📱 GCash]` `[👛 Wallet]` — Wallet disabled for walk-in
+- [ ] Payment method selector: `[💵 Cash]` `[📱 GCash]` `[👛 Wallet]` `[📋 Subscription]` — Wallet and Subscription disabled for walk-in; Subscription only visible when selected student has `student_type = subscription`
 - [ ] Cash panel: "Amount Tendered" input, live change calculation; Confirm disabled until tendered ≥ total
 - [ ] GCash panel: optional reference number input
 - [ ] Wallet panel: shows balance and "After" balance preview; red state if insufficient, triggers Insufficient Funds Modal
-- [ ] Discount block (Admin/Manager only): type toggle (% / ₱), amount input, reason input (required)
+- [ ] Subscription panel: shows per-category usage from `student.subscription_daily_status`; shows warning and disables Confirm if cart would exceed any category limit
+- [ ] Discount block (Admin/Manager only): type toggle (% / ₱), amount input, reason input (required); **hidden entirely when subscription payment is selected**
+- [ ] **Subscription daily status in student card** (for subscription students):
+  - Show per-category pill: `Meal 1/1 ✗` / `Snack 0/1 ✓` — red + ✗ if at limit, green + ✓ if available
+  - Show red alert banner immediately if any category limit is already met today
+- [ ] **`isCheckoutValid` logic** — extend to include subscription limit check: if `paymentMethod = subscription`, sum cart quantities by category, check against `student.subscription_daily_status`; disable Confirm if any category exceeded
 
 ## 7. Checkout
 
@@ -108,6 +136,11 @@
   - [ ] Validate cart items not empty; validate payment method requirements
   - [x] **Pre-checkout inventory mapping check** — for each cart item, verify `pos_menu_item_inventory` has at least one row; if any item is unmapped, return 422: "One or more items are not configured for inventory tracking. Please contact your administrator."
   - [x] **Pre-checkout stock check** — for each cart item, sum up total units to deduct across linked inventory items; if any inventory item's `quantity - deduction < 0`, return 422: "[Item Name] is out of stock."
+  - [ ] **Subscription item eligibility check** (when `payment_method = subscription`): filter `$menuItems` for `is_subscription_item !== true`; if any ineligible, return 422: "Item "[name]" is not eligible for subscription payment."
+  - [ ] **Subscription daily category limit check** (when `payment_method = subscription`, inside DB transaction):
+    - Query `OrderItem` for today's completed subscription orders for this student using `menuItem()` relationship; group by `category->value`, sum quantities
+    - Load `BranchSubscriptionConfig::forBranch($branch->id)` for limits
+    - Group cart items by category, compare `used + requested > limit`; if exceeded, return 422: "Daily [category] limit of [N] reached for this student."
   - [ ] Wrap all of the following in `DB::transaction()`:
   - [ ] For wallet payment: `Student::lockForUpdate()` — prevents double-spend race condition; re-validate balance inside the lock
   - [ ] Sanitize `notes` with `strip_tags()` before storage
@@ -135,6 +168,24 @@
 - [ ] `⭐ +X Point Earned!` (conditionally rendered when `points_earned > 0`)
 - [ ] `[🖨️ Print Receipt]` optional button — browser print, receipt-optimized CSS
 - [ ] `[🛒 New Order]` button: clears Zustand cart + student state, closes modal, re-focuses QR field
+- [ ] **Subscription payment receipt** — show "Payment Method: 📋 Subscription" only; hide tendered/change/wallet remaining fields; total still shown at actual item prices
+
+## 7a. Subscription Config (Admin References)
+
+### 7a.1 Backend
+- [ ] `SubscriptionConfigController`:
+  - [ ] `show()` — returns `BranchSubscriptionConfig::forBranch($branch->id)` as JSON (uses branch from authenticated user's active branch)
+  - [ ] `update()` — validates per-category limits (`integer|min:0|max:10`); saves and returns updated config
+- [ ] Routes under `auth:sanctum` + `ability:staff` + `role:admin|manager`:
+  - `GET /api/v1/pos/subscription-config`
+  - `PUT /api/v1/pos/subscription-config`
+
+### 7a.2 Frontend
+- [ ] `app/(kitchen)/references/subscription-config/page.tsx` — check if `page.tsx` exists; if not, create it
+- [ ] Page: form with four numeric inputs (Meal, Snack, Drink, Extra daily limits; each min 0, max 10)
+- [ ] Fetches current config on load via `useQuery` → `GET /api/v1/pos/subscription-config`
+- [ ] Saves via `useMutation` → `PUT /api/v1/pos/subscription-config`
+- [ ] Show loading skeleton while fetching; show success toast on save; disable save button while mutation is pending
 
 ## 8. Insufficient Funds Modal
 
@@ -170,6 +221,8 @@
 - [ ] Table: time, receipt#, customer, items (pill summary), payment badge, total, `[View]` `[Void]`
 - [ ] Voided rows: strikethrough text, `[VOIDED]` badge, dimmed
 - [ ] Void modal: customer, amount, payment method, wallet refund notice, reason input (required); `useMutation` for submit
+- [ ] **Subscription void modal** — replace "Wallet will be refunded ₱X" with "Daily allowance will be restored." when `payment_method = subscription`
+- [ ] Transaction history subscription badge: `bg-teal-50 text-teal-700` — "Subscription"
 
 ## 10. Keyboard Shortcuts
 - [ ] `F1` — focus QR/student search field
@@ -178,7 +231,7 @@
 - [ ] `Escape` — clear student selection
 - [ ] `Alt + W` — select Walk-In mode
 - [ ] `Alt + S` — select Student mode
-- [ ] `Alt + 1/2/3` — select payment method (Cash/GCash/Wallet)
+- [ ] `Alt + 1/2/3/4` — select payment method (Cash/GCash/Wallet/Subscription — `Alt+4` only activates if subscription is available for the current student)
 - [ ] `Delete` — removes last cart item (Admin/Manager/Supervisor only)
 
 ## 11. Policies
@@ -193,8 +246,27 @@
   - [ ] Checkout with LOW inventory proceeds (warns but does not block)
 - [ ] `PosWalletLockTest` — concurrent wallet checkout with `lockForUpdate()` prevents double-spend; balance re-validated inside lock
 - [ ] `PosStudentLookupTest` — QR lookup returns full student data including wallet; search returns minimal data only (no wallet/credit); non-enrolled student returns blocking error
+  - [ ] QR lookup for subscription student includes `subscription_daily_status` with per-category `{used, limit, remaining}` structure
+  - [ ] QR lookup for non-subscription student returns `subscription_daily_status: null`
+  - [ ] Daily status counts reflect only completed subscription orders from today (not voided, not other payment methods, not other days)
 - [ ] `PosVoidTest` — void reverses wallet via refund(); void of credit order inserts Voided credit_transaction and decrements credit_balance; total_spent/points restored; cashier cannot void (403)
 - [x] Update `PosVoidTest`:
   - [x] Void restores inventory stock — `InventoryLog` records with `type=restock` created for each deducted item, quantities restored
   - [ ] Void inventory restoration runs inside same transaction — if restoration fails, wallet refund also rolls back
 - [ ] `PosInsufficientFundsTest` — inline reload locked to exact shortfall; credit use inserts Charged credit_transaction; credit limit enforcement blocks use when exceeded
+- [ ] `SubscriptionCheckoutTest` (new file):
+  - [ ] Subscription payment blocked if any cart item has `is_subscription_item = false`
+  - [ ] Subscription payment blocked if any cart item has `is_subscription_item = null`
+  - [ ] Subscription payment succeeds when all items have `is_subscription_item = true` and limits not exceeded
+  - [ ] Checkout blocked when daily limit for a category is already met (used ≥ limit)
+  - [ ] Checkout allowed when different category is full (meal full → snack order still proceeds)
+  - [ ] Daily limit check counts only `status = completed` subscription orders from today (not voided, not other payment methods)
+  - [ ] Voided subscription order is excluded from daily count — allowance effectively restored
+  - [ ] Per-category limits are independent — one category reaching limit does not affect others
+  - [ ] Non-subscription student cannot use subscription payment method (422)
+- [ ] `SubscriptionConfigTest` (new file):
+  - [ ] Admin can GET current branch subscription config (returns defaults if no row exists yet)
+  - [ ] Admin can PUT per-category limits; changes are persisted
+  - [ ] Manager can GET and PUT subscription config
+  - [ ] Cashier/Supervisor receives 403 on PUT
+  - [ ] Validation rejects limits below 0 or above 10

@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\OrderStatus;
+use App\Enums\PaymentMethod;
 use App\Enums\StudentType;
 use App\Models\Concerns\HasBranch;
 use Bavix\Wallet\Interfaces\Wallet;
@@ -15,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -114,6 +117,21 @@ class Student extends Model implements Wallet
     {
         return $this->belongsToMany(ParentUser::class, 'parent_student', 'student_id', 'parent_id')
             ->withPivot(['wallet_alert_threshold', 'linked_at', 'linked_by']);
+    }
+
+    /**
+     * @return Collection<string, int>
+     */
+    public function todaySubscriptionUsageByCategory(): Collection
+    {
+        return OrderItem::whereHas('order', fn ($q) => $q
+            ->where('student_id', $this->id)
+            ->where('payment_method', PaymentMethod::Subscription)
+            ->where('status', OrderStatus::Completed)
+            ->whereDate('created_at', today())
+        )->with('menuItem')->get()
+            ->groupBy(fn ($item) => $item->menuItem->category->value)
+            ->map(fn ($items) => $items->sum('quantity'));
     }
 
     public static function generateUniqueQrCode(): string

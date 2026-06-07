@@ -23,6 +23,7 @@ class PosMenuItem extends Model
         'category',
         'is_available',
         'sort_order',
+        'is_subscription_item',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class PosMenuItem extends Model
         return [
             'category' => MenuCategory::class,
             'is_available' => 'boolean',
+            'is_subscription_item' => 'boolean',
             'price' => 'decimal:2',
         ];
     }
@@ -37,7 +39,7 @@ class PosMenuItem extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'price', 'category', 'is_available', 'sort_order'])
+            ->logOnly(['name', 'price', 'category', 'is_available', 'sort_order', 'is_subscription_item'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges()
             ->setDescriptionForEvent(fn (string $eventName) => "menu.item_{$eventName}");

@@ -75,6 +75,7 @@ class PaymentController extends Controller
 
         return response()->json([
             'id' => $payment->id,
+            'year' => $payment->year,
             'status' => $newStatus,
             'recorded_at' => $payment->recorded_at?->toDateTimeString(),
         ]);

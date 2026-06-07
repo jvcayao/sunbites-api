@@ -122,7 +122,7 @@
   - Uses same date range state as Movement History — no separate filter needed
 
 ### 6.4 Tests
-- [ ] Update `InventoryReportTest` (or add to existing):
+- [x] Update `InventoryReportTest` (or add to existing):
   - Date range filter returns only logs within the range
   - Type filter narrows log results to the specified type
   - Item filter narrows to a single inventory item's logs
