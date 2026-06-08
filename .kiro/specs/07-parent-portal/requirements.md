@@ -77,7 +77,13 @@ Accessible at: `portal.sunbites.com.ph/profile`
 - Phone number
 - Address
 - Profile photo upload — MIME whitelist: `image/jpeg`, `image/png`, `image/webp` only; max 2MB; server-side validation
-- Password change (current password required)
+- Password change (current password required) — via a **dedicated** `POST /api/v1/portal/profile/change-password` endpoint; not mixed into the profile PATCH
+
+### Profile Photo Storage & Serving
+- Photos are stored on the **public** disk under `photos/parents/`
+- The API returns `profile_photo_url` — a fully-qualified public URL (e.g. `https://api.sunbites.com.ph/storage/photos/parents/abc.jpg`) — not a raw file path
+- The portal renders this URL directly in `<Image src={profile.profile_photo_url} />`
+- `profile_photo_path` (raw path) must never be returned to the frontend; the controller resolves it to a URL before returning
 
 ---
 
@@ -271,8 +277,9 @@ All portal routes under `auth:sanctum` + `ability:parent` middleware unless note
 | POST | `/api/v1/portal/auth/logout` | parent | Revoke token |
 | POST | `/api/v1/portal/auth/forgot-password` | public | Send activation or reset link (generic response always) |
 | POST | `/api/v1/portal/auth/reset-password` | public | Set password and activate account (or reset) |
-| GET | `/api/v1/portal/profile` | parent | Get parent profile |
-| PUT | `/api/v1/portal/profile` | parent | Update parent profile |
+| GET | `/api/v1/portal/profile` | parent | Get parent profile — returns `profile_photo_url` (full public URL), not raw path |
+| PATCH | `/api/v1/portal/profile` | parent | Update name, phone, address (no password) |
+| POST | `/api/v1/portal/profile/change-password` | parent | Change password — requires `current_password`, `password`, `password_confirmation` |
 | GET | `/api/v1/portal/dashboard` | parent | Dashboard data for linked students |
 | GET | `/api/v1/portal/students` | parent | Linked students list |
 | GET | `/api/v1/portal/students/{id}/activity` | parent | Spending activity (IDOR-protected) |
@@ -307,7 +314,8 @@ Feedback reply and read endpoints are in the POS app under `ability:staff` (defi
 - [ ] `POST /api/v1/portal/auth/reset-password` — sets password, sets `email_verified_at = now()`, works for both initial activation and password reset
 - [ ] Activation link opens `portal.sunbites.com.ph/activate?token=...&email=...`; on success redirects to login with toast
 - [ ] Rate limiting: login, forgot-password — max 5 attempts per 5 minutes per IP
-- [ ] Parent profile edit page — photo upload: MIME whitelist (jpeg/png/webp), max 2MB
+- [ ] Parent profile edit page — photo upload: MIME whitelist (jpeg/png/webp), max 2MB; stored on public disk; API returns `profile_photo_url` (full public URL)
+- [ ] `POST /api/v1/portal/profile/change-password` — dedicated endpoint; requires `current_password`, `password`, `password_confirmation`; 422 if current password is wrong
 - [ ] No self-registration — no `/register` route on the portal
 - [ ] No manual student link request flow — no `parent_student_requests` table
 - [ ] Parent dashboard: outstanding credit alert card (when `credit_balance > 0`), wallet card, spending summary, recent purchases
@@ -333,6 +341,7 @@ Feedback reply and read endpoints are in the POS app under `ability:staff` (defi
 - [ ] Auth pages in `app/(auth)/` route group in `~/sunbites-portal`
 - [ ] Dashboard and portal pages in `app/(portal)/` route group
 - [ ] **Parent Management Page** at `pos.sunbites.com.ph/references/parents`: paginated table (Name, Email, Activation Status, Linked Students count, Registered Date, Last Login); filter by activation status and branch; search by name or email
+- [ ] Branch filter on parent list: `GET /api/v1/references/parents?branch_id=` — filters to parents who have at least one linked student in the given branch; when `X-Branch-Id` header is present, default to filtering by the active branch
 - [ ] Parent detail drawer/page: profile info, linked students list (with links to student detail), `Resend Activation Email` (when not activated, rate-limited) and `Send Password Reset Email` (when activated) actions
 - [ ] `GET /api/v1/parents` — staff-only; paginated, filterable; returns parent list with linked student count
 - [ ] `GET /api/v1/parents/{parent}` — staff-only; returns full parent detail with linked students array

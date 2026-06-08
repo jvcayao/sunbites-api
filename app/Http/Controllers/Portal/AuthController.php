@@ -48,7 +48,7 @@ class AuthController extends Controller
                 'email' => $parent->email,
                 'phone' => $parent->phone,
                 'address' => $parent->address,
-                'profile_photo_path' => $parent->profile_photo_path,
+                'profile_photo_url' => $parent->profile_photo_url,
             ],
         ]);
     }

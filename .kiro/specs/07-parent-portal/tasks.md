@@ -76,13 +76,19 @@
 
 ### 9.1 Backend
 - [x] `Portal\ProfileController::show()` — returns auth parent with all profile fields
-- [x] `Portal\ProfileController::update()` — updates name, phone, address; password change if current_password + password provided
-- [x] `Portal\ProfileController::uploadPhoto()` — MIME whitelist (jpeg/png/webp), max 2MB; stores in `photos/parents`
-- [x] Routes: `GET|PATCH /api/v1/portal/profile`, `POST /api/v1/portal/profile/photo`
+- [x] `Portal\ProfileController::show()` — returns `profile_photo_url` via `Storage::url()`; `profile_photo_path` removed from response
+- [x] `Portal\ProfileController::update()` — updates name, phone, address only; password change removed from this endpoint
+- [x] `Portal\ProfileController::changePassword()` — dedicated method; 422 on wrong current password; uses `Password::defaults()`
+- [x] `Portal\ProfileController::uploadPhoto()` — public disk; returns `profile_photo_url`; deletes old photo before upload
+- [x] Routes: `GET /api/v1/portal/profile`, `PATCH /api/v1/portal/profile`, `POST /api/v1/portal/profile/photo`, `POST /api/v1/portal/profile/change-password`
 
 ### 9.2 Frontend
 - [x] `lib/api/profile.ts` — `profileApi.show()`, `profileApi.update(payload)`, `profileApi.uploadPhoto(file)` — done: implemented as `profileApi` in `lib/api/portal.ts`
 - [x] Profile page at `app/(portal)/profile/page.tsx`: editable fields, photo upload with preview, password change section
+- [x] `lib/api/portal.ts` — `profileApi.changePassword` already calls `POST /portal/profile/change-password`; route registered on backend
+- [x] `lib/api/portal.ts` — `profileApi.uploadPhoto` return type updated to `{ profile_photo_url: string }`
+- [x] `app/(portal)/profile/page.tsx` — `ProfilePhotoSection`: uses `profile.profile_photo_url` as `<Image src>`; `next.config.ts` updated with `remotePatterns` for S3/MinIO
+- [x] `types/auth.ts` — `profile_photo_path` renamed to `profile_photo_url` in `AuthParent` interface
 
 ## 10. Linked Students
 
@@ -194,6 +200,7 @@
 
 ### 18.1 Backend
 - [x] `Kitchen\ParentController::index()` — paginated list, search by name/email, activation status
+- [x] `Kitchen\ParentController::index()` — branch filter added via `whereHas('students', branch_id)`; `show()` returns `profile_photo_url`; `Portal\AuthController::login()` also returns `profile_photo_url`
 - [x] `Kitchen\ParentController::show(ParentUser $parent)` — parent profile + linked students
 - [x] Routes: `GET /api/v1/references/parents`, `POST /api/v1/references/parents/{parent}/resend-activation`
 - [x] Route: `GET /api/v1/references/parents/{parent}`

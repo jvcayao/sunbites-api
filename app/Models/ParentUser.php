@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class ParentUser extends Authenticatable
@@ -44,6 +45,15 @@ class ParentUser extends Authenticatable
     {
         return Attribute::make(
             get: fn (): string => "{$this->first_name} {$this->last_name}",
+        );
+    }
+
+    protected function profilePhotoUrl(): Attribute
+    {
+        return Attribute::make(
+            get: fn (): ?string => $this->profile_photo_path
+                ? Storage::url($this->profile_photo_path)
+                : null,
         );
     }
 

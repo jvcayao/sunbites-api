@@ -22,6 +22,7 @@ Route::middleware(['auth:parents', 'ability:parent'])->group(function () {
     // Profile
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::patch('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/change-password', [ProfileController::class, 'changePassword']);
     Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
 
     // Dashboard
