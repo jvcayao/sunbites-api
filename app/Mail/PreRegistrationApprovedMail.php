@@ -30,7 +30,7 @@ class PreRegistrationApprovedMail extends Mailable implements ShouldQueue
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.pre-registration.approved',
+            view: 'emails.pre-registration.approved',
             with: [
                 'preRegistration' => $this->preRegistration,
                 'student' => $this->student,

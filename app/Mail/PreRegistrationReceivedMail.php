@@ -26,7 +26,7 @@ class PreRegistrationReceivedMail extends Mailable implements ShouldQueue
     public function content(): Content
     {
         return new Content(
-            markdown: 'emails.pre-registration.received',
+            view: 'emails.pre-registration.received',
             with: ['preRegistration' => $this->preRegistration],
         );
     }
