@@ -21,16 +21,16 @@
 
 ## Progress Tracker
 
-- [ ] Task 1: POS — `components/ui/popover.tsx`
-- [ ] Task 2: POS — `components/notification-item.tsx` + tests
-- [ ] Task 3: POS — `components/notification-bell.tsx` rewrite + tests
-- [ ] Task 4: POS — `app/(kitchen)/notifications/page.tsx` rewrite + tests
-- [ ] Task 5: POS — `app/(kitchen)/announcements/page.tsx` rewrite + tests
-- [ ] Task 6: Portal — `components/ui/popover.tsx`
-- [ ] Task 7: Portal — `components/notification-item.tsx` + tests
-- [ ] Task 8: Portal — `components/notification-bell.tsx` rewrite + tests
-- [ ] Task 9: Portal — `app/(portal)/notifications/page.tsx` rewrite + tests
-- [ ] Task 10: QA — Run all tests in both apps
+- [x] Task 1: POS — `components/ui/popover.tsx` — used @base-ui/react/popover (not Radix)
+- [x] Task 2: POS — `components/notification-item.tsx` + tests — 6 tests passing
+- [x] Task 3: POS — `components/notification-bell.tsx` rewrite + tests — 5/5 passing, fixed auth mock & URL pattern
+- [x] Task 4: POS — `app/(kitchen)/notifications/page.tsx` rewrite + tests — 9/9 passing
+- [x] Task 5: POS — `app/(kitchen)/announcements/page.tsx` rewrite + tests — 7/7 passing
+- [x] Task 6: Portal — `components/ui/popover.tsx` — same @base-ui/react/popover pattern
+- [x] Task 7: Portal — `components/notification-item.tsx` + tests — 4/4 passing, announcement expands inline, payment reminder navigates to /payments
+- [x] Task 8: Portal — `components/notification-bell.tsx` rewrite + tests — 4/4 passing, Popover dropdown with @base-ui/react
+- [x] Task 9: Portal — `app/(portal)/notifications/page.tsx` rewrite + tests — 7/7 passing, shared NotificationItem, Unread tab filter
+- [x] Task 10: QA — POS: 154/154 passing (16 suites) · Portal: 30/30 passing (7 suites)
 
 ---
 

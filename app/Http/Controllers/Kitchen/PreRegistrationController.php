@@ -29,14 +29,43 @@ class PreRegistrationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $statusFilter = $request->enum('status', PreRegistrationStatus::class) ?? PreRegistrationStatus::Pending;
+        $validated = $request->validate([
+            'status' => ['nullable', Rule::enum(PreRegistrationStatus::class)],
+            'enrollment_type' => ['nullable', 'in:subscription,non_subscription'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
 
-        $preRegistrations = PreRegistration::with([
+        $statusFilter = isset($validated['status'])
+            ? PreRegistrationStatus::from($validated['status'])
+            : PreRegistrationStatus::Pending;
+
+        $query = PreRegistration::with([
             'contacts' => fn ($q) => $q->where('is_primary', true),
-        ])
-            ->where('status', $statusFilter)
-            ->latest()
-            ->paginate(15);
+        ])->where('status', $statusFilter);
+
+        if (! empty($validated['enrollment_type'])) {
+            $query->where('enrollment_type', $validated['enrollment_type']);
+        }
+
+        if (! empty($validated['search'])) {
+            $like = '%'.mb_strtolower($validated['search']).'%';
+            $query->where(fn ($q) => $q->whereRaw('lower(first_name) like ?', [$like])
+                ->orWhereRaw('lower(last_name) like ?', [$like])
+            );
+        }
+
+        if (! empty($validated['date_from'])) {
+            $query->whereDate('created_at', '>=', $validated['date_from']);
+        }
+
+        if (! empty($validated['date_to'])) {
+            $query->whereDate('created_at', '<=', $validated['date_to']);
+        }
+
+        $preRegistrations = $query->latest()->paginate($validated['per_page'] ?? 15);
 
         $items = $preRegistrations->getCollection()->map(fn (PreRegistration $preReg) => [
             'id' => $preReg->id,
@@ -74,8 +103,12 @@ class PreRegistrationController extends Controller
             }
         }
 
+        $data = $preRegistration->toArray();
+        $data['approved_by'] = $preRegistration->approvedBy?->full_name;
+        $data['rejected_by'] = $preRegistration->rejectedBy?->full_name;
+
         return response()->json([
-            'data' => array_merge($preRegistration->toArray(), [
+            'data' => array_merge($data, [
                 'duplicate_warning' => $duplicateWarning,
                 'existing_student_name' => $existingStudentName,
             ]),

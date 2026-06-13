@@ -96,35 +96,24 @@ class ReminderTest extends TestCase
     // bellCount
     // -------------------------------------------------------------------------
 
-    public function test_bell_count_returns_zero_when_outside_reminder_window(): void
+    public function test_bell_count_is_zero_when_no_unpaid_payments_exist(): void
     {
-        // Set "now" to a date where now+14 days lands in April (not a school month)
-        Carbon::setTestNow(Carbon::create(2027, 4, 1));
-
         $response = $this->asAdmin()->getJson('/api/v1/reminders/bell-count');
 
-        $response->assertOk()->assertJson(['count' => 0, 'school_month' => null, 'school_year' => null]);
+        $response->assertOk()->assertJson(['count' => 0]);
     }
 
-    public function test_bell_count_returns_correct_count_when_window_is_open(): void
+    public function test_bell_count_counts_parents_with_unpaid_payments(): void
     {
-        // now = June 1; +14 days = June 15 → school month = june
-        Carbon::setTestNow(Carbon::create(2026, 6, 1));
         $this->seedPayment('june', 2026);
 
         $response = $this->asAdmin()->getJson('/api/v1/reminders/bell-count');
 
-        $response->assertOk()
-            ->assertJson([
-                'count' => 1,
-                'school_month' => 'june',
-                'school_year' => 2026,
-            ]);
+        $response->assertOk()->assertJson(['count' => 1]);
     }
 
     public function test_bell_count_excludes_already_notified_parents(): void
     {
-        Carbon::setTestNow(Carbon::create(2026, 6, 1));
         $this->seedPayment('june', 2026);
 
         ParentPaymentReminder::create([
@@ -134,11 +123,22 @@ class ReminderTest extends TestCase
             'school_year' => 2026,
             'sent_at' => now(),
             'sent_by_user_id' => $this->admin->id,
+            'send_count' => 1,
         ]);
 
         $response = $this->asAdmin()->getJson('/api/v1/reminders/bell-count');
 
         $response->assertOk()->assertJson(['count' => 0]);
+    }
+
+    public function test_bell_count_includes_parents_with_overdue_unpaid_payments(): void
+    {
+        // Past month — no Carbon mock needed
+        $this->seedPayment('june', 2024);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reminders/bell-count');
+
+        $response->assertOk()->assertJson(['count' => 1]);
     }
 
     // -------------------------------------------------------------------------
@@ -147,7 +147,7 @@ class ReminderTest extends TestCase
 
     public function test_eligible_parents_list_is_branch_scoped(): void
     {
-        Carbon::setTestNow(Carbon::create(2026, 6, 1));
+        $this->seedPayment('june', 2026);
 
         $otherBranch = Branch::factory()->create(['is_active' => true]);
         $otherStudent = Student::factory()->subscription()->create(['branch_id' => $otherBranch->id]);
@@ -172,6 +172,22 @@ class ReminderTest extends TestCase
         $this->assertFalse($ids->contains($otherParent->id));
     }
 
+    public function test_eligible_parents_includes_overdue_months(): void
+    {
+        $this->seedPayment('june', 2024);
+        $this->seedPayment('july', 2024);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reminders/eligible-parents');
+
+        $response->assertOk();
+        $parent = collect($response->json('data'))->firstWhere('id', $this->parent->id);
+        $this->assertNotNull($parent);
+        $this->assertCount(2, $parent['unpaid_periods']);
+        $months = collect($parent['unpaid_periods'])->pluck('school_month')->all();
+        $this->assertContains('june', $months);
+        $this->assertContains('july', $months);
+    }
+
     // -------------------------------------------------------------------------
     // send
     // -------------------------------------------------------------------------
@@ -179,7 +195,6 @@ class ReminderTest extends TestCase
     public function test_send_creates_reminder_records_and_notifications(): void
     {
         Notification::fake();
-        Carbon::setTestNow(Carbon::create(2026, 6, 1));
         $this->seedPayment('june', 2026);
 
         $response = $this->asAdmin()->postJson('/api/v1/reminders/send', [
@@ -193,6 +208,7 @@ class ReminderTest extends TestCase
             'branch_id' => $this->branch->id,
             'school_month' => 'june',
             'school_year' => 2026,
+            'send_count' => 1,
         ]);
 
         Notification::assertSentTo($this->parent, PaymentReminderNotification::class);
@@ -201,7 +217,6 @@ class ReminderTest extends TestCase
     public function test_send_skips_already_notified_parents(): void
     {
         Notification::fake();
-        Carbon::setTestNow(Carbon::create(2026, 6, 1));
         $this->seedPayment('june', 2026);
 
         ParentPaymentReminder::create([
@@ -211,6 +226,7 @@ class ReminderTest extends TestCase
             'school_year' => 2026,
             'sent_at' => now()->subDay(),
             'sent_by_user_id' => $this->admin->id,
+            'send_count' => 1,
         ]);
 
         $response = $this->asAdmin()->postJson('/api/v1/reminders/send', [
@@ -224,7 +240,6 @@ class ReminderTest extends TestCase
     public function test_send_with_force_true_resends_to_already_notified_parents(): void
     {
         Notification::fake();
-        Carbon::setTestNow(Carbon::create(2026, 6, 1));
         $this->seedPayment('june', 2026);
 
         ParentPaymentReminder::create([
@@ -234,6 +249,7 @@ class ReminderTest extends TestCase
             'school_year' => 2026,
             'sent_at' => now()->subDay(),
             'sent_by_user_id' => $this->admin->id,
+            'send_count' => 1,
         ]);
 
         $response = $this->asAdmin()->postJson('/api/v1/reminders/send', [
@@ -243,6 +259,56 @@ class ReminderTest extends TestCase
 
         $response->assertOk()->assertJson(['sent' => 1, 'skipped' => 0]);
         Notification::assertSentTo($this->parent, PaymentReminderNotification::class);
+    }
+
+    public function test_send_increments_send_count_on_force_resend(): void
+    {
+        Notification::fake();
+        $this->seedPayment('june', 2026);
+
+        // First send
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+        ])->assertOk()->assertJson(['sent' => 1]);
+
+        $this->assertDatabaseHas('parent_payment_reminders', [
+            'parent_user_id' => $this->parent->id,
+            'school_month' => 'june',
+            'school_year' => 2026,
+            'send_count' => 1,
+        ]);
+
+        // Force resend
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+            'force' => true,
+        ])->assertOk()->assertJson(['sent' => 1]);
+
+        $this->assertDatabaseHas('parent_payment_reminders', [
+            'parent_user_id' => $this->parent->id,
+            'school_month' => 'june',
+            'school_year' => 2026,
+            'send_count' => 2,
+        ]);
+    }
+
+    public function test_send_includes_all_unpaid_periods_in_notification(): void
+    {
+        Notification::fake();
+        $this->seedPayment('june', 2026);
+        $this->seedPayment('july', 2026);
+
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+        ])->assertOk()->assertJson(['sent' => 1]);
+
+        Notification::assertSentTo(
+            $this->parent,
+            PaymentReminderNotification::class,
+            function (PaymentReminderNotification $notification) {
+                return $notification->periods->count() === 2;
+            }
+        );
     }
 
     public function test_send_requires_parent_ids(): void

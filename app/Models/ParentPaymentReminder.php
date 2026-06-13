@@ -14,10 +14,12 @@ class ParentPaymentReminder extends Model
         'school_year',
         'sent_at',
         'sent_by_user_id',
+        'send_count',
     ];
 
     protected $casts = [
         'sent_at' => 'datetime',
+        'send_count' => 'integer',
     ];
 
     public function parentUser(): BelongsTo

@@ -15,12 +15,12 @@ class PaymentReminderNotification extends Notification implements ShouldBroadcas
 {
     use Queueable;
 
+    /**
+     * @param  Collection<int, array{school_month: string, school_year: int, due_date: Carbon, students: Collection<int, array{id: int, name: string, amount: float}>}>  $periods
+     */
     public function __construct(
         public readonly ParentUser $parent,
-        public readonly string $school_month,
-        public readonly int $school_year,
-        public readonly Collection $students,
-        public readonly Carbon $due_date,
+        public readonly Collection $periods,
     ) {}
 
     /** @return array<int, string> */
@@ -32,15 +32,21 @@ class PaymentReminderNotification extends Notification implements ShouldBroadcas
     /** @return array<string, mixed> */
     public function toDatabase(object $notifiable): array
     {
+        $primary = $this->periods->first();
+
         return [
-            'school_month' => $this->school_month,
-            'school_year' => $this->school_year,
-            'due_date' => $this->due_date->toDateString(),
-            'students' => $this->students->map(fn ($s) => [
-                'name' => $s['name'],
-                'amount' => $s['amount'],
-            ])->toArray(),
-            'total_amount' => $this->students->sum('amount'),
+            'school_month' => $primary['school_month'],
+            'school_year' => $primary['school_year'],
+            'due_date' => $primary['due_date']->toDateString(),
+            'students' => $primary['students']->toArray(),
+            'total_amount' => $this->periods->sum(fn ($p) => $p['students']->sum('amount')),
+            'periods' => $this->periods->map(fn ($p) => [
+                'school_month' => $p['school_month'],
+                'school_year' => $p['school_year'],
+                'due_date' => $p['due_date']->toDateString(),
+                'students' => $p['students']->toArray(),
+                'amount' => $p['students']->sum('amount'),
+            ])->values()->toArray(),
         ];
     }
 
