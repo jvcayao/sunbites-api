@@ -54,8 +54,8 @@
 │  First Name *           Last Name *                      │
 │  [__________________]   [__________________]             │
 │                                                          │
-│  Student Number *       Grade & Class *                  │
-│  [__________________]   [Grade 3 – Section Mabini]      │
+│  Student Number (optional)   Grade & Class *             │
+│  [__________________]        [Grade 3 – Section Mabini] │
 │                                                          │
 │  Birthday *                                              │
 │  [date picker          ]                                 │
@@ -100,6 +100,7 @@
   - Preview table footer: total months count + total amount
   - Source indicator: `text-xs text-muted-foreground` — "configured" in primary color, "default" in muted
 - Photo: 80×80 circle placeholder, file input, preview swaps in on selection
+- **Student Number**: optional field — no `*` asterisk, no `required` attribute; placeholder text "e.g. ANT-2025-001"; can be left blank at enrollment and filled in later via the student detail edit form
 - Required fields: `*` red asterisk in label
 - Checkboxes: custom styled with `accent-primary`
 - Submit button: primary, full width, `text-base font-bold py-4`
@@ -145,14 +146,10 @@
 ┌──────────────────────────────────────────────────────────────┐
 │ 👥 Student Portal                                            │
 ├──────────────────────────────────────────────────────────────┤
-│  🔔 Payment Reminder — July Subscription                     │
-│     Ensure payment by July 24, 2026 (1 week before 1st)     │
-│                                              [14 days left]  │
-├──────────────────────────────────────────────────────────────┤
-│  [Search name or student number...]  [Enroll Status ▾]      │
-│  (Subscription tab only): [Month ▾] [Year ▾] [Paid/Unpaid ▾]│
-│                                                              │
-│  [All●] [📋 Subscription (3)] [🪙 Non-Subscription (1)]     │
+│  [Search name or student number...]  [Enroll Status ▾]  [🗑 Deleted]│
+│  (Subscription tab only): [Month ▾] [Year ▾] [Paid/Unpaid ▾]       │
+│                                                                     │
+│  [All●] [📋 Subscription (3)] [🪙 Non-Subscription (1)]            │
 ├──────────────────────────────────────────────────────────────┤
 │                                                              │
 │  📋 SUBSCRIPTION STUDENTS (3) ━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
@@ -187,10 +184,29 @@
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Payment Reminder Banner (subscription students only, shown 14 days before month end):**
-- `bg-gradient-to-r from-primary/5 to-amber-50 border-2 border-primary rounded-xl p-3 mb-4`
-- Bell icon + "Payment Reminder — [Month] Subscription" bold title
-- Days-left badge: `bg-primary text-primary-foreground rounded-full text-xs font-bold px-3`
+**Deleted toggle button** (`[🗑 Deleted]`):
+- Inactive state: `variant="outline"` ghost button with destructive/red text color
+- Active state: `bg-destructive/10 text-destructive border-destructive` — clearly signals "danger zone" view
+- When active: type tabs (All / Subscription / Non-Subscription) and Month/Year filter are disabled (grayed out); search and grade filter remain active
+- Page header subtitle changes to: "Showing removed students — restore to make active again"
+
+**Deleted student card:**
+```
+┌── [gray left border] ────────────────────────────────────┐
+│  👤 Maria Santos  [📋 Subscription]  [Enrolled ✅]      │
+│     Grade 3 – Section Mabini                             │
+│     Primary contact: Ana Santos · 09171234567             │
+│     🗑 Removed: Jun 01, 2026  |  Enrolled: Jun 01, 2025  │
+│                                                          │
+│  [↩ Restore]                                             │
+└──────────────────────────────────────────────────────────┘
+```
+- Left border: `border-l-4 border-muted` (gray, not orange/purple) — visually distinct from active students
+- Card background: `bg-muted/30 opacity-80` — slightly dimmed to reinforce "inactive" state
+- "Removed" date label: `text-xs text-destructive font-medium`
+- `[↩ Restore]` button: `variant="outline"` with green accent (`text-green-700 border-green-300 hover:bg-green-50`)
+- No Edit, Wallet, Remove, or payment badges shown
+- Monthly subscription badges are hidden in deleted view
 
 **Section Headers (when "All" tab active):**
 - Subscription: `bg-primary/10 border-2 border-primary rounded-lg px-4 py-1.5 text-sm font-extrabold text-primary`
@@ -205,6 +221,12 @@
 **Non-subscription card — bottom section:**
 - Info box: `bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-800 font-semibold`
 - "Load Wallet" button: `bg-purple-600 text-white`
+
+**Student number null display (across the app):**
+- Student card in list: omit the student number line entirely if null (don't show "—" in the compact card view)
+- Student detail header: show `Student No.: ANT-2025-001` if set, or omit entirely if null
+- POS lookup result: if the looked-up student has no student number, show "No Student No." in `text-muted-foreground`
+- Enrollment success screen: "Number: ANT-2025-001" row — if null, show "Number: (not assigned yet)" in `text-muted-foreground`
 
 **Enrollment Status Badges:**
 ```
@@ -312,6 +334,7 @@ All: `text-[11px] font-bold px-3 py-1 rounded-full border cursor-pointer` — cl
 **Tab: Profile**
 ```
 │  Personal                                                 │
+│  Student No.: ANT-2025-001  (editable — shows "—" if not set) │
 │  Birthday: March 14, 2016                                 │
 │  Allergies: None                                          │
 │  Notes: Loves vegetables                                  │
@@ -330,6 +353,15 @@ All: `text-[11px] font-bold px-3 py-1 rounded-full border cursor-pointer` — cl
 │      [🖨️ Print QR Code]   [⬇ Download PNG]              │
 │      [↺ Regenerate QR Code] (Admin/Manager/Supervisor)   │
 ```
+
+**Profile edit form — student number field:**
+- Shown in the editable profile section alongside first name, last name, grade, section, birthday, allergies, notes
+- Label: "Student No." — no asterisk (optional)
+- Text input, max 50 chars, placeholder "e.g. ANT-2025-001"
+- Pre-filled with current value; blank if not yet assigned
+- Shows "—" (em dash) as display text when value is null and form is in read mode
+- Inline validation: if a duplicate student number exists in the same branch, field-level error "This student number is already in use."
+- Included in the existing `PUT /api/v1/students/{student}` payload — no separate endpoint needed
 
 **Single QR Print Card Layout:**
 ```

@@ -337,4 +337,51 @@ class StudentDetailTest extends TestCase
         $this->assertEquals(3, $mealStatus['limit']);
         $this->assertEquals(2, $mealStatus['remaining']);
     }
+
+    private function baseUpdatePayload(array $overrides = []): array
+    {
+        return array_merge([
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'grade_level' => 'Grade 3',
+            'birthday' => '2015-01-15',
+        ], $overrides);
+    }
+
+    public function test_update_student_number_succeeds(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->putJson("/api/v1/students/{$student->id}", $this->baseUpdatePayload([
+            'student_number' => 'NEW-2025-999',
+        ]));
+
+        $response->assertOk();
+        $this->assertDatabaseHas('students', ['id' => $student->id, 'student_number' => 'NEW-2025-999']);
+    }
+
+    public function test_duplicate_student_number_per_branch_fails_on_update(): void
+    {
+        $studentA = Student::factory()->create(['branch_id' => $this->branch->id, 'student_number' => 'TAKEN-001']);
+        $studentB = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->putJson("/api/v1/students/{$studentB->id}", $this->baseUpdatePayload([
+            'student_number' => 'TAKEN-001',
+        ]));
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['student_number']);
+    }
+
+    public function test_clearing_student_number_to_null_succeeds(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id, 'student_number' => 'CLEAR-001']);
+
+        $response = $this->asManager()->putJson("/api/v1/students/{$student->id}", $this->baseUpdatePayload([
+            'student_number' => null,
+        ]));
+
+        $response->assertOk();
+        $this->assertNull($student->fresh()->student_number);
+    }
 }

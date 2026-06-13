@@ -4,6 +4,7 @@
 - [x] Migration: create `system_configurations` table — `key` (string, unique), `value` (string), `type` (enum: integer/decimal/string), `label` (string), `description` (text, nullable), timestamps
 - [x] Seeder: `SystemConfigurationSeeder` — insert `daily_meal_rate` (135, decimal), `credit_limit` (300, decimal), `loyalty_point_threshold` (1000, decimal) with labels and descriptions
 - [x] Register seeder in `DatabaseSeeder`
+- [x] **MISSED**: Add `payment_reminder_days` (integer, 14, label: "Payment Reminder Days", description: "Number of days before a payment is due to send a reminder notification to parents.") to `SystemConfigurationSeeder` — required by Spec 10 before reminders can be sent — seeded + test updated; 399/399 green
 
 ## 2. Model
 - [x] `SystemConfiguration` model — `$fillable`, type enum

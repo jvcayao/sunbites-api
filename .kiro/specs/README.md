@@ -12,13 +12,17 @@
 | 06 | [POS & Checkout](./06-pos-and-checkout/requirements.md) | Cart, QR scan, payment methods, wallet deduction, receipts, void |
 | 07 | [Parent Portal](./07-parent-portal/requirements.md) | Parent auth, student linking, spending dashboard, wallet alerts, feedback |
 | 08 | [Reports & Dashboard](./08-reports-and-dashboard/requirements.md) | Kitchen dashboard, sales/student/wallet/inventory reports, Excel exports |
+| 09 | [System Configuration](./09-system-configuration/requirements.md) | DB-backed key-value config (daily rate, credit limit, payment reminder days) |
+| 10 | [Notifications & Reminders](./10-notifications-and-reminders/requirements.md) | Payment reminder bell, parent notifications, Reverb real-time, student payment history |
+| 11 | [Announcements](./11-announcements/requirements.md) | Staff-authored messages to parents or co-workers; staff notification inbox; POS Echo |
+| 12 | [Pre-Registration](./12-pre-registration/requirements.md) | Public pre-reg form on portal domain; reCAPTCHA v3; POS approval queue; converts to enrollment on approval |
 
 ---
 
 ## Build Order (Recommended)
 
 ```
-01 → 02 → 03 → 04 → 05 → 06 → 07 → 08
+01 → 02 → 03 → 04 → 05 → 06 → 07 → 08 → 09 → 10 → 11 → 12
 ```
 
 Each spec depends on the previous. Do not begin a spec until the prior one's requirements are confirmed.

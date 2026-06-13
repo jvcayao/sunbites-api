@@ -6,10 +6,9 @@ use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
-use App\Models\BranchMonthlyAmount;
-use App\Models\Student;
 use App\Models\StudentContact;
 use App\Models\SystemConfiguration;
+use App\Services\EnrollmentService;
 use App\Services\ParentProvisioningService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +18,10 @@ use Illuminate\Validation\Rule;
 
 class EnrollmentController extends Controller
 {
-    public function __construct(private readonly ParentProvisioningService $provisioningService) {}
+    public function __construct(
+        private readonly EnrollmentService $enrollmentService,
+        private readonly ParentProvisioningService $provisioningService,
+    ) {}
 
     public function index(): JsonResponse
     {
@@ -47,10 +49,12 @@ class EnrollmentController extends Controller
         $validated = $request->validate([
             'branch_id' => ['required', 'exists:branches,id'],
             'student_number' => [
-                'required',
+                'nullable',
                 'string',
                 'max:50',
-                Rule::unique('students')->where(fn ($q) => $q->where('branch_id', $request->branch_id)),
+                Rule::unique('students')
+                    ->where(fn ($q) => $q->where('branch_id', $request->branch_id))
+                    ->whereNotNull('student_number'),
             ],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
@@ -90,30 +94,15 @@ class EnrollmentController extends Controller
         $validated['allergies'] = isset($validated['allergies']) ? strip_tags($validated['allergies']) : null;
         $validated['notes'] = isset($validated['notes']) ? strip_tags($validated['notes']) : null;
 
-        $student = DB::transaction(function () use ($validated, $request, $studentType) {
-            $qrCode = Student::generateUniqueQrCode();
-
+        $student = DB::transaction(function () use ($validated, $request) {
             $photoPath = null;
             if ($request->hasFile('photo')) {
                 $photoPath = $request->file('photo')->store('photos/students', 'private');
             }
 
-            $student = Student::create([
-                'branch_id' => $validated['branch_id'],
-                'student_number' => $validated['student_number'],
-                'first_name' => $validated['first_name'],
-                'last_name' => $validated['last_name'],
-                'grade_level' => $validated['grade_level'],
-                'section' => $validated['section'] ?? null,
-                'birthday' => $validated['birthday'],
+            $student = $this->enrollmentService->enroll(array_merge($validated, [
                 'photo_path' => $photoPath,
-                'allergies' => $validated['allergies'] ?? null,
-                'notes' => $validated['notes'] ?? null,
-                'qr_code' => $qrCode,
-                'student_type' => $validated['student_type'],
-                'enrollment_status' => 'enrolled',
-                'enrollment_date' => now()->toDateString(),
-            ]);
+            ]));
 
             foreach ($validated['contacts'] as $index => $contact) {
                 StudentContact::create([
@@ -134,10 +123,6 @@ class EnrollmentController extends Controller
                         $request->user()->id,
                     );
                 }
-            }
-
-            if ($studentType === StudentType::Subscription) {
-                $this->seedMonthlyPayments($student, $validated);
             }
 
             activity('students')
@@ -168,32 +153,5 @@ class EnrollmentController extends Controller
             'enrollment_date' => $student->enrollment_date->toDateString(),
             'subscription_period' => $subscriptionPeriod,
         ], 201);
-    }
-
-    private function seedMonthlyPayments(Student $student, array $validated): void
-    {
-        $startYear = (int) $validated['subscription_start_year'];
-        $endYear = (int) $validated['subscription_end_year'];
-        $startMonth = SchoolMonth::from($validated['subscription_start_month']);
-        $endMonth = SchoolMonth::from($validated['subscription_end_month']);
-
-        $start = Carbon::createFromDate($startYear, $startMonth->toMonthNumber(), 1);
-        $end = Carbon::createFromDate($endYear, $endMonth->toMonthNumber(), 1);
-
-        $current = $start->copy();
-        while ($current->lte($end)) {
-            $schoolMonth = SchoolMonth::fromMonthNumber($current->month);
-            if ($schoolMonth !== null) {
-                $year = $current->year;
-                $amount = BranchMonthlyAmount::resolveAmount($student->branch_id, $schoolMonth, $year);
-                $student->monthlyPayments()->create([
-                    'school_month' => $schoolMonth->value,
-                    'year' => $year,
-                    'status' => 'unpaid',
-                    'amount' => $amount,
-                ]);
-            }
-            $current->addMonth();
-        }
     }
 }

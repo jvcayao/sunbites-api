@@ -65,7 +65,7 @@
 - [x] `POST /api/v1/portal/auth/logout` — `auth:parents`, `ability:parent`
 
 ### 8.3 Frontend (`~/sunbites-portal`)
-- [x] Fix Zustand auth store — remove `persist` middleware and sessionStorage; token stored in memory only
+- [ ] Zustand auth store token storage — **DECISION NEEDED**: original spec said memory-only, but `lib/store/auth.ts` still uses `persist` + `sessionStorage`. With Reverb (Spec 10), memory-only causes logout on page refresh. Options: (a) keep sessionStorage, (b) memory-only + reconnect Echo on re-auth. Resolve before Spec 10 Task 7.
 - [x] `lib/api/auth.ts` — add `forgotPassword(email)` and `resetPassword(token, email, password, passwordConfirmation)` methods — done: implemented in `lib/api/portal.ts` as `portalAuthApi.forgotPassword/resetPassword`
 - [x] Login page — handle `account_not_activated` error: show message "Your account has not been activated yet. Check your email or contact the canteen."
 - [x] Forgot password page at `app/(auth)/forgot-password/page.tsx` — email input, generic success message on submit

@@ -6,12 +6,13 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
 class ParentUser extends Authenticatable
 {
-    use HasApiTokens;
+    use HasApiTokens, Notifiable;
 
     protected $table = 'parents';
 
@@ -61,6 +62,11 @@ class ParentUser extends Authenticatable
     {
         return $this->belongsToMany(Student::class, 'parent_student', 'parent_id', 'student_id')
             ->withPivot(['wallet_alert_threshold', 'linked_at', 'linked_by']);
+    }
+
+    public function receivesBroadcastNotificationsOn(): string
+    {
+        return "parents.{$this->id}";
     }
 
     public function feedbacks(): HasMany

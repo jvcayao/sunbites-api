@@ -51,6 +51,7 @@ class StudentResource extends JsonResource
                 'amount' => $p->amount,
                 'recorded_at' => $p->recorded_at?->toDateTimeString(),
             ])),
+            'deleted_at' => $this->when($this->deleted_at !== null, fn () => $this->deleted_at->toDateTimeString()),
         ];
     }
 }

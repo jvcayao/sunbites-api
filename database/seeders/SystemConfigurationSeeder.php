@@ -31,6 +31,20 @@ class SystemConfigurationSeeder extends Seeder
                 'label' => 'Loyalty Point Threshold (₱)',
                 'description' => 'Amount spent to earn one loyalty point.',
             ],
+            [
+                'key' => 'payment_reminder_days',
+                'value' => '14',
+                'type' => 'integer',
+                'label' => 'Payment Reminder Days',
+                'description' => 'Number of days before a payment is due to send a reminder notification to parents.',
+            ],
+            [
+                'key' => 'pre_registration_expiry_days',
+                'value' => '30',
+                'type' => 'integer',
+                'label' => 'Pre-Registration Expiry Days',
+                'description' => 'Number of days before a pending pre-registration expires automatically.',
+            ],
         ], ['key'], ['value', 'type', 'label', 'description']);
     }
 }

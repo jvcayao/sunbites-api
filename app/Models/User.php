@@ -104,6 +104,11 @@ class User extends Authenticatable
             ->withPivot(['assigned_at', 'assigned_by']);
     }
 
+    public function receivesBroadcastNotificationsOn(): string
+    {
+        return "staff.{$this->id}";
+    }
+
     public function staffDailyStatuses(): HasMany
     {
         return $this->hasMany(StaffDailyStatus::class);

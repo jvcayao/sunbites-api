@@ -20,7 +20,11 @@ class StudentController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Student::with([
+        $query = $request->deleted
+            ? Student::onlyTrashed()
+            : Student::query();
+
+        $query->with([
             'contacts' => fn ($q) => $q->where('is_primary', true),
             'monthlyPayments',
         ])
@@ -32,24 +36,28 @@ class StudentController extends Controller
                         ->orWhere('student_number', 'like', "%{$escaped}%");
                 });
             })
-            ->when($request->grade, fn ($q, $grade) => $q->where('grade_level', $grade))
-            ->when($request->status, fn ($q, $status) => $q->where('enrollment_status', $status))
-            ->when($request->type && $request->type !== 'all', fn ($q) => $q->where('student_type', $request->type));
+            ->when($request->grade, fn ($q, $grade) => $q->where('grade_level', $grade));
 
-        if ($request->type === 'subscription' && $request->month) {
-            $month = $request->month;
-            $paymentStatus = $request->payment_status;
-            $year = $request->year;
+        if (! $request->deleted) {
+            $query
+                ->when($request->status, fn ($q, $status) => $q->where('enrollment_status', $status))
+                ->when($request->type && $request->type !== 'all', fn ($q) => $q->where('student_type', $request->type));
 
-            $query->whereHas('monthlyPayments', function ($q) use ($month, $paymentStatus, $year) {
-                $q->where('school_month', $month);
-                if ($paymentStatus) {
-                    $q->where('status', $paymentStatus);
-                }
-                if ($year) {
-                    $q->where('year', $year);
-                }
-            });
+            if ($request->type === 'subscription' && $request->month) {
+                $month = $request->month;
+                $paymentStatus = $request->payment_status;
+                $year = $request->year;
+
+                $query->whereHas('monthlyPayments', function ($q) use ($month, $paymentStatus, $year) {
+                    $q->where('school_month', $month);
+                    if ($paymentStatus) {
+                        $q->where('status', $paymentStatus);
+                    }
+                    if ($year) {
+                        $q->where('year', $year);
+                    }
+                });
+            }
         }
 
         $students = $query->orderBy('last_name')->orderBy('first_name')
@@ -99,6 +107,15 @@ class StudentController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
+            'student_number' => [
+                'nullable',
+                'string',
+                'max:50',
+                Rule::unique('students')
+                    ->where(fn ($q) => $q->where('branch_id', $student->branch_id))
+                    ->ignore($student->id)
+                    ->whereNotNull('student_number'),
+            ],
             'grade_level' => ['required', 'string', 'in:'.implode(',', config('sunbites.grade_levels'))],
             'section' => ['nullable', 'string', 'max:100'],
             'birthday' => ['required', 'date', 'before:today'],
@@ -172,6 +189,22 @@ class StudentController extends Controller
             ->log('students.deleted');
 
         return response()->json(['message' => 'Student removed.']);
+    }
+
+    public function restore(Request $request, Student $student): JsonResponse
+    {
+        if (! $student->trashed()) {
+            return response()->json(['message' => 'Student is not deleted.'], 422);
+        }
+
+        $student->restore();
+
+        activity('students')
+            ->causedBy($request->user())
+            ->performedOn($student)
+            ->log('students.restored');
+
+        return response()->json(new StudentResource($student->fresh()));
     }
 
     public function updateStatus(Request $request, Student $student): JsonResponse
