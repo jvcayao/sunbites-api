@@ -10,7 +10,7 @@
         <div style="max-width:600px;margin:0 auto;">
 
             {{-- Header --}}
-            <div style="background-color:#1c1c1e;padding:28px 32px;text-align:center;border-radius:8px 8px 0 0;">
+            <div style="background-color:#f9fafb;padding:28px 32px;text-align:center;border-radius:8px 8px 0 0;">
                 <img src="{{ asset('images/sunbites.png') }}"
                      alt="Sunbites"
                      height="48"
@@ -23,9 +23,9 @@
             </div>
 
             {{-- Footer --}}
-            <div style="background-color:#f9fafb;padding:20px 32px;text-align:center;border-top:1px solid #e5e7eb;border-radius:0 0 8px 8px;">
-                <p style="margin:0;color:#9ca3af;font-size:12px;">Sunbites School Canteen Management System</p>
-                <p style="margin:4px 0 0;color:#9ca3af;font-size:12px;">&copy; {{ date('Y') }} Sunbites. All rights reserved.</p>
+            <div style="background-color:#1c1c1e;padding:20px 32px;text-align:center;border-radius:0 0 8px 8px;">
+                <p style="margin:0;color:#ffffff;font-size:12px;">Sunbites School Canteen Management System</p>
+                <p style="margin:4px 0 0;color:#ffffff;font-size:12px;">&copy; {{ date('Y') }} Sunbites. All rights reserved.</p>
             </div>
 
         </div>
