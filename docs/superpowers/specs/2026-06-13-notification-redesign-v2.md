@@ -187,8 +187,11 @@ interface NotificationItemProps {
 **Portal:**
 | Type | Action |
 |---|---|
-| `AnnouncementNotification` | `onMarkRead(id)` optimistic → expand inline accordion (panel stays open, `onNavigate` not called) |
+| `AnnouncementNotification` | `onMarkRead(id)` optimistic → toggle `expanded` local state — body expands inline (panel stays open, `onNavigate` not called) |
 | `PaymentReminderNotification` | `onMarkRead(id)` optimistic → `router.push("/payments")` → `onNavigate?.()` |
+
+**Portal `AnnouncementNotification` inline expansion detail:**
+The portal `NotificationItem` holds `const [expanded, setExpanded] = useState(false)` for announcement rows only. When `expanded` is true, a `<div>` below the preview renders the full `data.message` text (`text-sm text-foreground mt-2 pt-2 border-t`). The `line-clamp-2` on the preview is removed when expanded. Clicking the row again collapses it. This expansion works identically in the dropdown panel and on the full notifications page.
 
 ---
 
