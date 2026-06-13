@@ -86,3 +86,14 @@
 - [ ] 9.5 `app/(kitchen)/notifications/page.tsx` — full MagicBell redesign: type-aware cards for `AnnouncementNotification` and `PreRegistrationNotification`; click routing: announcement → `/announcements/{data.announcement_id}`, pre-registration → `/pre-registrations/{data.pre_registration_id}`; optimistic mark-as-read; empty state
 - [ ] 9.6 Update POS notification and layout component tests: assert single bell in header; assert `PreRegistrationNotification` event increments badge; assert click routing
 - [ ] 9.7 POS lint: 0 errors
+
+---
+
+## Task 10: Announcements Pages Redesign
+
+> Added 2026-06-13 — see `docs/superpowers/specs/2026-06-13-unified-notification-system-design.md` section "POS Announcements Page Redesign"
+
+- [ ] 10.1 `app/(kitchen)/announcements/page.tsx` — replace plain text list with card-based layout: recipient-type badge (purple=Parents, indigo=Staff), bold title, 2-line gray preview, footer (sender · sent count · read count), relative timestamp top-right, click navigates to detail; "New Announcement" button in header; empty state (Megaphone icon + "No announcements yet")
+- [ ] 10.2 `app/(kitchen)/announcements/create/page.tsx` — replace bare form with card-sectioned layout: "Send to" styled pill toggle buttons (not radio inputs); recipients searchable multi-select checklist with "Select all (N)" link and "N selected" badge; character count on textarea; Send button count reflects selection (disabled at 0)
+- [ ] 10.3 `app/(kitchen)/announcements/[id]/page.tsx` — two-panel detail: info card (badge, full title, full message, sender, sent-at, total recipients) + recipient table (Name, Status dot, Read at relative time); summary row "{N} read / {total}"
+- [ ] 10.4 POS lint: 0 errors

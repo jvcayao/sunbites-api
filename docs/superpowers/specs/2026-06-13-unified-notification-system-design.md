@@ -254,6 +254,70 @@ POS staff receives pre-registration:
 
 ---
 
+## POS Announcements Page Redesign
+
+### Current state (from screenshots)
+
+The Announcements list (`/announcements`) is a plain text list with no visual hierarchy. The create form (`/announcements/create`) is a bare white form with plain radio buttons and a flat checkbox list.
+
+### Redesigned Announcements List (`/announcements`)
+
+Each announcement is a **card** with clear visual structure:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  [Parents]  badge (purple)               Jun 13   →          │
+│  test 10  (bold title)                                       │
+│  qwewqewqewqe  (message preview, 2 lines gray)               │
+│  Sent by Jhersonnn Cayao  ·  1 sent  ·  1 read  (footer)    │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- Recipient type badge: "Parents" = purple, "Staff" = blue/indigo
+- Title: bold, 1 line, truncated
+- Message: gray, 2 lines max, truncated
+- Footer: sender name · sent count · read count (with `Eye` icon)
+- Timestamp: top-right, relative format ("Jun 13", "2h", "just now")
+- Right arrow (`→`) navigates to detail page on click
+- "+ New Announcement" button in page header (top-right)
+- Empty state: Megaphone illustration + "No announcements yet"
+
+### Redesigned Create Form (`/announcements/create`)
+
+Contained in a card with proper sections:
+
+**Section 1 — Content**
+- `Title` (optional) — single-line input with placeholder "e.g. Canteen notice"
+- `Message` — textarea, required, with character count in bottom-right corner
+
+**Section 2 — Recipients**
+- "Send to" — styled pill toggle buttons ("Parents" / "Staff"), not plain radio inputs
+- Recipients — searchable multi-select checklist:
+  - Search input at top
+  - "Select all (N)" link
+  - Each row: checkbox + recipient name + avatar initial
+  - Shows selected count: "3 selected" badge near the list header
+
+**Footer bar**
+- `Cancel` button (left)
+- `Send (N)` button (right, primary, disabled when 0 selected) — N reflects selected recipient count
+
+### Redesigned Detail Page (`/announcements/[id]`)
+
+Two-panel layout:
+
+**Left / Top — Announcement info card**
+- Badge (Parents / Staff)
+- Full title + full message (no truncation)
+- Sent by · Sent at · Total recipients
+
+**Right / Bottom — Recipient list table**
+- Columns: Name, Status (Read / Unread), Read at (relative time or "—")
+- Row: unread rows have a colored dot, read rows are grayed
+- Summary: "{N} read / {total}"
+
+---
+
 ## Summary of Files Changed
 
 | File | App | Change |
@@ -267,3 +331,6 @@ POS staff receives pre-registration:
 | `app/(kitchen)/notifications/page.tsx` | POS | Full MagicBell redesign, type-aware cards, click routing |
 | `lib/utils/relative-time.ts` | POS | New shared utility |
 | `types/staff-notification.ts` | POS | Add discriminated union |
+| `app/(kitchen)/announcements/page.tsx` | POS | Card-based list redesign |
+| `app/(kitchen)/announcements/create/page.tsx` | POS | Pill toggle recipients, character count, selected count |
+| `app/(kitchen)/announcements/[id]/page.tsx` | POS | Two-panel detail with recipient read status table |
