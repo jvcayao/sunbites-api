@@ -10,7 +10,7 @@
         <div style="max-width:600px;margin:0 auto;">
 
             {{-- Header --}}
-            <div style="background-color:#dc2626;padding:28px 32px;text-align:center;border-radius:8px 8px 0 0;">
+            <div style="background-color:#1c1c1e;padding:28px 32px;text-align:center;border-radius:8px 8px 0 0;">
                 <img src="{{ asset('images/sunbites.png') }}"
                      alt="Sunbites"
                      height="48"
