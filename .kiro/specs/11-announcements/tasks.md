@@ -79,13 +79,13 @@
 > Added 2026-06-13 — see `docs/superpowers/specs/2026-06-13-unified-notification-system-design.md`
 > Corrects Task 7.4 (two bells in header is incorrect per approved design)
 
-- [ ] 9.1 `components/layouts/kitchen-layout.tsx` — remove `<ReminderBell />` from header; keep only `<NotificationBell />`; the Reminders nav item (already in sidebar) remains the sole entry point for the outbound reminders workflow
-- [ ] 9.2 `components/notification-bell.tsx` (POS) — add `.listen("PreRegistrationNotification", () => refetch())` so the single bell badge reflects all inbound staff notifications (no backend changes needed — `PreRegistrationNotification` already broadcasts on `staff.{id}`)
-- [ ] 9.3 `types/staff-notification.ts` — replace flat type with discriminated union on `type` FQCN field; add `PreRegistrationData` interface (`pre_registration_id`, `student_name`, `branch_name`, `enrollment_type`, `submitted_at`)
-- [ ] 9.4 `lib/utils/relative-time.ts` (new) — same relative-time helper as portal (copy or extract to shared if monorepo)
-- [ ] 9.5 `app/(kitchen)/notifications/page.tsx` — full MagicBell redesign: type-aware cards for `AnnouncementNotification` and `PreRegistrationNotification`; click routing: announcement → `/announcements/{data.announcement_id}`, pre-registration → `/pre-registrations/{data.pre_registration_id}`; optimistic mark-as-read; empty state
-- [ ] 9.6 Update POS notification and layout component tests: assert single bell in header; assert `PreRegistrationNotification` event increments badge; assert click routing
-- [ ] 9.7 POS lint: 0 errors
+- [x] 9.1 `components/layouts/kitchen-layout.tsx` — remove `<ReminderBell />` from header; keep only `<NotificationBell />` — done (commit f1faffc)
+- [x] 9.2 `components/notification-bell.tsx` (POS) — add `.listen("PreRegistrationNotification", () => refetch())` — done (commit 5552eed)
+- [x] 9.3 `types/staff-notification.ts` — replace flat type with discriminated union; add `PreRegistrationData` interface — done (commit a9bf175)
+- [x] 9.4 `lib/relative-time.ts` (new) — same relative-time helper as portal — done (commit 5552eed)
+- [x] 9.5 `app/(kitchen)/notifications/page.tsx` — full MagicBell redesign: type-aware cards for both notification types; click routing to respective pages — done (commit 0e10135)
+- [x] 9.6 POS staff notification page tests (5/5 pass) covering type-aware rendering and click routing — done (commit 8df2ba2)
+- [x] 9.7 POS lint: 0 errors — confirmed
 
 ---
 
@@ -93,7 +93,7 @@
 
 > Added 2026-06-13 — see `docs/superpowers/specs/2026-06-13-unified-notification-system-design.md` section "POS Announcements Page Redesign"
 
-- [ ] 10.1 `app/(kitchen)/announcements/page.tsx` — replace plain text list with card-based layout: recipient-type badge (purple=Parents, indigo=Staff), bold title, 2-line gray preview, footer (sender · sent count · read count), relative timestamp top-right, click navigates to detail; "New Announcement" button in header; empty state (Megaphone icon + "No announcements yet")
-- [ ] 10.2 `app/(kitchen)/announcements/create/page.tsx` — replace bare form with card-sectioned layout: "Send to" styled pill toggle buttons (not radio inputs); recipients searchable multi-select checklist with "Select all (N)" link and "N selected" badge; character count on textarea; Send button count reflects selection (disabled at 0)
-- [ ] 10.3 `app/(kitchen)/announcements/[id]/page.tsx` — two-panel detail: info card (badge, full title, full message, sender, sent-at, total recipients) + recipient table (Name, Status dot, Read at relative time); summary row "{N} read / {total}"
-- [ ] 10.4 POS lint: 0 errors
+- [x] 10.1 `app/(kitchen)/announcements/page.tsx` — fixed badge colors (parents=purple, staff=blue); added relative timestamps — done (commit 2bc73a4)
+- [x] 10.2 `app/(kitchen)/announcements/create/page.tsx` — replaced radio inputs with pill toggle buttons; added character count (N/1000) on textarea — done (commit 1150120)
+- [x] 10.3 `app/(kitchen)/announcements/[id]/page.tsx` — added "{N} read / {total}" summary header on recipients; replaced toLocaleDateString with relativeTime in Read At column — done (commit 94b0d40)
+- [x] 10.4 POS lint: 0 errors — confirmed

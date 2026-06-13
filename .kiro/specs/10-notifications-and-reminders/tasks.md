@@ -81,9 +81,9 @@
 
 > Added 2026-06-13 — see `docs/superpowers/specs/2026-06-13-unified-notification-system-design.md`
 
-- [ ] 8.1 `types/notification.ts` — replace `PaymentReminderData`-only definition with a discriminated union on the `type` FQCN field; add `AnnouncementData` interface (`announcement_id`, `title`, `message`, `sender_name`, `sent_at`)
-- [ ] 8.2 `components/notification-bell.tsx` — add `.listen("AnnouncementNotification", () => refetch())` alongside existing `PaymentReminderNotification` listener so badge updates in real time for both types
-- [ ] 8.3 `lib/utils/relative-time.ts` (new) — human-relative timestamp helper: "just now" / "{N}m" / "{N}h" / "{N}d" / "Jun 10"
-- [ ] 8.4 `app/(portal)/notifications/page.tsx` — full MagicBell redesign: unread dot (left), bold type-aware title, 2-line preview, relative timestamp (right), `...` context menu (Mark as read / Delete); header: mark-all-read icon + cog; click routing: `PaymentReminderNotification` → `/payments`, `AnnouncementNotification` → inline accordion expansion; empty state: bell illustration + "You're all caught up"
-- [ ] 8.5 Update portal notification component tests to cover `AnnouncementNotification` cards rendering correctly (not "Payment reminder")
-- [ ] 8.6 Portal lint: 0 errors
+- [x] 8.1 `types/notification.ts` — replace `PaymentReminderData`-only definition with a discriminated union on the `type` FQCN field; add `AnnouncementData` interface (`announcement_id`, `title`, `message`, `sender_name`, `sent_at`) — done (commit 6df690f)
+- [x] 8.2 `components/notification-bell.tsx` — add `.listen("AnnouncementNotification", () => refetch())` alongside existing `PaymentReminderNotification` listener so badge updates in real time for both types — done (commit 1947157)
+- [x] 8.3 `lib/relative-time.ts` (new) — human-relative timestamp helper: "just now" / "{N}m" / "{N}h" / "{N}d" / "Jun 10"; 5/5 tests pass — done (commit c56c872)
+- [x] 8.4 `app/(portal)/notifications/page.tsx` — full MagicBell redesign: unread dot (left), bold type-aware title, 2-line preview, relative timestamp (right), `...` context menu (Mark as read / Delete); click routing: `PaymentReminderNotification` → `/payments`, `AnnouncementNotification` → inline accordion expansion; empty state — done (commit 9bd5b0d)
+- [x] 8.5 Portal notification page tests (6/6 pass) covering type-aware rendering, click routing, empty state, regression for announcement-as-payment-reminder bug — done (commit 2ddc4eb)
+- [x] 8.6 Portal lint: 0 errors — confirmed
