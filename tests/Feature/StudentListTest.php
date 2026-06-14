@@ -117,4 +117,45 @@ class StudentListTest extends TestCase
 
         $response->assertForbidden();
     }
+
+    public function test_deleted_filter_returns_only_soft_deleted_students(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $student->delete();
+
+        Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asSupervisor()->getJson('/api/v1/students?deleted=1');
+
+        $response->assertOk();
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
+        $response->assertJsonPath('data.0.id', $student->id);
+    }
+
+    public function test_active_list_excludes_soft_deleted_students(): void
+    {
+        $active = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $deleted = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $deleted->delete();
+
+        $response = $this->asSupervisor()->getJson('/api/v1/students');
+
+        $response->assertOk();
+        $response->assertJson(fn ($json) => $json->has('data', 1)->etc());
+        $response->assertJsonPath('data.0.id', $active->id);
+    }
+
+    public function test_deleted_filter_is_branch_scoped(): void
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $otherStudent = Student::withoutBranch()->create(
+            Student::factory()->make(['branch_id' => $otherBranch->id])->toArray()
+        );
+        $otherStudent->delete();
+
+        $response = $this->asSupervisor()->getJson('/api/v1/students?deleted=1');
+
+        $response->assertOk();
+        $response->assertJson(fn ($json) => $json->has('data', 0)->etc());
+    }
 }

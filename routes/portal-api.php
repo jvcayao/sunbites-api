@@ -5,9 +5,12 @@ use App\Http\Controllers\Portal\AuthController;
 use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\MealPlannerController;
+use App\Http\Controllers\Portal\NotificationController;
 use App\Http\Controllers\Portal\ProfileController;
 use App\Http\Controllers\Portal\StudentController;
+use App\Http\Controllers\Portal\StudentPaymentHistoryController;
 use App\Http\Controllers\Portal\WalletController;
+use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
 
 // Parent auth — public (rate limited)
@@ -22,6 +25,7 @@ Route::middleware(['auth:parents', 'ability:parent'])->group(function () {
     // Profile
     Route::get('/profile', [ProfileController::class, 'show']);
     Route::patch('/profile', [ProfileController::class, 'update']);
+    Route::post('/profile/change-password', [ProfileController::class, 'changePassword']);
     Route::post('/profile/photo', [ProfileController::class, 'uploadPhoto']);
 
     // Dashboard
@@ -43,4 +47,18 @@ Route::middleware(['auth:parents', 'ability:parent'])->group(function () {
 
     // Meal planner
     Route::get('/meal-planner', [MealPlannerController::class, 'show']);
+
+    // Broadcast auth for private channels (Reverb)
+    Route::post('/broadcasting/auth', [BroadcastController::class, 'authenticate']);
+
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
+    Route::delete('/notifications', [NotificationController::class, 'clearAll']);
+    Route::patch('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+
+    // Payment history per student
+    Route::get('/students/{student}/payment-history', [StudentPaymentHistoryController::class, 'index']);
 });

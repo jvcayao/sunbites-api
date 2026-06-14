@@ -24,6 +24,11 @@ class ParentController extends Controller
             ->orderBy('last_name')
             ->orderBy('first_name');
 
+        if (app()->bound('active_branch')) {
+            $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
+            );
+        }
+
         if (! empty($validated['search'])) {
             $search = '%'.mb_strtolower($validated['search']).'%';
             $query->where(fn ($q) => $q->whereRaw('lower(first_name) like ?', [$search])
@@ -66,7 +71,7 @@ class ParentController extends Controller
             'email' => $parent->email,
             'phone' => $parent->phone ?? $contact?->phone,
             'address' => $parent->address ?? $contact?->address,
-            'profile_photo_path' => $parent->profile_photo_path,
+            'profile_photo_url' => $parent->profile_photo_url,
             'is_activated' => $parent->isActivated(),
             'created_at' => $parent->created_at,
             'students' => $parent->students->map(fn ($s) => [

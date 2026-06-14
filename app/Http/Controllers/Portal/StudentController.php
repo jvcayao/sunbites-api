@@ -33,6 +33,7 @@ class StudentController extends Controller
                 'wallet_balance' => $student->wallet?->balanceFloat ?? 0,
                 'wallet_alert_threshold' => (float) $student->pivot->wallet_alert_threshold,
                 'linked_at' => $student->pivot->linked_at,
+                'subscription_monthly_status' => $student->currentMonthSubscriptionStatus(),
             ]);
 
         return response()->json(['data' => $students]);

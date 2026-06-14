@@ -26,6 +26,7 @@ system_configurations
 | `daily_meal_rate` | `135` | `decimal` | Daily Meal Rate (₱) |
 | `credit_limit` | `300` | `decimal` | Credit Limit (₱) |
 | `loyalty_point_threshold` | `1000` | `decimal` | Loyalty Point Threshold (₱) |
+| `payment_reminder_days` | `14` | `integer` | Payment Reminder Days (Spec 10) |
 
 ---
 

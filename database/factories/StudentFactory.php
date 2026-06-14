@@ -60,4 +60,9 @@ class StudentFactory extends Factory
     {
         return $this->state(fn () => ['enrollment_status' => EnrollmentStatus::Banned->value]);
     }
+
+    public function withoutStudentNumber(): static
+    {
+        return $this->state(['student_number' => null]);
+    }
 }

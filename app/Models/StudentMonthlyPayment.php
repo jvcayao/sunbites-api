@@ -3,11 +3,16 @@
 namespace App\Models;
 
 use App\Enums\SchoolMonth;
+use Database\Factories\StudentMonthlyPaymentFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class StudentMonthlyPayment extends Model
 {
+    /** @use HasFactory<StudentMonthlyPaymentFactory> */
+    use HasFactory;
+
     protected $fillable = [
         'student_id',
         'school_month',

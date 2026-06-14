@@ -17,11 +17,11 @@ class MealPlannerController extends Controller
      * @var array<string, array{ulam: string, vegetables: string, fruit: string, soup: string, snacks: string}>
      */
     private const DEFAULT_WEEK = [
-        'monday' => ['ulam' => 'Chicken Adobo', 'vegetables' => 'Chopsuey', 'fruit' => 'Mango', 'soup' => 'Nilaga Soup', 'snacks' => 'Graham Crackers'],
-        'tuesday' => ['ulam' => 'Pork Sinigang', 'vegetables' => 'Pinakbet', 'fruit' => 'Banana', 'soup' => 'Miso Soup', 'snacks' => 'Bread Roll'],
-        'wednesday' => ['ulam' => 'Fish Tinola', 'vegetables' => 'Laing', 'fruit' => 'Apple', 'soup' => 'Sinigang Broth', 'snacks' => 'Biscuit'],
-        'thursday' => ['ulam' => 'Beef Kaldereta', 'vegetables' => 'Ginisang Gulay', 'fruit' => 'Orange', 'soup' => 'Chicken Broth', 'snacks' => 'Banana Cue'],
-        'friday' => ['ulam' => 'Chicken Inasal', 'vegetables' => 'Ampalaya', 'fruit' => 'Watermelon', 'soup' => 'Corn Soup', 'snacks' => 'Puto'],
+        'monday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
+        'tuesday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
+        'wednesday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
+        'thursday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
+        'friday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
     ];
 
     public function show(Request $request): JsonResponse

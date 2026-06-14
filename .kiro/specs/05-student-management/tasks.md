@@ -33,7 +33,7 @@
   - [x] `index()` — returns branches and grade level config data for form
   - [x] `store()`:
     - [x] Validate all required fields
-    - [x] Validate `student_number` unique per branch (manually entered — school-assigned ID)
+    - [x] Validate `student_number` unique per branch when provided (manually entered — school-assigned ID); **⚠ now nullable — see Task 13 to make it optional**
     - [x] Sanitize `allergies` and `notes` via `strip_tags()` before storage
     - [x] Auto-generate `qr_code`: `'SB-' . Str::random(12)` with collision retry loop
     - [x] Create `Student` record
@@ -92,7 +92,7 @@
   - [x] Non-subscription student card: purple left border, wallet-only info box (purple tint), "Load Wallet" button (purple)
   - [x] Enrollment status badge: color-coded, clickable to open status picker popover
   - [x] Red "₱X Credit Owed" badge when `credit_balance > 0`
-  - [x] Payment reminder banner (14 days before month end, subscription students only)
+  - [ ] Payment reminder banner — moved to Spec 10 (Notifications & Reminders)
   - [x] Checkbox column for multi-select; floating action bar when ≥1 selected: `[🖨️ Print QR Codes]` `[✕ Clear Selection]`
   - [x] Batch QR print preview modal: 2 or 4 cards per row selector, `[🖨️ Print All]` button
   - [x] Print layout (`@media print`): 4 cards per row on A4, no sidebar/topbar/chrome
@@ -222,7 +222,7 @@
 ## 11. Tests
 
 ### 11.1 Existing Tests (passing)
-- [x] `EnrollmentTest` — subscription enrollment seeds 10 monthly payments; non-subscription enrollment skips; QR uniqueness collision retry; duplicate student_number rejected per branch; cashier cannot enroll (403)
+- [x] `EnrollmentTest` — subscription enrollment seeds 10 monthly payments; non-subscription enrollment skips; QR uniqueness collision retry; duplicate student_number rejected per branch when provided; cashier cannot enroll (403); **⚠ Task 13 adds: null student_number allowed; two nulls in same branch both succeed**
 - [x] `StudentListTest` — filters work; branch-scoped (other branch's students not returned); subscription/non-subscription grouping
 - [x] `StudentDetailTest` — profile update strips tags from notes/allergies; QR regeneration invalidates old code; status change with reason; soft delete retains orders
 - [x] `WalletTopUpTest` — cashier cannot top-up (403); reference number alphanumeric validation; new balance preview matches deposit
@@ -234,3 +234,45 @@
 - [x] `PaymentRangeTest` (new, 4 tests) — happy path, skip-existing, end-before-start 422, cashier 403
 - [x] `PaymentControllerTest` — update existing toggle and record tests to assert `year` is in response/request
 - [x] Update `EnrollmentTest` factory states — `StudentFactory::subscriptionPayload()` should accept optional subscription period fields
+
+## 12. Soft-Deleted Student Filter & Restore
+
+### 12.1 Backend
+- [x] Migration: no schema change needed — `deleted_at` column already exists on `students` table
+- [x] `StudentController::index()` — add `deleted` query parameter: `onlyTrashed()` branch + shared search/grade filters; unified query with ternary scope — simplifier refactored
+- [x] `StudentController::index()` response — `deleted_at` included in StudentResource conditionally
+- [x] New `StudentController::restore()` — 422 guard if not trashed; `$student->restore()`; logs `students.restored`; returns `StudentResource`; admin|manager|supervisor
+- [x] Route: `POST /students/{student}/restore` with `->withTrashed()` — registered in admin|manager|supervisor group
+- [x] `StudentResource` — `deleted_at` conditionally included; simplifier removed redundant null-safe operator
+- [x] Pattern follows `UserManagementController::reactivate()`
+
+### 12.2 Frontend (sunbites-pos)
+- [x] "Show Deleted" / "Hide Deleted" toggle pill button (red filled when active)
+- [x] `showDeleted` state drives `deleted: 1` query param
+- [x] `DeletedStudentCard` component: shows "Removed: {date}", `[Restore]` button only, hides Edit/Wallet/Remove
+- [x] `[Restore]` → `useMutation` → `studentApi.restore()` → invalidate list + toast "Student restored."
+- [x] `restore(id)` added to `lib/api/students.ts`
+- [x] Deleted view hides type tabs and month filter; keeps search + grade
+
+### 12.3 Tests
+- [x] `StudentListTest` — 3 new tests: deleted filter / active list excludes deleted / branch-scoped
+- [x] `StudentRestoreTest` — 4 tests: restore 200, activity log, cashier 403, active student 422 — 14/14 pass; simplifier extracted `asUser()` helper
+
+## 13. Nullable / Editable Student Number
+
+### 13.1 Backend
+- [x] Migration: `make_student_number_nullable_on_students_table` — column now NULL; 412/412 tests pass
+- [x] `EnrollmentController::store()` — `nullable` + `whereNotNull()` uniqueness guard
+- [x] `StudentController::update()` — `student_number` added with `nullable` + `ignore()->whereNotNull()`; included via `$student->update($validated)` passthrough
+- [x] `StudentResource` — no change needed; null returned as-is
+- [x] `StudentFactory` — `withoutStudentNumber()` state added
+
+### 13.2 Frontend (sunbites-pos)
+- [x] `enrollment/page.tsx` — label "Student No. (optional)"; removed `required`; Zod: `.optional().or(z.literal(''))`;  empty string → null before submit
+- [x] `students/[id]/page.tsx` — `EditProfileForm` adds `studentNumber` state + field + payload; success screen shows "—" when null
+- [x] `types/student.ts` — `student_number: string | null`; `UpdateStudentPayload` has `student_number?: string | null`
+- [x] `student_number` displays "—" when null in InfoRow
+
+### 13.3 Tests
+- [x] `EnrollmentTest` — 3 new tests: null succeeds, two nulls both succeed, duplicate still 422
+- [x] `StudentDetailTest` — 3 new tests: update succeeds, duplicate 422, clear to null succeeds — 34/34 pass; 412/412 full suite

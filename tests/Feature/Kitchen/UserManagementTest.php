@@ -5,8 +5,8 @@ namespace Tests\Feature\Kitchen;
 use App\Http\Resources\UserResource;
 use App\Models\Branch;
 use App\Models\User;
+use App\Notifications\StaffResetPasswordNotification;
 use Database\Seeders\PermissionSeeder;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -268,7 +268,26 @@ class UserManagementTest extends TestCase
             ->postJson("/api/v1/users/{$staff->id}/reset-password");
 
         $response->assertOk();
-        Notification::assertSentTo($staff, ResetPassword::class);
+        Notification::assertSentTo($staff, StaffResetPasswordNotification::class);
+    }
+
+    public function test_password_reset_notification_url_points_to_pos_app(): void
+    {
+        Notification::fake();
+
+        $staff = User::factory()->create(['email' => 'staff@example.com']);
+        $staff->assignRole('cashier');
+
+        $this->withToken($this->adminToken())
+            ->postJson("/api/v1/users/{$staff->id}/reset-password")
+            ->assertOk();
+
+        Notification::assertSentTo($staff, StaffResetPasswordNotification::class, function (StaffResetPasswordNotification $notification) use ($staff) {
+            $url = $notification->toMail($staff)->viewData['resetUrl'];
+            $posUrl = config('app.pos_url');
+
+            return str_starts_with($url, $posUrl) && str_contains($url, 'reset-password');
+        });
     }
 
     public function test_photo_upload_rejects_invalid_mime(): void

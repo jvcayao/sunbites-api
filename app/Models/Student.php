@@ -3,8 +3,10 @@
 namespace App\Models;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\MenuCategory;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Models\Concerns\HasBranch;
 use Bavix\Wallet\Interfaces\Wallet;
@@ -132,6 +134,62 @@ class Student extends Model implements Wallet
         )->with('menuItem')->get()
             ->groupBy(fn ($item) => $item->menuItem->category->value)
             ->map(fn ($items) => $items->sum('quantity'));
+    }
+
+    /**
+     * Monthly meal usage per category for the given school month.
+     * Uses withoutGlobalScopes() on the Order relation so this is safe
+     * to call from both kitchen (branch-scoped) and portal (no active branch) contexts.
+     *
+     * @return Collection<string, int>
+     */
+    public function monthlySubscriptionUsageByCategory(SchoolMonth $month, int $year): Collection
+    {
+        return OrderItem::whereHas('order', fn ($q) => $q
+            ->withoutGlobalScopes()
+            ->where('student_id', $this->id)
+            ->where('payment_method', PaymentMethod::Subscription)
+            ->where('status', OrderStatus::Completed)
+            ->whereYear('created_at', $year)
+            ->whereMonth('created_at', $month->toMonthNumber())
+        )->with('menuItem')->get()
+            ->groupBy(fn ($item) => $item->menuItem->category->value)
+            ->map(fn ($items) => $items->sum('quantity'));
+    }
+
+    /** @return array<string, mixed>|null */
+    public function currentMonthSubscriptionStatus(): ?array
+    {
+        if ($this->student_type !== StudentType::Subscription) {
+            return null;
+        }
+
+        $month = SchoolMonth::fromMonthNumber(now()->month);
+        if ($month === null) {
+            return null;
+        }
+
+        $year = now()->year;
+        $config = BranchSubscriptionConfig::forBranch($this->branch_id);
+        $days = config('sunbites.school_months')[$month->value]['days'];
+        $used = $this->monthlySubscriptionUsageByCategory($month, $year);
+
+        $categories = [];
+        foreach (MenuCategory::cases() as $category) {
+            $allocated = $days * $config->limitForCategory($category);
+            $usedCount = (int) ($used[$category->value] ?? 0);
+            $categories[$category->value] = [
+                'allocated' => $allocated,
+                'used' => $usedCount,
+                'remaining' => max(0, $allocated - $usedCount),
+            ];
+        }
+
+        return [
+            'month' => $month->value,
+            'year' => $year,
+            'categories' => $categories,
+        ];
     }
 
     public static function generateUniqueQrCode(): string

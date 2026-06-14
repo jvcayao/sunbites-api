@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Kitchen\ActivityLogController;
+use App\Http\Controllers\Kitchen\AnnouncementController;
 use App\Http\Controllers\Kitchen\AuthController;
 use App\Http\Controllers\Kitchen\BillingReportController;
 use App\Http\Controllers\Kitchen\BranchController;
@@ -20,17 +21,22 @@ use App\Http\Controllers\Kitchen\MealPlannerController;
 use App\Http\Controllers\Kitchen\ParentController;
 use App\Http\Controllers\Kitchen\PaymentController;
 use App\Http\Controllers\Kitchen\PosMenuItemController;
+use App\Http\Controllers\Kitchen\PreRegistrationController;
+use App\Http\Controllers\Kitchen\ReminderController;
 use App\Http\Controllers\Kitchen\SalesReportController;
+use App\Http\Controllers\Kitchen\StaffNotificationController;
 use App\Http\Controllers\Kitchen\StudentContactController;
 use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\StudentReportController;
 use App\Http\Controllers\Kitchen\SubscriptionConfigController;
+use App\Http\Controllers\Kitchen\SubscriptionReportController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
 use App\Http\Controllers\Kitchen\UserManagementController;
 use App\Http\Controllers\Kitchen\WalletController;
 use App\Http\Controllers\Kitchen\WalletReportController;
+use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
 
 // Staff auth — public (rate limited)
@@ -40,6 +46,8 @@ Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])->m
 
 // Staff auth — authenticated
 Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
+    Route::post('/broadcasting/auth', [BroadcastController::class, 'authenticate']);
+
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/user', [AuthController::class, 'user']);
     Route::post('/auth/branch', [AuthController::class, 'setBranch']);
@@ -138,6 +146,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/students/{student}/photo', [StudentController::class, 'uploadPhoto']);
         Route::put('/students/{student}', [StudentController::class, 'update']);
         Route::delete('/students/{student}', [StudentController::class, 'destroy']);
+        Route::post('/students/{student}/restore', [StudentController::class, 'restore'])->withTrashed();
         Route::post('/students/{student}/regenerate-qr', [StudentController::class, 'regenerateQr']);
         Route::patch('/students/{student}/status', [StudentController::class, 'updateStatus']);
         Route::patch('/students/{student}/type', [StudentController::class, 'updateType']);
@@ -190,6 +199,43 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/dashboard/staff-status', [DashboardController::class, 'updateStaffStatus']);
     });
 
+    // Reminders — bell count visible to all staff; management restricted by role
+    Route::get('/reminders/bell-count', [ReminderController::class, 'bellCount']);
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::get('/reminders/eligible-parents', [ReminderController::class, 'eligibleParents']);
+        Route::get('/reminders/parents/{parent}', [ReminderController::class, 'show']);
+    });
+    Route::middleware('role:admin|manager')->group(function () {
+        Route::post('/reminders/send', [ReminderController::class, 'send']);
+    });
+
+    // Staff notifications (inbox) — all staff roles
+    Route::get('/staff/notifications/unread-count', [StaffNotificationController::class, 'unreadCount']);
+    Route::get('/staff/notifications', [StaffNotificationController::class, 'index']);
+    Route::post('/staff/notifications/mark-all-read', [StaffNotificationController::class, 'markAllRead']);
+    Route::patch('/staff/notifications/{id}/read', [StaffNotificationController::class, 'markRead']);
+    Route::delete('/staff/notifications/{id}', [StaffNotificationController::class, 'destroy']);
+
+    // Announcements — supervisor+ can send; all supervisor+ can list/show
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::get('/announcements', [AnnouncementController::class, 'index']);
+        Route::post('/announcements', [AnnouncementController::class, 'store']);
+        Route::get('/announcements/{announcement}', [AnnouncementController::class, 'show']);
+    });
+
+    // Pre-Registrations
+    Route::middleware('role:admin|manager|supervisor')->group(function () {
+        Route::get('/pre-registrations', [PreRegistrationController::class, 'index']);
+        Route::get('/pre-registrations/{preRegistration}', [PreRegistrationController::class, 'show']);
+        Route::patch('/pre-registrations/{preRegistration}', [PreRegistrationController::class, 'update']);
+        Route::post('/pre-registrations/{preRegistration}/reactivate', [PreRegistrationController::class, 'reactivate']);
+    });
+
+    Route::middleware('role:admin|manager')->group(function () {
+        Route::post('/pre-registrations/{preRegistration}/approve', [PreRegistrationController::class, 'approve']);
+        Route::post('/pre-registrations/{preRegistration}/reject', [PreRegistrationController::class, 'reject']);
+    });
+
     // Reports
     Route::prefix('reports')->group(function () {
         Route::middleware('role:admin|manager|supervisor')->group(function () {
@@ -197,6 +243,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
             Route::get('/students', [StudentReportController::class, 'index']);
             Route::get('/inventory', [InventoryReportController::class, 'index']);
             Route::get('/billing', [BillingReportController::class, 'index']);
+            Route::get('/subscription', [SubscriptionReportController::class, 'index']);
         });
 
         Route::middleware('role:admin|manager')->group(function () {
