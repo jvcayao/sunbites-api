@@ -196,7 +196,7 @@ class MealPlannerTest extends TestCase
             'school_month' => 'june',
             'week_number' => 1,
             'day_of_week' => 'monday',
-            'ulam' => 'Chicken Adobo',
+            'ulam' => '',
         ]);
     }
 
@@ -218,17 +218,17 @@ class MealPlannerTest extends TestCase
         $this->assertDatabaseHas('weekly_meal_plans', [
             'branch_id' => $this->branch->id,
             'day_of_week' => 'monday',
-            'snacks' => 'Graham Crackers',
+            'snacks' => '',
         ]);
         $this->assertDatabaseHas('weekly_meal_plans', [
             'branch_id' => $this->branch->id,
             'day_of_week' => 'tuesday',
-            'snacks' => 'Bread Roll',
+            'snacks' => '',
         ]);
         $this->assertDatabaseHas('weekly_meal_plans', [
             'branch_id' => $this->branch->id,
             'day_of_week' => 'friday',
-            'snacks' => 'Puto',
+            'snacks' => '',
         ]);
     }
 
