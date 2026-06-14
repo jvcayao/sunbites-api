@@ -20,16 +20,37 @@ class SubscriptionReportController extends Controller
         $validated = $request->validate([
             'month' => ['required', Rule::in(array_column(SchoolMonth::cases(), 'value'))],
             'year' => ['required', 'integer', 'min:2020', 'max:2099'],
+            'status' => ['sometimes', Rule::in(['paid', 'unpaid', 'not_recorded'])],
+            'grade_level' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
         ]);
 
         $monthEnum = SchoolMonth::from($validated['month']);
         $year = (int) $validated['year'];
         $branch = app('active_branch');
+        $status = $validated['status'] ?? null;
+        $gradeLevel = $validated['grade_level'] ?? null;
+        $search = $validated['search'] ?? null;
 
         // Paginate subscription students for this branch
         $students = Student::where('branch_id', $branch->id)
             ->where('student_type', 'subscription')
             ->whereNull('deleted_at')
+            ->when($gradeLevel, fn ($q) => $q->where('grade_level', $gradeLevel))
+            ->when($search, fn ($q) => $q->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('student_number', 'like', "%{$search}%");
+            }))
+            ->when($status === 'not_recorded', fn ($q) => $q->whereDoesntHave('monthlyPayments', fn ($pq) => $pq
+                ->where('school_month', $monthEnum->value)
+                ->where('year', $year)
+            ))
+            ->when($status === 'paid' || $status === 'unpaid', fn ($q) => $q->whereHas('monthlyPayments', fn ($pq) => $pq
+                ->where('school_month', $monthEnum->value)
+                ->where('year', $year)
+                ->where('status', $status)
+            ))
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->paginate(20);
