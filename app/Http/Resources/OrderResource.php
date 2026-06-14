@@ -38,7 +38,7 @@ class OrderResource extends JsonResource
                 'full_name' => $this->student->full_name,
                 'grade_level' => $this->student->grade_level,
                 'section' => $this->student->section,
-                'wallet_balance' => $this->student->wallet?->balanceFloat ?? 0,
+                'wallet_balance' => $this->student->wallet?->balanceFloatNum ?? 0.0,
                 'credit_balance' => $this->student->credit_balance,
                 'points' => $this->student->points,
             ]),

@@ -141,7 +141,7 @@ class CheckoutController extends Controller
                 }
 
                 if ($paymentMethod === PaymentMethod::Wallet) {
-                    $walletBalance = $student->wallet?->balanceFloat ?? 0;
+                    $walletBalance = $student->wallet?->balanceFloatNum ?? 0.0;
                     $shortfall = $total - $walletBalance;
 
                     if ($shortfall > 0 && ! $useCredit) {
@@ -162,7 +162,7 @@ class CheckoutController extends Controller
             $isCredit = false;
 
             if ($paymentMethod === PaymentMethod::Wallet && $student) {
-                $walletBalance = $student->wallet?->balanceFloat ?? 0;
+                $walletBalance = $student->wallet?->balanceFloatNum ?? 0.0;
                 $shortfall = $total - $walletBalance;
 
                 if ($shortfall > 0 && $useCredit) {
@@ -271,7 +271,7 @@ class CheckoutController extends Controller
         $order->load(['items', 'student.wallet', 'cashier']);
 
         if ($order->payment_method === PaymentMethod::Wallet && $order->student_id) {
-            $currentBalance = $order->student->wallet?->balanceFloat ?? 0;
+            $currentBalance = $order->student->wallet?->balanceFloatNum ?? 0.0;
             WalletAlertJob::dispatch($order->student_id, $currentBalance);
         }
 

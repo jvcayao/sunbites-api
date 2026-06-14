@@ -48,10 +48,16 @@ class StudentDetailTest extends TestCase
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
+        activity('students')->causedBy($this->manager)->performedOn($student)->log('students.updated');
+
         $response = $this->asManager()->getJson("/api/v1/students/{$student->id}");
 
         $response->assertOk();
         $response->assertJsonStructure(['student', 'subscription_monthly_status', 'wallet_transactions', 'activity_logs']);
+
+        $log = collect($response->json('activity_logs'))->firstWhere('description', 'students.updated');
+        $this->assertNotNull($log, 'Expected activity log entry not found in response.');
+        $this->assertEquals($this->manager->full_name, $log['causer_name']);
     }
 
     public function test_manager_can_update_student_profile(): void

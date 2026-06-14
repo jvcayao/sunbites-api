@@ -35,7 +35,7 @@ class WalletController extends Controller
                 'id' => $student->id,
                 'full_name' => $student->full_name,
             ],
-            'balance' => $student->wallet?->balanceFloat ?? 0,
+            'balance' => $student->wallet?->balanceFloatNum ?? 0.0,
             'wallet_alert_threshold' => $pivot ? (float) $pivot->wallet_alert_threshold : 0.0,
             'data' => collect($transactions->items())->map(fn ($tx) => [
                 'id' => $tx->id,

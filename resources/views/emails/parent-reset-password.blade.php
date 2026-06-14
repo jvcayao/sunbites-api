@@ -3,10 +3,10 @@
         Reset your password
     </h2>
 
-    <p style="margin:0 0 16px;">Hi {{ $name }},</p>
+    <p style="margin:0 0 16px;">Hi {{ $firstName }},</p>
 
     <p style="margin:0 0 20px;">
-        We received a request to reset the password for your Sunbites staff account.
+        We received a request to reset the password for your Sunbites Parent Portal account.
         Click the button below to set a new password.
     </p>
 

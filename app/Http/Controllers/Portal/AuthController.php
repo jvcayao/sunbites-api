@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
-use App\Mail\ParentWelcomeMail;
+use App\Mail\ParentResetPasswordMail;
 use App\Models\ParentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -75,7 +75,7 @@ class AuthController extends Controller
 
         if ($parent) {
             $token = Password::broker('parents')->createToken($parent);
-            Mail::to($parent->email)->queue(new ParentWelcomeMail($parent, $token));
+            Mail::to($parent->email)->queue(new ParentResetPasswordMail($parent, $token));
         }
 
         return response()->json([

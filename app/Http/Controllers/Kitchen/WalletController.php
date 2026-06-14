@@ -39,13 +39,13 @@ class WalletController extends Controller
                 'amount' => $validated['amount'],
                 'payment_method' => $validated['payment_method'],
                 'reference' => $validated['reference_number'] ?? null,
-                'new_balance' => $student->wallet?->balanceFloat ?? 0,
+                'new_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
             ])
             ->log('wallet.topped_up');
 
         return response()->json([
             'message' => 'Wallet topped up successfully.',
-            'new_balance' => $student->wallet?->balanceFloat ?? 0,
+            'new_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
         ]);
     }
 }
