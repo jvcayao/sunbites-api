@@ -145,4 +145,21 @@ class ParentAccountManagementTest extends TestCase
 
         $response->assertNotFound();
     }
+
+    // -------------------------------------------------------------------------
+    // portal login — disabled parent
+    // -------------------------------------------------------------------------
+
+    public function test_disabled_parent_cannot_login_to_portal(): void
+    {
+        $parent = ParentUser::factory()->disabled()->create();
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => $parent->email,
+            'password' => 'Password1',
+        ]);
+
+        $response->assertStatus(401);
+        $response->assertJson(['error' => 'account_disabled']);
+    }
 }
