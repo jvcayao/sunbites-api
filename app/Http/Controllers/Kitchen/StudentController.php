@@ -97,6 +97,7 @@ class StudentController extends Controller
 
         return response()->json([
             'student' => new StudentResource($student),
+            'subscription_monthly_status' => $student->currentMonthSubscriptionStatus(),
             'wallet_transactions' => $walletTransactions,
             'activity_logs' => $activityLogs,
         ]);

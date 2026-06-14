@@ -119,11 +119,11 @@ class BillingReportController extends Controller
             ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])))
             ->when(isset($validated['search']), function ($q) use ($validated) {
                 $like = '%'.mb_strtolower($validated['search']).'%';
-                $q->whereHas('student', fn ($sq) => $sq
-                    ->whereRaw('lower(first_name) like ?', [$like])
-                    ->orWhereRaw('lower(last_name) like ?', [$like])
-                    ->orWhereRaw('lower(student_number) like ?', [$like])
-                );
+                $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($like) {
+                    $inner->whereRaw('lower(first_name) like ?', [$like])
+                        ->orWhereRaw('lower(last_name) like ?', [$like])
+                        ->orWhereRaw('lower(student_number) like ?', [$like]);
+                }));
             });
     }
 }

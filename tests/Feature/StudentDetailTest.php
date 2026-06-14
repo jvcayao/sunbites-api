@@ -51,7 +51,7 @@ class StudentDetailTest extends TestCase
         $response = $this->asManager()->getJson("/api/v1/students/{$student->id}");
 
         $response->assertOk();
-        $response->assertJsonStructure(['student', 'wallet_transactions', 'activity_logs']);
+        $response->assertJsonStructure(['student', 'subscription_monthly_status', 'wallet_transactions', 'activity_logs']);
     }
 
     public function test_manager_can_update_student_profile(): void
