@@ -185,7 +185,7 @@ class ParentAccountManagementTest extends TestCase
         ]);
     }
 
-    public function test_index_with_include_deleted_returns_soft_deleted_parents(): void
+    public function test_index_with_status_deleted_returns_only_soft_deleted_parents(): void
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
@@ -196,14 +196,15 @@ class ParentAccountManagementTest extends TestCase
         $deleted->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
         $deleted->delete();
 
-        $response = $this->asAdmin()->getJson('/api/v1/references/parents?include_deleted=1');
+        $response = $this->asAdmin()->getJson('/api/v1/references/parents?status=deleted');
 
         $response->assertOk();
         $ids = collect($response->json('data'))->pluck('id');
         $this->assertTrue($ids->contains($deleted->id));
+        $this->assertFalse($ids->contains($active->id));
     }
 
-    public function test_index_without_include_deleted_excludes_soft_deleted_parents(): void
+    public function test_index_without_status_excludes_soft_deleted_parents(): void
     {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
@@ -219,6 +220,46 @@ class ParentAccountManagementTest extends TestCase
         $response->assertOk();
         $ids = collect($response->json('data'))->pluck('id');
         $this->assertFalse($ids->contains($deleted->id));
+    }
+
+    public function test_index_with_status_disabled_returns_only_disabled_parents(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $active = ParentUser::factory()->create();
+        $active->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $disabled = ParentUser::factory()->disabled()->create();
+        $disabled->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/references/parents?status=disabled');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($disabled->id));
+        $this->assertFalse($ids->contains($active->id));
+    }
+
+    public function test_index_with_status_active_returns_only_activated_non_disabled_parents(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $active = ParentUser::factory()->create();
+        $active->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $disabled = ParentUser::factory()->disabled()->create();
+        $disabled->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $unactivated = ParentUser::factory()->unactivated()->create();
+        $unactivated->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/references/parents?status=active');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($active->id));
+        $this->assertFalse($ids->contains($disabled->id));
+        $this->assertFalse($ids->contains($unactivated->id));
     }
 
     // -------------------------------------------------------------------------

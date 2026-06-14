@@ -29,16 +29,20 @@ class ParentController extends Controller
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'include_deleted' => ['nullable', 'boolean'],
+            'status' => ['nullable', 'in:active,pending,disabled,deleted'],
         ]);
 
         $query = ParentUser::with('students:id,first_name,last_name,student_number,branch_id')
             ->orderBy('last_name')
             ->orderBy('first_name');
 
-        if ($validated['include_deleted'] ?? false) {
-            $query->withTrashed();
-        }
+        match ($validated['status'] ?? null) {
+            'active' => $query->whereNotNull('email_verified_at')->whereNull('disabled_at'),
+            'pending' => $query->whereNull('email_verified_at')->whereNull('disabled_at'),
+            'disabled' => $query->whereNotNull('disabled_at'),
+            'deleted' => $query->onlyTrashed(),
+            default => null,
+        };
 
         if (app()->bound('active_branch')) {
             $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
