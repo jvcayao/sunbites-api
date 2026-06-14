@@ -317,6 +317,81 @@ class StudentDetailTest extends TestCase
         $this->assertNull($response->json('student.subscription_monthly_status'));
     }
 
+    public function test_monthly_subscription_status_counts_completed_subscription_orders_only(): void
+    {
+        $student = Student::factory()->subscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+        ]);
+
+        BranchSubscriptionConfig::factory()->create([
+            'branch_id' => $this->branch->id,
+            'meal_daily_limit' => 1,
+            'snack_daily_limit' => 1,
+            'drink_daily_limit' => 1,
+            'extra_daily_limit' => 1,
+        ]);
+
+        $cashier = User::factory()->create();
+        $cashier->assignRole('cashier');
+
+        $mealItem = PosMenuItem::factory()->subscriptionEligible()->create([
+            'branch_id' => $this->branch->id,
+            'category' => MenuCategory::Meal->value,
+        ]);
+
+        // Completed subscription order this month → should count
+        $completedOrder = Order::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'subscription',
+            'status' => 'completed',
+        ]);
+        OrderItem::factory()->create([
+            'order_id' => $completedOrder->id,
+            'pos_menu_item_id' => $mealItem->id,
+            'quantity' => 2,
+        ]);
+
+        // Voided subscription order → should NOT count
+        $voidedOrder = Order::factory()->voided()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'subscription',
+        ]);
+        OrderItem::factory()->create([
+            'order_id' => $voidedOrder->id,
+            'pos_menu_item_id' => $mealItem->id,
+            'quantity' => 5,
+        ]);
+
+        // Cash order → should NOT count
+        $cashOrder = Order::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'cash',
+            'status' => 'completed',
+        ]);
+        OrderItem::factory()->create([
+            'order_id' => $cashOrder->id,
+            'pos_menu_item_id' => $mealItem->id,
+            'quantity' => 3,
+        ]);
+
+        $status = $student->currentMonthSubscriptionStatus();
+
+        if ($status === null) {
+            $this->markTestSkipped('Current month is not a school month.');
+        }
+
+        $mealStatus = $status['categories']['meal'];
+        $this->assertEquals(2, $mealStatus['used']);
+        $this->assertEquals($mealStatus['allocated'] - 2, $mealStatus['remaining']);
+        $this->assertEquals(0, $status['categories']['snack']['used']);
+    }
+
     public function test_daily_status_counts_only_completed_subscription_orders_from_today(): void
     {
         $student = Student::factory()->subscription()->create([
