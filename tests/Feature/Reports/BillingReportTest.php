@@ -223,4 +223,93 @@ class BillingReportTest extends TestCase
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
     }
+
+    public function test_search_by_first_name_returns_matching_students(): void
+    {
+        $year = now()->year;
+
+        $maria = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
+        ]);
+        $pedro = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Pedro',
+            'last_name' => 'Reyes',
+        ]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $maria->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+        StudentMonthlyPayment::create([
+            'student_id' => $pedro->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&search=maria");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Maria Santos', $response->json('data.0.student.full_name'));
+    }
+
+    public function test_search_by_student_number_returns_matching_student(): void
+    {
+        $year = now()->year;
+
+        $target = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => 'STU-2026-001',
+        ]);
+        $other = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => 'STU-2026-002',
+        ]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $target->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+        StudentMonthlyPayment::create([
+            'student_id' => $other->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&search=STU-2026-001");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_with_no_match_returns_empty_data(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&search=doesnotexist");
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+    }
 }

@@ -103,6 +103,7 @@ class BillingReportController extends Controller
             'school_month' => ['nullable', 'string', Rule::in($this->schoolMonthValues())],
             'status' => ['nullable', 'string', 'in:paid,unpaid'],
             'grade_level' => ['nullable', 'string'],
+            'search' => ['nullable', 'string', 'max:100'],
         ];
     }
 
@@ -115,6 +116,14 @@ class BillingReportController extends Controller
             ->where('year', $validated['year'])
             ->when(isset($validated['school_month']), fn ($q) => $q->where('school_month', $validated['school_month']))
             ->when(isset($validated['status']), fn ($q) => $q->where('status', $validated['status']))
-            ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])));
+            ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])))
+            ->when(isset($validated['search']), function ($q) use ($validated) {
+                $like = '%'.mb_strtolower($validated['search']).'%';
+                $q->whereHas('student', fn ($sq) => $sq
+                    ->whereRaw('lower(first_name) like ?', [$like])
+                    ->orWhereRaw('lower(last_name) like ?', [$like])
+                    ->orWhereRaw('lower(student_number) like ?', [$like])
+                );
+            });
     }
 }
