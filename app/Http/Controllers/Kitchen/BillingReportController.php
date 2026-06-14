@@ -105,6 +105,8 @@ class BillingReportController extends Controller
             'grade_level' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],
             'recorded_by' => ['nullable', 'integer', 'exists:users,id'],
+            'recorded_from' => ['nullable', 'date'],
+            'recorded_to' => ['nullable', 'date'],
         ];
     }
 
@@ -119,6 +121,24 @@ class BillingReportController extends Controller
             ->when(isset($validated['status']), fn ($q) => $q->where('status', $validated['status']))
             ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])))
             ->when(isset($validated['recorded_by']), fn ($q) => $q->where('recorded_by', $validated['recorded_by']))
+            ->when(
+                isset($validated['recorded_from']) || isset($validated['recorded_to']),
+                fn ($q) => $q->where(function ($inner) use ($validated) {
+                    $inner->whereNotNull('recorded_at')
+                        ->when(
+                            isset($validated['recorded_from']),
+                            fn ($d) => $d->whereDate('recorded_at', '>=', $validated['recorded_from'])
+                        )
+                        ->when(
+                            isset($validated['recorded_to']),
+                            fn ($d) => $d->whereDate('recorded_at', '<=', $validated['recorded_to'])
+                        );
+
+                    if (! isset($validated['status']) || $validated['status'] !== 'paid') {
+                        $inner->orWhereNull('recorded_at');
+                    }
+                })
+            )
             ->when(isset($validated['search']), function ($q) use ($validated) {
                 $like = '%'.mb_strtolower($validated['search']).'%';
                 $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($like) {

@@ -344,4 +344,94 @@ class BillingReportTest extends TestCase
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
     }
+
+    public function test_recorded_from_excludes_payments_recorded_before_date(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now()->subDays(3),
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $from = now()->subDay()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_from={$from}");
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+    }
+
+    public function test_recorded_to_excludes_payments_recorded_after_date(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $to = now()->subDay()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_to={$to}");
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+    }
+
+    public function test_recorded_from_and_to_together_return_payments_within_range(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        // Inside range
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $from = now()->subDay()->toDateString();
+        $to = now()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_from={$from}&recorded_to={$to}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_recorded_from_does_not_exclude_unpaid_records(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        // Unpaid payment — no recorded_at; should always pass through date filters
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        // Date filter set to yesterday — unpaid record should still appear
+        $from = now()->subDay()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_from={$from}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
 }
