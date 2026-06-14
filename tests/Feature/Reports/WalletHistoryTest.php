@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Enums\OrderStatus;
 use App\Models\Branch;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -174,6 +175,32 @@ class WalletHistoryTest extends TestCase
             ->getJson("/api/v1/reports/wallet/{$this->student->id}/history?type=topups");
 
         $this->assertEquals('—', $response->json('data.0.added_by'));
+    }
+
+    public function test_voided_orders_are_excluded_from_purchases(): void
+    {
+        $cashier = User::factory()->create();
+
+        Order::factory()->create([
+            'student_id' => $this->student->id,
+            'branch_id' => $this->branch->id,
+            'cashier_id' => $cashier->id,
+            'status' => OrderStatus::Completed,
+        ]);
+
+        Order::factory()->voided()->create([
+            'student_id' => $this->student->id,
+            'branch_id' => $this->branch->id,
+            'cashier_id' => $cashier->id,
+        ]);
+
+        $response = $this->asAdmin()
+            ->getJson("/api/v1/reports/wallet/{$this->student->id}/history?type=purchases");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertEquals(1, $response->json('meta.total'));
+        $this->assertEquals(OrderStatus::Completed->value, Order::find($response->json('data.0.id'))->status->value);
     }
 
     public function test_student_from_other_branch_returns_404(): void

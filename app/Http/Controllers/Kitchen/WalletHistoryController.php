@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Student;
@@ -36,6 +37,7 @@ class WalletHistoryController extends Controller
     private function purchases(Student $student, ?string $search, int $perPage): JsonResponse
     {
         $orders = Order::where('student_id', $student->id)
+            ->where('status', '!=', OrderStatus::Voided)
             ->when($search, fn ($q) => $q->whereHas(
                 'items',
                 fn ($iq) => $iq->where('name', 'like', "%{$search}%")
