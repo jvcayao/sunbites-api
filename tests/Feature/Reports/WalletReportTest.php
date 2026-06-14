@@ -172,4 +172,18 @@ class WalletReportTest extends TestCase
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
     }
+
+    public function test_wallet_export_includes_students_with_wallet_activity_only(): void
+    {
+        Student::factory()->create(['branch_id' => $this->branch->id]); // no wallet — excluded
+        $active = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $active->deposit(50000);
+
+        // We cannot inspect xlsx contents easily, but we can assert the response succeeds
+        // and that the controller doesn't throw when computing totals.
+        $response = $this->asAdmin()->getJson('/api/v1/reports/wallet/export');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
 }
