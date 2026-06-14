@@ -29,9 +29,9 @@ class StudentPaymentHistoryController extends Controller
         $monthOrder = ['june', 'july', 'august', 'september', 'october', 'november', 'december', 'january', 'february', 'march'];
 
         $payments = $student->monthlyPayments()
-            ->orderBy('year')
-            ->orderByRaw('FIELD(school_month, "'.implode('","', $monthOrder).'")')
             ->get()
+            ->sortBy(fn ($payment) => [$payment->year, array_search($payment->school_month->value, $monthOrder)])
+            ->values()
             ->map(fn ($payment) => [
                 'id' => $payment->id,
                 'school_month' => $payment->school_month->value,
