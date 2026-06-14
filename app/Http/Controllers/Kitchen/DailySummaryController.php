@@ -30,12 +30,12 @@ class DailySummaryController extends Controller
             ->selectRaw('payment_method, COUNT(*) as count, SUM(total) as total')
             ->groupBy('payment_method')
             ->get()
-            ->mapWithKeys(fn ($row) => [
-                $row->payment_method => [
-                    'count' => (int) $row->count,
-                    'total' => (float) $row->total,
-                ],
-            ]);
+            ->map(fn ($row) => [
+                'method' => $row->payment_method->value,
+                'count' => (int) $row->count,
+                'amount' => (float) $row->total,
+            ])
+            ->values();
 
         $totals = $baseQuery()
             ->selectRaw('SUM(discount_amount) as total_discounts, SUM(total) as total_revenue')
@@ -47,12 +47,9 @@ class DailySummaryController extends Controller
             ->groupBy('cashier_id')
             ->get()
             ->map(fn ($row) => [
-                'cashier' => [
-                    'id' => $row->cashier_id,
-                    'full_name' => $row->cashier?->full_name ?? '—',
-                ],
-                'orders_count' => (int) $row->orders_count,
-                'total' => (float) $row->total,
+                'cashier_name' => $row->cashier?->full_name ?? '—',
+                'orders' => (int) $row->orders_count,
+                'amount' => (float) $row->total,
             ]);
 
         $itemsSold = Order::withoutBranch()
@@ -66,7 +63,7 @@ class DailySummaryController extends Controller
             ->get()
             ->map(fn ($row) => [
                 'name' => $row->name,
-                'quantity' => (int) $row->quantity,
+                'quantity_sold' => (int) $row->quantity,
             ]);
 
         return response()->json([
