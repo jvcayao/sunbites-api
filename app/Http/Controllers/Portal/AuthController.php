@@ -33,6 +33,13 @@ class AuthController extends Controller
             ], 401);
         }
 
+        if ($parent->isDisabled()) {
+            return response()->json([
+                'message' => 'Account access has been disabled.',
+                'error' => 'account_disabled',
+            ], 401);
+        }
+
         if (! Hash::check($request->password, $parent->password ?? '')) {
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
