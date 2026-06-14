@@ -10,6 +10,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -64,10 +65,7 @@ class WalletHistoryController extends Controller
         $wallet = $student->wallet;
 
         if (! $wallet) {
-            return response()->json([
-                'data' => [],
-                'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => $perPage],
-            ]);
+            return $this->emptyPaginatedResponse($perPage);
         }
 
         $transactions = DB::table('transactions')
@@ -83,16 +81,14 @@ class WalletHistoryController extends Controller
                 ->toArray();
 
             if (empty($matchingUserIds)) {
-                return response()->json([
-                    'data' => [],
-                    'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => $perPage],
-                ]);
+                return $this->emptyPaginatedResponse($perPage);
             }
 
-            // Each ID appears in JSON meta as: {"performed_by": 123}
+            // Match both compact {"performed_by":123} and spaced {"performed_by": 123} JSON formats
             $transactions->where(function ($q) use ($matchingUserIds) {
                 foreach ($matchingUserIds as $userId) {
-                    $q->orWhere('transactions.meta', 'like', "%\"performed_by\": {$userId}%");
+                    $q->orWhere('transactions.meta', 'like', "%\"performed_by\":{$userId}%")
+                        ->orWhere('transactions.meta', 'like', "%\"performed_by\": {$userId}%");
                 }
             });
         }
@@ -118,6 +114,16 @@ class WalletHistoryController extends Controller
         return response()->json([
             'data' => $data,
             'meta' => $this->paginationMeta($transactions),
+        ]);
+    }
+
+    private function emptyPaginatedResponse(int $perPage): JsonResponse
+    {
+        $empty = new LengthAwarePaginator([], 0, $perPage);
+
+        return response()->json([
+            'data' => [],
+            'meta' => $this->paginationMeta($empty),
         ]);
     }
 

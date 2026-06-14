@@ -43,12 +43,11 @@ class WalletReportController extends Controller
         $totalCredits = (float) ($walletSummary?->total_credits ?? 0);
         $totalDebits = (float) ($walletSummary?->total_debits ?? 0);
 
-        $studentsBelowHundred = Student::where('branch_id', $branchId)
-            ->whereHas('wallet', fn ($q) => $q->whereRaw('(balance / 100.0) < 100'))
+        $studentsBelowHundred = Student::whereHas('wallet', fn ($q) => $q->whereRaw('(balance / 100.0) < 100'))
             ->count();
 
         // Only include students who have real wallet activity (wallet exists with balance > 0 OR has transactions)
-        $students = $this->walletActivityStudents($branchId)
+        $students = $this->walletActivityStudents()
             ->with('wallet')
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -92,7 +91,7 @@ class WalletReportController extends Controller
         $branchId = $branch->id;
 
         // Only include students who have real wallet activity (same filter as index())
-        $students = $this->walletActivityStudents($branchId)
+        $students = $this->walletActivityStudents()
             ->with('wallet')
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -115,16 +114,15 @@ class WalletReportController extends Controller
         return Excel::download(new WalletReportExport($students), $filename);
     }
 
-    private function walletActivityStudents(int $branchId): Builder
+    private function walletActivityStudents(): Builder
     {
-        return Student::where('branch_id', $branchId)
-            ->whereHas('wallet', fn ($q) => $q->where('balance', '>', 0)->orWhereExists(function ($sub) {
-                $sub->select(DB::raw(1))
-                    ->from('transactions')
-                    ->join('wallets as wt2', 'wt2.id', '=', 'transactions.wallet_id')
-                    ->whereColumn('wt2.holder_id', 'wallets.holder_id')
-                    ->where('wt2.holder_type', Student::class);
-            }));
+        return Student::whereHas('wallet', fn ($q) => $q->where('balance', '>', 0)->orWhereExists(function ($sub) {
+            $sub->select(DB::raw(1))
+                ->from('transactions')
+                ->join('wallets as wt2', 'wt2.id', '=', 'transactions.wallet_id')
+                ->whereColumn('wt2.holder_id', 'wallets.holder_id')
+                ->where('wt2.holder_type', Student::class);
+        }));
     }
 
     private function buildTxStats(array $studentIds, ?string $dateFrom = null, ?string $dateTo = null): Collection
