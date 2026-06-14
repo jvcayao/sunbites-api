@@ -18,15 +18,9 @@ class BillingReportController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $schoolMonthValues = collect(SchoolMonth::cases())->map->value->toArray();
-
-        $validated = $request->validate([
-            'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
-            'school_month' => ['nullable', 'string', Rule::in($schoolMonthValues)],
-            'status' => ['nullable', 'string', 'in:paid,unpaid'],
-            'grade_level' => ['nullable', 'string'],
+        $validated = $request->validate(array_merge($this->filterRules(), [
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        ]));
 
         $validated['year'] = $validated['year'] ?? now()->year;
         $perPage = $validated['per_page'] ?? 50;
@@ -67,14 +61,7 @@ class BillingReportController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
-        $schoolMonthValues = collect(SchoolMonth::cases())->map->value->toArray();
-
-        $validated = $request->validate([
-            'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
-            'school_month' => ['nullable', 'string', Rule::in($schoolMonthValues)],
-            'status' => ['nullable', 'string', 'in:paid,unpaid'],
-            'grade_level' => ['nullable', 'string'],
-        ]);
+        $validated = $request->validate($this->filterRules());
 
         $validated['year'] = $validated['year'] ?? now()->year;
         $branch = app('active_branch');
@@ -100,6 +87,21 @@ class BillingReportController extends Controller
         $filename = "billing-report-{$branch->slug}-{$year}.xlsx";
 
         return Excel::download(new BillingReportExport($payments, $summary), $filename);
+    }
+
+    private function schoolMonthValues(): array
+    {
+        return collect(SchoolMonth::cases())->map->value->toArray();
+    }
+
+    private function filterRules(): array
+    {
+        return [
+            'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
+            'school_month' => ['nullable', 'string', Rule::in($this->schoolMonthValues())],
+            'status' => ['nullable', 'string', 'in:paid,unpaid'],
+            'grade_level' => ['nullable', 'string'],
+        ];
     }
 
     private function buildQuery(array $validated): Builder

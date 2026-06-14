@@ -265,6 +265,58 @@ class StudentDetailTest extends TestCase
         $this->assertNull($response->json('student.subscription_daily_status'));
     }
 
+    public function test_subscription_student_pos_lookup_includes_monthly_status(): void
+    {
+        $student = Student::factory()->subscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+            'qr_code' => 'SB-MONTHLY001X',
+        ]);
+
+        BranchSubscriptionConfig::factory()->create([
+            'branch_id' => $this->branch->id,
+            'meal_daily_limit' => 1,
+            'snack_daily_limit' => 1,
+            'drink_daily_limit' => 1,
+            'extra_daily_limit' => 1,
+        ]);
+
+        $response = $this->asManager()->postJson('/api/v1/pos/students/lookup', [
+            'type' => 'qr',
+            'value' => 'SB-MONTHLY001X',
+        ]);
+
+        $response->assertOk();
+        $status = $response->json('student.subscription_monthly_status');
+        $this->assertNotNull($status);
+        $this->assertArrayHasKey('month', $status);
+        $this->assertArrayHasKey('year', $status);
+        $this->assertArrayHasKey('categories', $status);
+        $this->assertArrayHasKey('meal', $status['categories']);
+        $this->assertArrayHasKey('snack', $status['categories']);
+        $this->assertArrayHasKey('drink', $status['categories']);
+        $this->assertArrayHasKey('extra', $status['categories']);
+        $this->assertArrayHasKey('allocated', $status['categories']['meal']);
+        $this->assertArrayHasKey('used', $status['categories']['meal']);
+        $this->assertArrayHasKey('remaining', $status['categories']['meal']);
+        $this->assertEquals(0, $status['categories']['meal']['used']);
+    }
+
+    public function test_non_subscription_student_pos_lookup_has_null_monthly_status(): void
+    {
+        $student = Student::factory()->nonSubscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+            'qr_code' => 'SB-NOSUB001MNT',
+        ]);
+
+        $response = $this->asManager()->postJson('/api/v1/pos/students/lookup', [
+            'type' => 'qr',
+            'value' => 'SB-NOSUB001MNT',
+        ]);
+
+        $response->assertOk();
+        $this->assertNull($response->json('student.subscription_monthly_status'));
+    }
+
     public function test_daily_status_counts_only_completed_subscription_orders_from_today(): void
     {
         $student = Student::factory()->subscription()->create([
