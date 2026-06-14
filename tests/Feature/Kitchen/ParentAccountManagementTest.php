@@ -98,4 +98,21 @@ class ParentAccountManagementTest extends TestCase
         $this->assertNull($parent->fresh()->email_verified_at);
         Mail::assertQueued(ParentWelcomeMail::class);
     }
+
+    // -------------------------------------------------------------------------
+    // destroy (soft delete)
+    // -------------------------------------------------------------------------
+
+    public function test_admin_can_soft_delete_a_parent(): void
+    {
+        $parent = ParentUser::factory()->create();
+        $parent->createToken('portal-token', ['parent']);
+
+        $response = $this->asAdmin()->deleteJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertOk();
+        $response->assertJson(['message' => 'Parent account deleted.']);
+        $this->assertSoftDeleted('parents', ['id' => $parent->id]);
+        $this->assertCount(0, $parent->tokens()->get());
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Actions\Parents\DisableParentAction;
 use App\Actions\Parents\EnableParentAction;
+use App\Actions\Parents\SoftDeleteParentAction;
 use App\Http\Controllers\Controller;
 use App\Mail\ParentWelcomeMail;
 use App\Models\ParentUser;
@@ -108,5 +109,12 @@ class ParentController extends Controller
         (new EnableParentAction)->execute($parent);
 
         return response()->json(['message' => 'Parent access enabled. Activation email queued.']);
+    }
+
+    public function destroy(ParentUser $parent): JsonResponse
+    {
+        (new SoftDeleteParentAction)->execute($parent);
+
+        return response()->json(['message' => 'Parent account deleted.']);
     }
 }
