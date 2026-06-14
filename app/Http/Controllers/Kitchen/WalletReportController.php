@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Kitchen;
 use App\Exports\WalletReportExport;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -46,17 +48,7 @@ class WalletReportController extends Controller
             ->count();
 
         // Only include students who have real wallet activity (wallet exists with balance > 0 OR has transactions)
-        $students = Student::where('branch_id', $branchId)
-            ->where(function ($q) {
-                $q->whereHas('wallet', fn ($w) => $w->where('balance', '>', 0))
-                    ->orWhereExists(function ($sub) {
-                        $sub->select(DB::raw(1))
-                            ->from('transactions')
-                            ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
-                            ->whereColumn('wallets.holder_id', 'students.id')
-                            ->where('wallets.holder_type', Student::class);
-                    });
-            })
+        $students = $this->walletActivityStudents($branchId)
             ->with('wallet')
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -65,20 +57,7 @@ class WalletReportController extends Controller
         // Single aggregation query replacing the old N+1 loop
         $studentIds = collect($students->items())->pluck('id')->all();
 
-        $txStats = DB::table('transactions')
-            ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
-            ->where('wallets.holder_type', Student::class)
-            ->whereIn('wallets.holder_id', $studentIds)
-            ->whereBetween('transactions.created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
-            ->selectRaw("
-                wallets.holder_id AS student_id,
-                SUM(CASE WHEN type = 'deposit' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credited,
-                SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debited,
-                MAX(transactions.created_at) AS last_transaction
-            ")
-            ->groupBy('wallets.holder_id')
-            ->get()
-            ->keyBy('student_id');
+        $txStats = $this->buildTxStats($studentIds, $dateFrom, $dateTo);
 
         $studentData = collect($students->items())->map(function ($student) use ($txStats) {
             $stats = $txStats->get($student->id);
@@ -113,17 +92,7 @@ class WalletReportController extends Controller
         $branchId = $branch->id;
 
         // Only include students who have real wallet activity (same filter as index())
-        $students = Student::where('branch_id', $branchId)
-            ->where(function ($q) {
-                $q->whereHas('wallet', fn ($w) => $w->where('balance', '>', 0))
-                    ->orWhereExists(function ($sub) {
-                        $sub->select(DB::raw(1))
-                            ->from('transactions')
-                            ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
-                            ->whereColumn('wallets.holder_id', 'students.id')
-                            ->where('wallets.holder_type', Student::class);
-                    });
-            })
+        $students = $this->walletActivityStudents($branchId)
             ->with('wallet')
             ->orderBy('last_name')
             ->orderBy('first_name')
@@ -132,23 +101,7 @@ class WalletReportController extends Controller
         // Compute all-time credited/debited totals per student in one aggregation query (no N+1)
         $studentIds = $students->pluck('id')->all();
 
-        if ($studentIds !== []) {
-            $txStats = DB::table('transactions')
-                ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
-                ->where('wallets.holder_type', Student::class)
-                ->whereIn('wallets.holder_id', $studentIds)
-                ->selectRaw("
-                    wallets.holder_id AS student_id,
-                    SUM(CASE WHEN type = 'deposit' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credited,
-                    SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debited,
-                    MAX(transactions.created_at) AS last_transaction
-                ")
-                ->groupBy('wallets.holder_id')
-                ->get()
-                ->keyBy('student_id');
-        } else {
-            $txStats = collect();
-        }
+        $txStats = $this->buildTxStats($studentIds);
 
         $students->each(function ($student) use ($txStats) {
             $stats = $txStats->get($student->id);
@@ -160,5 +113,42 @@ class WalletReportController extends Controller
         $filename = "wallet-report-{$branch->slug}-".now()->format('Y-m-d').'.xlsx';
 
         return Excel::download(new WalletReportExport($students), $filename);
+    }
+
+    private function walletActivityStudents(int $branchId): Builder
+    {
+        return Student::where('branch_id', $branchId)
+            ->whereHas('wallet', fn ($q) => $q->where('balance', '>', 0)->orWhereExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('transactions')
+                    ->join('wallets as wt2', 'wt2.id', '=', 'transactions.wallet_id')
+                    ->whereColumn('wt2.holder_id', 'wallets.holder_id')
+                    ->where('wt2.holder_type', Student::class);
+            }));
+    }
+
+    private function buildTxStats(array $studentIds, ?string $dateFrom = null, ?string $dateTo = null): Collection
+    {
+        if ($studentIds === []) {
+            return collect();
+        }
+
+        $query = DB::table('transactions')
+            ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
+            ->where('wallets.holder_type', Student::class)
+            ->whereIn('wallets.holder_id', $studentIds)
+            ->selectRaw("
+                wallets.holder_id AS student_id,
+                SUM(CASE WHEN type = 'deposit' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credited,
+                SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debited,
+                MAX(transactions.created_at) AS last_transaction
+            ")
+            ->groupBy('wallets.holder_id');
+
+        if ($dateFrom && $dateTo) {
+            $query->whereBetween('transactions.created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"]);
+        }
+
+        return $query->get()->keyBy('student_id');
     }
 }

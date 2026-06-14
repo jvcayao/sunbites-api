@@ -104,7 +104,8 @@ class WalletReportTest extends TestCase
 
     public function test_manager_can_export_wallet_report(): void
     {
-        Student::factory()->create(['branch_id' => $this->branch->id]);
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $student->deposit(50000);
 
         $response = $this->asManager()->getJson('/api/v1/reports/wallet/export');
 
