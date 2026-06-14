@@ -246,4 +246,82 @@ class ParentAccountManagementTest extends TestCase
         $response->assertOk();
         $this->assertNotNull($response->json('deleted_at'));
     }
+
+    // -------------------------------------------------------------------------
+    // authorization
+    // -------------------------------------------------------------------------
+
+    public function test_supervisor_cannot_disable_a_parent(): void
+    {
+        $parent = ParentUser::factory()->create();
+
+        $response = $this->asUserWithRole('supervisor')->postJson("/api/v1/references/parents/{$parent->id}/disable");
+
+        $response->assertForbidden();
+    }
+
+    public function test_supervisor_cannot_enable_a_parent(): void
+    {
+        $parent = ParentUser::factory()->disabled()->create();
+
+        $response = $this->asUserWithRole('supervisor')->postJson("/api/v1/references/parents/{$parent->id}/enable");
+
+        $response->assertForbidden();
+    }
+
+    public function test_supervisor_cannot_delete_a_parent(): void
+    {
+        $parent = ParentUser::factory()->create();
+
+        $response = $this->asUserWithRole('supervisor')->deleteJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertForbidden();
+    }
+
+    public function test_supervisor_cannot_restore_a_parent(): void
+    {
+        $parent = ParentUser::factory()->create();
+        $parent->delete();
+
+        $response = $this->asUserWithRole('supervisor')->postJson("/api/v1/references/parents/{$parent->id}/restore");
+
+        $response->assertForbidden();
+    }
+
+    public function test_unauthenticated_request_cannot_disable_a_parent(): void
+    {
+        $parent = ParentUser::factory()->create();
+
+        $response = $this->postJson("/api/v1/references/parents/{$parent->id}/disable");
+
+        $response->assertUnauthorized();
+    }
+
+    // -------------------------------------------------------------------------
+    // edge cases
+    // -------------------------------------------------------------------------
+
+    public function test_disabling_an_already_disabled_parent_is_idempotent(): void
+    {
+        $parent = ParentUser::factory()->disabled()->create();
+
+        $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/disable");
+
+        $response->assertOk();
+        $this->assertNotNull($parent->fresh()->disabled_at);
+    }
+
+    public function test_soft_deleted_parent_cannot_log_in_to_portal(): void
+    {
+        $parent = ParentUser::factory()->create();
+        $parent->delete();
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => $parent->email,
+            'password' => 'Password1',
+        ]);
+
+        // Soft-deleted records are excluded from normal queries — login treats it as "not found" → 422
+        $response->assertUnprocessable();
+    }
 }
