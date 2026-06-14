@@ -17,6 +17,13 @@ use Illuminate\Support\Facades\Password;
 
 class ParentController extends Controller
 {
+    public function __construct(
+        private readonly DisableParentAction $disableParent,
+        private readonly EnableParentAction $enableParent,
+        private readonly SoftDeleteParentAction $softDeleteParent,
+        private readonly RestoreParentAction $restoreParent,
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -29,7 +36,7 @@ class ParentController extends Controller
             ->orderBy('last_name')
             ->orderBy('first_name');
 
-        if (! empty($validated['include_deleted'])) {
+        if ($validated['include_deleted'] ?? false) {
             $query->withTrashed();
         }
 
@@ -109,21 +116,21 @@ class ParentController extends Controller
 
     public function disable(ParentUser $parent): JsonResponse
     {
-        (new DisableParentAction)->execute($parent);
+        $this->disableParent->execute($parent);
 
         return response()->json(['message' => 'Parent access disabled.']);
     }
 
     public function enable(ParentUser $parent): JsonResponse
     {
-        (new EnableParentAction)->execute($parent);
+        $this->enableParent->execute($parent);
 
         return response()->json(['message' => 'Parent access enabled. Activation email queued.']);
     }
 
     public function destroy(ParentUser $parent): JsonResponse
     {
-        (new SoftDeleteParentAction)->execute($parent);
+        $this->softDeleteParent->execute($parent);
 
         return response()->json(['message' => 'Parent account deleted.']);
     }
@@ -134,7 +141,7 @@ class ParentController extends Controller
             abort(404);
         }
 
-        (new RestoreParentAction)->execute($parent);
+        $this->restoreParent->execute($parent);
 
         return response()->json(['message' => 'Parent account restored. Activation email queued.']);
     }
