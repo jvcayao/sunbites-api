@@ -104,6 +104,7 @@ class BillingReportController extends Controller
             'status' => ['nullable', 'string', 'in:paid,unpaid'],
             'grade_level' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],
+            'recorded_by' => ['nullable', 'integer', 'exists:users,id'],
         ];
     }
 
@@ -117,6 +118,7 @@ class BillingReportController extends Controller
             ->when(isset($validated['school_month']), fn ($q) => $q->where('school_month', $validated['school_month']))
             ->when(isset($validated['status']), fn ($q) => $q->where('status', $validated['status']))
             ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])))
+            ->when(isset($validated['recorded_by']), fn ($q) => $q->where('recorded_by', $validated['recorded_by']))
             ->when(isset($validated['search']), function ($q) use ($validated) {
                 $like = '%'.mb_strtolower($validated['search']).'%';
                 $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($like) {

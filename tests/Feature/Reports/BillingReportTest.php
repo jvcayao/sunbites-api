@@ -312,4 +312,36 @@ class BillingReportTest extends TestCase
         $response->assertOk();
         $this->assertCount(0, $response->json('data'));
     }
+
+    public function test_recorded_by_filter_returns_only_payments_by_that_staff_member(): void
+    {
+        $year = now()->year;
+
+        $student1 = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $student2 = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student1->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->admin->id,
+        ]);
+        StudentMonthlyPayment::create([
+            'student_id' => $student2->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->manager->id,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_by={$this->admin->id}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
 }
