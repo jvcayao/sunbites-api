@@ -37,7 +37,7 @@ class ActivityLogController extends Controller
             'data' => collect($logs->items())->map(fn ($log) => [
                 'id' => $log->id,
                 'created_at' => $log->created_at->toDateTimeString(),
-                'causer_name' => $log->causer?->full_name ?? null,
+                'causer_name' => $log->causer?->full_name,
                 'description' => $log->description,
                 'log_name' => $log->log_name,
                 'subject_type' => $log->subject_type,

@@ -82,7 +82,8 @@ class StudentController extends Controller
                 ])
             : collect();
 
-        $activityLogs = Activity::where('subject_type', Student::class)
+        $activityLogs = Activity::with('causer')
+            ->where('subject_type', Student::class)
             ->where('subject_id', $student->id)
             ->latest()
             ->take(50)
@@ -90,7 +91,7 @@ class StudentController extends Controller
             ->map(fn ($log) => [
                 'id' => $log->id,
                 'description' => $log->description,
-                'causer' => $log->causer?->full_name ?? 'System',
+                'causer_name' => $log->causer?->full_name,
                 'properties' => $log->properties,
                 'created_at' => $log->created_at->toDateTimeString(),
             ]);
