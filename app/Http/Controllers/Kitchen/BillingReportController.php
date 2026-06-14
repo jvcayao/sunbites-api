@@ -22,7 +22,8 @@ class BillingReportController extends Controller
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]));
 
-        $validated['year'] = $validated['year'] ?? now()->year;
+        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
+        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
         $perPage = $validated['per_page'] ?? 50;
 
         $query = $this->buildQuery($validated)
@@ -63,7 +64,8 @@ class BillingReportController extends Controller
     {
         $validated = $request->validate($this->filterRules());
 
-        $validated['year'] = $validated['year'] ?? now()->year;
+        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
+        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
         $branch = app('active_branch');
         $year = $validated['year'];
 

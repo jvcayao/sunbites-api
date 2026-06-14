@@ -82,10 +82,56 @@ class BillingReportTest extends TestCase
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
         $this->createPayment($student, 'paid');
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
 
         $response->assertOk()
             ->assertJsonStructure(['data', 'meta', 'summary']);
+    }
+
+    public function test_billing_report_includes_student_full_name(): void
+    {
+        $student = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+        ]);
+        $this->createPayment($student);
+
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
+
+        $response->assertOk();
+        $this->assertSame('Juan Dela Cruz', $response->json('data.0.student.full_name'));
+    }
+
+    public function test_default_school_month_and_year_filters_to_current_school_period(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        // Current period payment — should appear
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => strtolower(now()->format('F')),
+            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        // Different month payment — must NOT appear
+        $otherMonth = now()->month === 6 ? 'july' : 'june';
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => $otherMonth,
+            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
     }
 
     public function test_supervisor_can_view_billing_report(): void
@@ -103,7 +149,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($student, 'paid');
         $this->createPayment($student2, 'unpaid');
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
 
         $response->assertOk();
         $this->assertEquals('unpaid', $response->json('data.0.status'));
@@ -117,7 +164,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($student, 'paid');
         $this->createPayment($student2, 'unpaid');
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?status=paid');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&status=paid");
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
@@ -131,7 +179,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($student, 'paid', 800.00);
         $this->createPayment($student2, 'unpaid', 800.00);
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
 
         $response->assertOk();
         $this->assertEquals(800.0, $response->json('summary.total_collected'));
@@ -168,7 +217,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($grade1Student);
         $this->createPayment($grade3Student);
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?grade_level=Grade+1');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&grade_level=Grade+1");
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
