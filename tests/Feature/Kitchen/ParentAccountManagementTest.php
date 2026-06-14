@@ -2,11 +2,13 @@
 
 namespace Tests\Feature\Kitchen;
 
+use App\Mail\ParentWelcomeMail;
 use App\Models\Branch;
 use App\Models\ParentUser;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -62,5 +64,38 @@ class ParentAccountManagementTest extends TestCase
         $response->assertJson(['message' => 'Parent access disabled.']);
         $this->assertNotNull($parent->fresh()->disabled_at);
         $this->assertCount(0, $parent->tokens()->get());
+    }
+
+    // -------------------------------------------------------------------------
+    // enable
+    // -------------------------------------------------------------------------
+
+    public function test_admin_can_enable_a_disabled_parent(): void
+    {
+        Mail::fake();
+
+        $parent = ParentUser::factory()->disabled()->create();
+
+        $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/enable");
+
+        $response->assertOk();
+        $response->assertJson(['message' => 'Parent access enabled. Activation email queued.']);
+        $this->assertNull($parent->fresh()->disabled_at);
+        $this->assertNull($parent->fresh()->email_verified_at);
+        Mail::assertQueued(ParentWelcomeMail::class);
+    }
+
+    public function test_enabling_an_already_enabled_parent_is_idempotent(): void
+    {
+        Mail::fake();
+
+        $parent = ParentUser::factory()->create(); // active, enabled
+
+        $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/enable");
+
+        $response->assertOk();
+        $this->assertNull($parent->fresh()->disabled_at);
+        $this->assertNull($parent->fresh()->email_verified_at);
+        Mail::assertQueued(ParentWelcomeMail::class);
     }
 }
