@@ -108,7 +108,7 @@ class StudentLookupController extends Controller
             'points' => $student->points,
             'total_spent' => $student->total_spent,
             'credit_balance' => $student->credit_balance,
-            'wallet_balance' => $student->wallet?->balanceFloat ?? 0,
+            'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
             'subscription_daily_status' => $student->student_type === StudentType::Subscription
                 ? $this->buildDailyStatus($student)
                 : null,

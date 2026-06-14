@@ -32,7 +32,7 @@ class StudentResource extends JsonResource
             'points' => $this->points,
             'total_spent' => $this->total_spent,
             'credit_balance' => $this->credit_balance,
-            'wallet_balance' => $this->whenLoaded('wallet', fn () => $this->wallet?->balanceFloat ?? 0),
+            'wallet_balance' => $this->whenLoaded('wallet', fn () => $this->wallet?->balanceFloatNum ?? 0.0),
             'contacts' => $this->whenLoaded('contacts', fn () => $this->contacts->map(fn ($c) => [
                 'id' => $c->id,
                 'full_name' => $c->full_name,

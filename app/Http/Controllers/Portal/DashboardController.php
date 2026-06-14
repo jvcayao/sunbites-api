@@ -31,7 +31,7 @@ class DashboardController extends Controller
                 'student_number' => $student->student_number,
                 'grade_level' => $student->grade_level,
                 'branch_name' => $student->branch?->name,
-                'wallet_balance' => $student->wallet?->balanceFloat ?? 0,
+                'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
                 'wallet_alert_threshold' => (float) $student->pivot->wallet_alert_threshold,
                 'enrollment_status' => $student->enrollment_status,
                 'student_type' => $student->student_type,

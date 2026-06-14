@@ -140,7 +140,7 @@ class ActivityLogTest extends TestCase
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
-        $this->assertEquals($this->manager->full_name, $response->json('data.0.causer'));
+        $this->assertEquals($this->manager->full_name, $response->json('data.0.causer_name'));
     }
 
     public function test_log_name_filter_works(): void
