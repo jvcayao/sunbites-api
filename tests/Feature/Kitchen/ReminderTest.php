@@ -292,7 +292,29 @@ class ReminderTest extends TestCase
         ]);
     }
 
-    public function test_send_includes_all_unpaid_periods_in_notification(): void
+    public function test_send_sends_one_notification_per_unpaid_period(): void
+    {
+        Notification::fake();
+        // Use two months that have already started (past school year)
+        $this->seedPayment('june', 2025);
+        $this->seedPayment('july', 2025);
+
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+        ])->assertOk()->assertJson(['sent' => 1]);
+
+        Notification::assertSentToTimes($this->parent, PaymentReminderNotification::class, 2);
+
+        $months = Notification::sent($this->parent, PaymentReminderNotification::class)
+            ->map(fn ($n) => $n->schoolMonth)
+            ->sort()
+            ->values()
+            ->all();
+
+        $this->assertSame(['july', 'june'], $months);
+    }
+
+    public function test_notification_total_amount_reflects_only_its_own_period(): void
     {
         Notification::fake();
         $this->seedPayment('june', 2026);
@@ -300,15 +322,78 @@ class ReminderTest extends TestCase
 
         $this->asAdmin()->postJson('/api/v1/reminders/send', [
             'parent_ids' => [$this->parent->id],
-        ])->assertOk()->assertJson(['sent' => 1]);
+        ])->assertOk();
 
         Notification::assertSentTo(
             $this->parent,
             PaymentReminderNotification::class,
             function (PaymentReminderNotification $notification) {
-                return $notification->periods->count() === 2;
+                return $notification->schoolMonth === 'june'
+                    && $notification->students->sum('amount') === 2970.0;
             }
         );
+    }
+
+    public function test_notification_student_payload_uses_full_name_key(): void
+    {
+        Notification::fake();
+        $this->seedPayment('june', 2026);
+
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+        ])->assertOk();
+
+        Notification::assertSentTo(
+            $this->parent,
+            PaymentReminderNotification::class,
+            function (PaymentReminderNotification $notification) {
+                $student = $notification->students->first();
+
+                return isset($student['full_name'])
+                    && $student['full_name'] === $this->student->full_name
+                    && ! isset($student['name']);
+            }
+        );
+    }
+
+    public function test_notification_includes_ignore_note_in_payload(): void
+    {
+        Notification::fake();
+        $this->seedPayment('june', 2026);
+
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+        ])->assertOk();
+
+        Notification::assertSentTo(
+            $this->parent,
+            PaymentReminderNotification::class,
+            function (PaymentReminderNotification $notification) {
+                $data = $notification->toDatabase($this->parent);
+
+                return isset($data['note']) && str_contains($data['note'], 'already paid');
+            }
+        );
+    }
+
+    public function test_send_does_not_remind_future_months(): void
+    {
+        Notification::fake();
+        $this->seedPayment('june', 2026);   // current month — should notify
+        $this->seedPayment('july', 2026);   // future month — must be skipped
+        $this->seedPayment('march', 2027);  // future month — must be skipped
+
+        $this->asAdmin()->postJson('/api/v1/reminders/send', [
+            'parent_ids' => [$this->parent->id],
+        ])->assertOk()->assertJson(['sent' => 1]);
+
+        Notification::assertSentToTimes($this->parent, PaymentReminderNotification::class, 1);
+
+        $sentMonth = Notification::sent($this->parent, PaymentReminderNotification::class)
+            ->first()
+            ->schoolMonth;
+
+        $this->assertSame('june', $sentMonth);
     }
 
     public function test_send_requires_parent_ids(): void

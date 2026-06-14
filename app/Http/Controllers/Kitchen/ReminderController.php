@@ -206,28 +206,24 @@ class ReminderController extends Controller
                 continue;
             }
 
-            $notificationPeriods = $periodsToNotify->map(function ($p) use ($parent) {
+            foreach ($periodsToNotify as $p) {
                 $schoolMonth = SchoolMonth::from($p['school_month']);
 
                 $students = $parent->students->map(function ($s) use ($p) {
                     $payment = $s->monthlyPayments
                         ->first(fn ($mp) => $mp->school_month->value === $p['school_month'] && $mp->year === $p['year']);
 
-                    return $payment ? ['id' => $s->id, 'name' => $s->full_name, 'amount' => (float) $payment->amount] : null;
+                    return $payment ? ['id' => $s->id, 'full_name' => $s->full_name, 'amount' => (float) $payment->amount] : null;
                 })->filter()->values();
 
-                return [
-                    'school_month' => $p['school_month'],
-                    'school_year' => $p['year'],
-                    'due_date' => $this->resolveDueDate($schoolMonth, $p['year']),
-                    'students' => $students,
-                ];
-            });
-
-            $parent->notify(new PaymentReminderNotification(
-                parent: $parent,
-                periods: $notificationPeriods,
-            ));
+                $parent->notify(new PaymentReminderNotification(
+                    parent: $parent,
+                    schoolMonth: $p['school_month'],
+                    schoolYear: $p['year'],
+                    dueDate: $this->resolveDueDate($schoolMonth, $p['year']),
+                    students: $students,
+                ));
+            }
 
             foreach ($periodsToNotify as $p) {
                 $key = $p['school_month'].'_'.$p['year'];
@@ -290,19 +286,6 @@ class ReminderController extends Controller
         ]);
     }
 
-    /** @return array{SchoolMonth|null, int} */
-    private function resolveUpcomingMonth(int $reminderDays): array
-    {
-        $target = now()->addDays($reminderDays);
-        $schoolMonth = SchoolMonth::fromMonthNumber($target->month);
-
-        if ($schoolMonth === null) {
-            return [null, 0];
-        }
-
-        return [$schoolMonth, (int) $target->year];
-    }
-
     private function resolveDueDate(SchoolMonth $schoolMonth, int $year): Carbon
     {
         $monthNumber = $schoolMonth->toMonthNumber();
@@ -353,14 +336,23 @@ class ReminderController extends Controller
 
     /**
      * For a loaded parent (with students.monthlyPayments loaded), return all unique
-     * (school_month, year) pairs from unpaid payments as a Collection of arrays.
+     * (school_month, year) pairs from unpaid payments whose calendar month has already started.
+     * Future months are excluded — they should not be reminded until they are current.
      *
      * @return Collection<int, array{school_month: string, year: int}>
      */
     private function extractUnpaidPeriods(ParentUser $parent): Collection
     {
+        $now = now();
+
         return $parent->students
             ->flatMap(fn ($s) => $s->monthlyPayments)
+            ->filter(function ($p) use ($now) {
+                $monthNum = $p->school_month->toMonthNumber();
+                $calYear = $monthNum >= 6 ? $p->year : $p->year + 1;
+
+                return Carbon::create($calYear, $monthNum, 1)->startOfMonth()->lte($now);
+            })
             ->map(fn ($p) => ['school_month' => $p->school_month->value, 'year' => $p->year])
             ->unique(fn ($p) => $p['school_month'].'_'.$p['year'])
             ->values();
