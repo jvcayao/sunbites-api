@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Actions\Parents\DisableParentAction;
 use App\Http\Controllers\Controller;
 use App\Mail\ParentWelcomeMail;
 use App\Models\ParentUser;
@@ -92,5 +93,12 @@ class ParentController extends Controller
         Mail::to($parent->email)->queue(new ParentWelcomeMail($parent, $token));
 
         return response()->json(['message' => 'Activation email sent.']);
+    }
+
+    public function disable(ParentUser $parent): JsonResponse
+    {
+        (new DisableParentAction)->execute($parent);
+
+        return response()->json(['message' => 'Parent access disabled.']);
     }
 }

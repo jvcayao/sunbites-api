@@ -167,6 +167,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::get('/references/parents', [ParentController::class, 'index']);
         Route::get('/references/parents/{parent}', [ParentController::class, 'show']);
         Route::post('/references/parents/{parent}/resend-activation', [ParentController::class, 'resendActivation']);
+        Route::post('/references/parents/{parent}/disable', [ParentController::class, 'disable']);
     });
 
     // Feedback — admin, manager, supervisor
