@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use Database\Factories\ParentUserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
@@ -12,7 +15,8 @@ use Laravel\Sanctum\HasApiTokens;
 
 class ParentUser extends Authenticatable
 {
-    use HasApiTokens, Notifiable;
+    /** @use HasFactory<ParentUserFactory> */
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
 
     protected $table = 'parents';
 
@@ -25,6 +29,7 @@ class ParentUser extends Authenticatable
         'address',
         'profile_photo_path',
         'email_verified_at',
+        'disabled_at',
     ];
 
     protected $hidden = ['password', 'remember_token'];
@@ -33,6 +38,7 @@ class ParentUser extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'disabled_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -40,6 +46,16 @@ class ParentUser extends Authenticatable
     public function isActivated(): bool
     {
         return $this->email_verified_at !== null;
+    }
+
+    public function isDisabled(): bool
+    {
+        return $this->disabled_at !== null;
+    }
+
+    public function isAccessible(): bool
+    {
+        return ! $this->isDisabled() && $this->isActivated();
     }
 
     protected function fullName(): Attribute
