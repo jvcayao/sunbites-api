@@ -35,6 +35,7 @@ use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
 use App\Http\Controllers\Kitchen\UserManagementController;
 use App\Http\Controllers\Kitchen\WalletController;
+use App\Http\Controllers\Kitchen\WalletHistoryController;
 use App\Http\Controllers\Kitchen\WalletReportController;
 use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
@@ -255,6 +256,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
             Route::get('/students/export', [StudentReportController::class, 'export']);
             Route::get('/wallet', [WalletReportController::class, 'index']);
             Route::get('/wallet/export', [WalletReportController::class, 'export']);
+            Route::get('/wallet/{student}/history', [WalletHistoryController::class, 'index']);
             Route::get('/inventory/export', [InventoryReportController::class, 'export']);
             Route::get('/daily-summary', [DailySummaryController::class, 'index']);
             Route::get('/activity', [ActivityLogController::class, 'index']);
