@@ -30,6 +30,7 @@ use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\StudentReportController;
 use App\Http\Controllers\Kitchen\SubscriptionConfigController;
+use App\Http\Controllers\Kitchen\SubscriptionReportController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
 use App\Http\Controllers\Kitchen\UserManagementController;
@@ -242,6 +243,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
             Route::get('/students', [StudentReportController::class, 'index']);
             Route::get('/inventory', [InventoryReportController::class, 'index']);
             Route::get('/billing', [BillingReportController::class, 'index']);
+            Route::get('/subscription', [SubscriptionReportController::class, 'index']);
         });
 
         Route::middleware('role:admin|manager')->group(function () {
