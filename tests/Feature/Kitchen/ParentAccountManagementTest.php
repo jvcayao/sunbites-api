@@ -115,4 +115,34 @@ class ParentAccountManagementTest extends TestCase
         $this->assertSoftDeleted('parents', ['id' => $parent->id]);
         $this->assertCount(0, $parent->tokens()->get());
     }
+
+    // -------------------------------------------------------------------------
+    // restore
+    // -------------------------------------------------------------------------
+
+    public function test_admin_can_restore_a_soft_deleted_parent(): void
+    {
+        Mail::fake();
+
+        $parent = ParentUser::factory()->create();
+        $parent->delete();
+
+        $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/restore");
+
+        $response->assertOk();
+        $response->assertJson(['message' => 'Parent account restored. Activation email queued.']);
+        $this->assertNull($parent->fresh()->deleted_at);
+        $this->assertNull($parent->fresh()->disabled_at);
+        $this->assertNull($parent->fresh()->email_verified_at);
+        Mail::assertQueued(ParentWelcomeMail::class);
+    }
+
+    public function test_restoring_a_non_deleted_parent_returns_404(): void
+    {
+        $parent = ParentUser::factory()->create(); // not deleted
+
+        $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/restore");
+
+        $response->assertNotFound();
+    }
 }

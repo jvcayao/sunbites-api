@@ -170,6 +170,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/references/parents/{parent}/disable', [ParentController::class, 'disable']);
         Route::post('/references/parents/{parent}/enable', [ParentController::class, 'enable']);
         Route::delete('/references/parents/{parent}', [ParentController::class, 'destroy']);
+        Route::post('/references/parents/{parent}/restore', [ParentController::class, 'restore'])->withTrashed();
     });
 
     // Feedback — admin, manager, supervisor

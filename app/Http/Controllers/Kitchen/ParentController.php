@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Actions\Parents\DisableParentAction;
 use App\Actions\Parents\EnableParentAction;
+use App\Actions\Parents\RestoreParentAction;
 use App\Actions\Parents\SoftDeleteParentAction;
 use App\Http\Controllers\Controller;
 use App\Mail\ParentWelcomeMail;
@@ -116,5 +117,16 @@ class ParentController extends Controller
         (new SoftDeleteParentAction)->execute($parent);
 
         return response()->json(['message' => 'Parent account deleted.']);
+    }
+
+    public function restore(ParentUser $parent): JsonResponse
+    {
+        if (! $parent->trashed()) {
+            abort(404);
+        }
+
+        (new RestoreParentAction)->execute($parent);
+
+        return response()->json(['message' => 'Parent account restored. Activation email queued.']);
     }
 }
