@@ -5,6 +5,7 @@ namespace Tests\Feature\Kitchen;
 use App\Mail\ParentWelcomeMail;
 use App\Models\Branch;
 use App\Models\ParentUser;
+use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
@@ -161,5 +162,88 @@ class ParentAccountManagementTest extends TestCase
 
         $response->assertStatus(401);
         $response->assertJson(['error' => 'account_disabled']);
+    }
+
+    // -------------------------------------------------------------------------
+    // index — is_disabled / deleted_at fields
+    // -------------------------------------------------------------------------
+
+    public function test_index_returns_is_disabled_and_deleted_at_fields(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $active = ParentUser::factory()->create();
+        $active->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $disabled = ParentUser::factory()->disabled()->create();
+        $disabled->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/references/parents');
+
+        $response->assertOk();
+        $response->assertJsonStructure([
+            'data' => [['id', 'is_disabled', 'deleted_at']],
+        ]);
+    }
+
+    public function test_index_with_include_deleted_returns_soft_deleted_parents(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $active = ParentUser::factory()->create();
+        $active->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $deleted = ParentUser::factory()->create();
+        $deleted->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+        $deleted->delete();
+
+        $response = $this->asAdmin()->getJson('/api/v1/references/parents?include_deleted=1');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($deleted->id));
+    }
+
+    public function test_index_without_include_deleted_excludes_soft_deleted_parents(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $active = ParentUser::factory()->create();
+        $active->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+
+        $deleted = ParentUser::factory()->create();
+        $deleted->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id]);
+        $deleted->delete();
+
+        $response = $this->asAdmin()->getJson('/api/v1/references/parents');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertFalse($ids->contains($deleted->id));
+    }
+
+    // -------------------------------------------------------------------------
+    // show — is_disabled / deleted_at fields
+    // -------------------------------------------------------------------------
+
+    public function test_show_returns_is_disabled_and_deleted_at_fields(): void
+    {
+        $parent = ParentUser::factory()->disabled()->create();
+
+        $response = $this->asAdmin()->getJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertOk();
+        $response->assertJsonStructure(['is_disabled', 'deleted_at']);
+        $response->assertJsonPath('is_disabled', true);
+    }
+
+    public function test_show_resolves_soft_deleted_parent(): void
+    {
+        $parent = ParentUser::factory()->create();
+        $parent->delete();
+
+        $response = $this->asAdmin()->getJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertOk();
+        $this->assertNotNull($response->json('deleted_at'));
     }
 }

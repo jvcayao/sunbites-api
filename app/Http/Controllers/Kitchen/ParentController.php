@@ -22,11 +22,16 @@ class ParentController extends Controller
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'include_deleted' => ['nullable', 'boolean'],
         ]);
 
         $query = ParentUser::with('students:id,first_name,last_name,student_number,branch_id')
             ->orderBy('last_name')
             ->orderBy('first_name');
+
+        if (! empty($validated['include_deleted'])) {
+            $query->withTrashed();
+        }
 
         if (app()->bound('active_branch')) {
             $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
@@ -50,6 +55,8 @@ class ParentController extends Controller
                 'email' => $parent->email,
                 'phone' => $parent->phone,
                 'is_activated' => $parent->isActivated(),
+                'is_disabled' => $parent->isDisabled(),
+                'deleted_at' => $parent->deleted_at,
                 'students_count' => $parent->students->count(),
                 'students' => $parent->students->map(fn ($s) => [
                     'id' => $s->id,
@@ -77,6 +84,8 @@ class ParentController extends Controller
             'address' => $parent->address ?? $contact?->address,
             'profile_photo_url' => $parent->profile_photo_url,
             'is_activated' => $parent->isActivated(),
+            'is_disabled' => $parent->isDisabled(),
+            'deleted_at' => $parent->deleted_at,
             'created_at' => $parent->created_at,
             'students' => $parent->students->map(fn ($s) => [
                 'id' => $s->id,

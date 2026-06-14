@@ -165,7 +165,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     // Parent management — admin, manager only
     Route::middleware('role:admin|manager')->group(function () {
         Route::get('/references/parents', [ParentController::class, 'index']);
-        Route::get('/references/parents/{parent}', [ParentController::class, 'show']);
+        Route::get('/references/parents/{parent}', [ParentController::class, 'show'])->withTrashed();
         Route::post('/references/parents/{parent}/resend-activation', [ParentController::class, 'resendActivation']);
         Route::post('/references/parents/{parent}/disable', [ParentController::class, 'disable']);
         Route::post('/references/parents/{parent}/enable', [ParentController::class, 'enable']);
