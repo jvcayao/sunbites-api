@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Student;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -70,7 +71,31 @@ class WalletHistoryController extends Controller
         $transactions = DB::table('transactions')
             ->where('wallet_id', $wallet->id)
             ->where('type', 'deposit')
-            ->whereNull('deleted_at')
+            ->where('transactions.confirmed', true)
+            ->whereNull('transactions.deleted_at');
+
+        if ($search) {
+            $matchingUserIds = User::where('first_name', 'like', "%{$search}%")
+                ->orWhere('last_name', 'like', "%{$search}%")
+                ->pluck('id')
+                ->toArray();
+
+            if (empty($matchingUserIds)) {
+                return response()->json([
+                    'data' => [],
+                    'meta' => ['current_page' => 1, 'last_page' => 1, 'total' => 0, 'per_page' => $perPage],
+                ]);
+            }
+
+            // Each ID appears in JSON meta as: {"performed_by": 123}
+            $transactions->where(function ($q) use ($matchingUserIds) {
+                foreach ($matchingUserIds as $userId) {
+                    $q->orWhere('transactions.meta', 'like', "%\"performed_by\": {$userId}%");
+                }
+            });
+        }
+
+        $transactions = $transactions
             ->orderByDesc('created_at')
             ->paginate($perPage, ['id', 'amount', 'meta', 'created_at']);
 
@@ -85,23 +110,6 @@ class WalletHistoryController extends Controller
         $usersById = User::whereIn('id', $performedByIds)
             ->get(['id', 'first_name', 'last_name'])
             ->mapWithKeys(fn ($user) => [$user->id => trim("{$user->first_name} {$user->last_name}")]);
-
-        // Apply optional search filter by staff name
-        if ($search !== null) {
-            $filtered = $transactions->getCollection()->filter(function ($tx) use ($usersById, $search) {
-                $performedById = data_get(json_decode($tx->meta, true), 'performed_by');
-                $name = $performedById ? ($usersById[$performedById] ?? null) : null;
-
-                return $name && str_contains(strtolower($name), strtolower($search));
-            })->values();
-
-            $data = $filtered->map(fn ($tx) => $this->formatTopup($tx, $usersById));
-
-            return response()->json([
-                'data' => $data,
-                'meta' => $this->paginationMeta($transactions),
-            ]);
-        }
 
         $data = $transactions->getCollection()->map(fn ($tx) => $this->formatTopup($tx, $usersById));
 
@@ -119,7 +127,7 @@ class WalletHistoryController extends Controller
 
         return [
             'id' => $tx->id,
-            'date' => $tx->created_at,
+            'date' => Carbon::parse($tx->created_at)->toIso8601String(),
             'description' => 'Wallet Top-Up',
             'amount' => abs((float) $tx->amount) / 100,
             'added_by' => $addedByName,
