@@ -29,7 +29,7 @@ Both types have a QR code and wallet. Both can buy any menu item at the POS.
 students
   id
   branch_id                (FK → branches)
-  student_number           (string, unique per branch) — manually entered at enrollment (school-assigned ID)
+  student_number           (string, nullable, unique per branch when set) — school-assigned ID; may be blank at enrollment and filled in later
   first_name               (string)
   last_name                (string)
   full_name                (virtual/computed)
@@ -164,7 +164,7 @@ Accessible at: `pos.sunbites.com.ph/enrollment`, roles: Admin, Manager, Supervis
 
 ### On Submit
 - Validate all required fields
-- Validate `student_number` is unique per branch
+- `student_number` is **optional** — may be left blank if the school has not yet assigned one; when provided, it must be unique per branch
 - Auto-generate `qr_code`
 - Create wallet via `bavix/laravel-wallet`
 - If subscription type: generate one `student_monthly_payments` row per calendar month in the selected range (status=unpaid, amount resolved from `branch_monthly_amounts` or config fallback)
@@ -216,9 +216,10 @@ Accessible at: `pos.sunbites.com.ph/students`, roles: Admin, Manager, Supervisor
 ### Filters
 - Search by name or student number
 - Filter by grade level
-- Filter by enrollment status
+- Filter by enrollment status (excludes deleted students from this filter)
 - **Month + Year + Payment Status filter** (subscription tab only): Month dropdown + Year dropdown + Paid/Unpaid toggle
 - Group tabs: All / Subscription / Non-Subscription
+- **Deleted toggle**: when active, replaces the normal list with only soft-deleted students; all other filters still apply within deleted view
 - Default sort: alphabetical by last name, then first name
 
 ### Student List Layout
@@ -237,6 +238,7 @@ Each student shows:
 - Outstanding credit badge (red, shown only when `credit_balance > 0`): e.g. "₱135 Credit Owed"
 - Enrollment date
 - Actions: Edit, Wallet Top-up, Remove (with confirmation)
+- When in **deleted view**: actions replaced by `[Restore]` button only; no Remove, no Wallet, no Edit
 
 **Subscription student card (bottom section):**
 - Month payment badges showing month + year (e.g. "Jun '25"): green ✓ = paid, red ✗ = unpaid — clickable to toggle
@@ -406,6 +408,46 @@ On each `credit_transactions` insert, `students.credit_balance` is updated atomi
 
 ---
 
+## Deleted Students (Soft-Delete Recovery)
+
+Students are soft-deleted — they are never permanently erased. This preserves order history, wallet transaction history, activity logs, and payment records for reporting and auditing purposes.
+
+### Rules
+- Deleted students are excluded from all normal list views, the POS lookup, and any active data queries (handled by global `BranchScope` + `SoftDeletes`)
+- No force delete is permitted — the only delete operation is soft delete
+- Admin, Manager, and Supervisor can restore a soft-deleted student
+
+### Deleted Student List (filtered view)
+- Accessible via a "Deleted" toggle/filter on the student list page
+- Shows only students where `deleted_at IS NOT NULL` for the active branch
+- All other filters (search, grade, type tabs) still apply in the deleted view
+- Each deleted student card shows: name, grade, student type, `deleted_at` date, primary contact
+- The only action visible is `[Restore]` — no Edit, no Wallet, no Remove button
+- A `deleted_at` label shows when the student was removed
+
+### Restore
+- Calls `POST /api/v1/students/{student}/restore` (with `.withTrashed()` route binding)
+- Clears `deleted_at`; student returns to normal list with their previous `enrollment_status`
+- Logs `students.restored` with causer
+- UI shows a success toast and removes the student card from the deleted view
+
+---
+
+## Student Number
+
+The student number is assigned by the school administration, not by this system. At the time of enrollment, the number may not yet be available.
+
+### Rules
+- `student_number` is **optional at enrollment** — staff may leave it blank if the school has not assigned one yet
+- Uniqueness is enforced per branch at the time the number is set — null values are excluded from the unique constraint
+- Staff can set or update a student's number at any time from the student profile edit form
+- The edit field appears in the profile edit section of the student detail page
+- The enrollment form shows the field as optional (labelled "Student No. (optional)")
+- If a student with a blank number is assigned a number that already belongs to another student in the same branch, a 422 validation error is returned
+- Activity log tracks `student_number` changes via `LogsActivity` (already in `$logAttributes`)
+
+---
+
 ## API Routes
 
 All routes under `auth:sanctum` + `ability:staff` middleware.
@@ -418,6 +460,7 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | GET | `/api/v1/students/{student}` | admin, manager, supervisor | Student detail |
 | PUT | `/api/v1/students/{student}` | admin, manager, supervisor | Update student profile |
 | DELETE | `/api/v1/students/{student}` | admin, manager, supervisor | Soft delete student |
+| POST | `/api/v1/students/{student}/restore` | admin, manager, supervisor | Restore a soft-deleted student (`.withTrashed()` binding) |
 | POST | `/api/v1/students/{student}/regenerate-qr` | admin, manager, supervisor | Regenerate QR code |
 | PATCH | `/api/v1/students/{student}/status` | admin, manager, supervisor | Change enrollment status |
 | POST | `/api/v1/students/{student}/wallet/top-up` | admin, manager, supervisor | Wallet top-up |
@@ -477,6 +520,14 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [x] Log `wallet.inline_reload` on POS inline reload (properties: amount, payment_method, cashier, order context)
 - [x] Log `wallet.credit_settled` (properties: amount_settled, settled_by)
 - [x] Log `payments.recorded` (properties: school_month, year, status, amount, recorded_by)
+- [ ] Soft-deleted students viewable via `?deleted=1` filter on the student list endpoint
+- [ ] `POST /api/v1/students/{student}/restore` — restore a soft-deleted student; `.withTrashed()` route binding; roles: admin, manager, supervisor; logs `students.restored`
+- [ ] No force delete endpoint — permanent deletion is not supported
+- [ ] `student_number` is nullable in the `students` table — migration required to ALTER the column
+- [ ] Enrollment validation: `student_number` changed from `required` to `nullable` — uniqueness still enforced per branch when a value is provided
+- [ ] `StudentController::update()` — add `student_number` to editable fields with `Rule::unique('students')->where(branch_id)->ignore($student->id)->whereNotNull('student_number')` uniqueness validation
+- [ ] Student detail profile edit form — show editable `student_number` field alongside existing profile fields
+- [ ] Enrollment form — `student_number` field labelled as "Student No. (optional)"
 - [ ] `BranchMonthlyAmountController::store()` and `update()` — accept optional `amount` field in request; if provided, store it directly instead of computing `days × daily_meal_rate`; if absent, compute from current `daily_meal_rate` system config value
 - [ ] Student detail Payment tab — for `unpaid` payments only: show an `[Edit Amount]` inline button next to the toggle; opens a small dialog with a decimal input pre-filled with current amount; on save: `PATCH /api/v1/students/{student}/payments/{payment}` with `{ amount }`; updates the `amount` column without changing status
 - [ ] `PaymentController::updateAmount(Request, Student, StudentMonthlyPayment)` — new action on existing PATCH route: if request only contains `amount` (no status toggle), update the `amount` field on the payment record; only allowed on `unpaid` payments; roles: admin, manager

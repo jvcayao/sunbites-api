@@ -112,6 +112,7 @@ class StudentLookupController extends Controller
             'subscription_daily_status' => $student->student_type === StudentType::Subscription
                 ? $this->buildDailyStatus($student)
                 : null,
+            'subscription_monthly_status' => $student->currentMonthSubscriptionStatus(),
         ];
     }
 

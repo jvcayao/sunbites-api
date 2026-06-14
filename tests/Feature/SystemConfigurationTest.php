@@ -56,10 +56,10 @@ class SystemConfigurationTest extends TestCase
         $response = $this->asAdmin()->getJson('/api/v1/system-configurations');
 
         $response->assertOk();
-        $response->assertJsonCount(3);
+        $response->assertJsonCount(5);
 
         $keys = collect($response->json())->pluck('key')->sort()->values()->all();
-        $this->assertEquals(['credit_limit', 'daily_meal_rate', 'loyalty_point_threshold'], $keys);
+        $this->assertEquals(['credit_limit', 'daily_meal_rate', 'loyalty_point_threshold', 'payment_reminder_days', 'pre_registration_expiry_days'], $keys);
     }
 
     public function test_admin_can_update_daily_meal_rate(): void

@@ -82,10 +82,56 @@ class BillingReportTest extends TestCase
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
         $this->createPayment($student, 'paid');
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
 
         $response->assertOk()
             ->assertJsonStructure(['data', 'meta', 'summary']);
+    }
+
+    public function test_billing_report_includes_student_full_name(): void
+    {
+        $student = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+        ]);
+        $this->createPayment($student);
+
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
+
+        $response->assertOk();
+        $this->assertSame('Juan Dela Cruz', $response->json('data.0.student.full_name'));
+    }
+
+    public function test_default_school_month_and_year_filters_to_current_school_period(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        // Current period payment — should appear
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => strtolower(now()->format('F')),
+            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        // Different month payment — must NOT appear
+        $otherMonth = now()->month === 6 ? 'july' : 'june';
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => $otherMonth,
+            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
     }
 
     public function test_supervisor_can_view_billing_report(): void
@@ -103,7 +149,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($student, 'paid');
         $this->createPayment($student2, 'unpaid');
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
 
         $response->assertOk();
         $this->assertEquals('unpaid', $response->json('data.0.status'));
@@ -117,7 +164,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($student, 'paid');
         $this->createPayment($student2, 'unpaid');
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?status=paid');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&status=paid");
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
@@ -131,7 +179,8 @@ class BillingReportTest extends TestCase
         $this->createPayment($student, 'paid', 800.00);
         $this->createPayment($student2, 'unpaid', 800.00);
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}");
 
         $response->assertOk();
         $this->assertEquals(800.0, $response->json('summary.total_collected'));
@@ -168,7 +217,219 @@ class BillingReportTest extends TestCase
         $this->createPayment($grade1Student);
         $this->createPayment($grade3Student);
 
-        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?grade_level=Grade+1');
+        $year = now()->year;
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&grade_level=Grade+1");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_by_first_name_returns_matching_students(): void
+    {
+        $year = now()->year;
+
+        $maria = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
+        ]);
+        $pedro = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Pedro',
+            'last_name' => 'Reyes',
+        ]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $maria->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+        StudentMonthlyPayment::create([
+            'student_id' => $pedro->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&search=maria");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Maria Santos', $response->json('data.0.student.full_name'));
+    }
+
+    public function test_search_by_student_number_returns_matching_student(): void
+    {
+        $year = now()->year;
+
+        $target = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => 'STU-2026-001',
+        ]);
+        $other = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => 'STU-2026-002',
+        ]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $target->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+        StudentMonthlyPayment::create([
+            'student_id' => $other->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&search=STU-2026-001");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_with_no_match_returns_empty_data(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&search=doesnotexist");
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+    }
+
+    public function test_recorded_by_filter_returns_only_payments_by_that_staff_member(): void
+    {
+        $year = now()->year;
+
+        $student1 = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $student2 = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student1->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->admin->id,
+        ]);
+        StudentMonthlyPayment::create([
+            'student_id' => $student2->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->manager->id,
+        ]);
+
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_by={$this->admin->id}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_recorded_from_excludes_payments_recorded_before_date(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now()->subDays(3),
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $from = now()->subDay()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_from={$from}");
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+    }
+
+    public function test_recorded_to_excludes_payments_recorded_after_date(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $to = now()->subDay()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_to={$to}");
+
+        $response->assertOk();
+        $this->assertCount(0, $response->json('data'));
+    }
+
+    public function test_recorded_from_and_to_together_return_payments_within_range(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        // Inside range
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_at' => now(),
+            'recorded_by' => $this->admin->id,
+        ]);
+
+        $from = now()->subDay()->toDateString();
+        $to = now()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_from={$from}&recorded_to={$to}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_recorded_from_does_not_exclude_unpaid_records(): void
+    {
+        $year = now()->year;
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        // Unpaid payment — no recorded_at; should always pass through date filters
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        // Date filter set to yesterday — unpaid record should still appear
+        $from = now()->subDay()->toDateString();
+        $response = $this->asAdmin()->getJson("/api/v1/reports/billing?school_month=june&year={$year}&recorded_from={$from}");
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));

@@ -1,25 +1,37 @@
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="font-family:sans-serif;color:#1a1a1a;padding:24px;max-width:600px;margin:0 auto;">
-    <h2 style="color:#f97316;">Low Wallet Balance Alert</h2>
-    <p>Hi {{ $parent->first_name }},</p>
-    <p><strong>{{ $student->full_name }}</strong>'s canteen wallet balance has dropped below your alert threshold.</p>
-    <table style="border-collapse:collapse;margin:16px 0;background:#fff7ed;border-radius:8px;padding:16px;width:100%;">
-        <tr>
-            <td style="padding:6px 16px 6px 16px;color:#6b7280;">Current Balance</td>
-            <td style="padding:6px 16px;font-weight:700;color:#dc2626;">₱{{ number_format($currentBalance, 2) }}</td>
-        </tr>
-        <tr>
-            <td style="padding:6px 16px;color:#6b7280;">Alert Threshold</td>
-            <td style="padding:6px 16px;">₱{{ number_format($threshold, 2) }}</td>
-        </tr>
-    </table>
-    <p>Please arrange a wallet top-up at the canteen or contact the school.</p>
-    <p style="margin:24px 0;">
-        <a href="{{ $portalUrl }}" style="background:#f97316;color:#fff;padding:12px 28px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;">View Parent Portal</a>
+<x-emails.layout title="Low Wallet Balance Alert">
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a1a1a;">
+        Low Wallet Balance Alert
+    </h2>
+
+    <p style="margin:0 0 16px;">Hi {{ $parent->first_name }},</p>
+
+    <p style="margin:0 0 20px;">
+        <strong>{{ $student->full_name }}</strong>'s canteen wallet balance has dropped below your alert threshold.
     </p>
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-    <p style="color:#9ca3af;font-size:12px;">Sunbites School Canteen Management System</p>
-</body>
-</html>
+
+    <div style="background-color:#fef2f2;border-left:4px solid #dc2626;border-radius:0 6px 6px 0;padding:16px;margin:0 0 20px;">
+        <div style="padding:6px 0;">
+            <span style="color:#6b7280;font-size:13px;">Current Balance</span>
+            <span style="display:block;font-weight:700;font-size:18px;color:#dc2626;">
+                &#8369;{{ number_format($currentBalance, 2) }}
+            </span>
+        </div>
+        <div style="padding:6px 0;border-top:1px solid #fecaca;margin-top:6px;">
+            <span style="color:#6b7280;font-size:13px;">Alert Threshold</span>
+            <span style="display:block;font-weight:600;color:#1a1a1a;">
+                &#8369;{{ number_format($threshold, 2) }}
+            </span>
+        </div>
+    </div>
+
+    <p style="margin:0 0 24px;">
+        Please arrange a wallet top-up at the canteen or contact the school.
+    </p>
+
+    <div style="text-align:center;margin:28px 0;">
+        <a href="{{ $portalUrl }}"
+           style="background-color:#dc2626;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;font-size:15px;">
+            View Parent Portal
+        </a>
+    </div>
+</x-emails.layout>

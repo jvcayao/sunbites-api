@@ -219,4 +219,38 @@ class EnrollmentTest extends TestCase
 
         $response->assertJsonValidationErrors(['contacts']);
     }
+
+    public function test_enrollment_with_null_student_number_succeeds(): void
+    {
+        $payload = $this->validPayload(['student_number' => null]);
+
+        $response = $this->asManager()->postJson('/api/v1/enrollment', $payload);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('students', [
+            'first_name' => 'Juan',
+            'student_number' => null,
+        ]);
+    }
+
+    public function test_two_students_with_null_student_number_in_same_branch_both_succeed(): void
+    {
+        $payload = $this->validPayload(['student_number' => null, 'first_name' => 'Student', 'last_name' => 'One']);
+        $this->asManager()->postJson('/api/v1/enrollment', $payload)->assertCreated();
+
+        $payload2 = $this->validPayload(['student_number' => null, 'first_name' => 'Student', 'last_name' => 'Two']);
+        $this->asManager()->postJson('/api/v1/enrollment', $payload2)->assertCreated();
+
+        $this->assertDatabaseCount('students', 2);
+    }
+
+    public function test_duplicate_student_number_per_branch_still_rejected(): void
+    {
+        $this->asManager()->postJson('/api/v1/enrollment', $this->validPayload())->assertCreated();
+
+        $response = $this->asManager()->postJson('/api/v1/enrollment', $this->validPayload(['last_name' => 'Santos']));
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['student_number']);
+    }
 }

@@ -51,7 +51,7 @@ class StudentDetailTest extends TestCase
         $response = $this->asManager()->getJson("/api/v1/students/{$student->id}");
 
         $response->assertOk();
-        $response->assertJsonStructure(['student', 'wallet_transactions', 'activity_logs']);
+        $response->assertJsonStructure(['student', 'subscription_monthly_status', 'wallet_transactions', 'activity_logs']);
     }
 
     public function test_manager_can_update_student_profile(): void
@@ -265,6 +265,133 @@ class StudentDetailTest extends TestCase
         $this->assertNull($response->json('student.subscription_daily_status'));
     }
 
+    public function test_subscription_student_pos_lookup_includes_monthly_status(): void
+    {
+        $student = Student::factory()->subscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+            'qr_code' => 'SB-MONTHLY001X',
+        ]);
+
+        BranchSubscriptionConfig::factory()->create([
+            'branch_id' => $this->branch->id,
+            'meal_daily_limit' => 1,
+            'snack_daily_limit' => 1,
+            'drink_daily_limit' => 1,
+            'extra_daily_limit' => 1,
+        ]);
+
+        $response = $this->asManager()->postJson('/api/v1/pos/students/lookup', [
+            'type' => 'qr',
+            'value' => 'SB-MONTHLY001X',
+        ]);
+
+        $response->assertOk();
+        $status = $response->json('student.subscription_monthly_status');
+        $this->assertNotNull($status);
+        $this->assertArrayHasKey('month', $status);
+        $this->assertArrayHasKey('year', $status);
+        $this->assertArrayHasKey('categories', $status);
+        $this->assertArrayHasKey('meal', $status['categories']);
+        $this->assertArrayHasKey('snack', $status['categories']);
+        $this->assertArrayHasKey('drink', $status['categories']);
+        $this->assertArrayHasKey('extra', $status['categories']);
+        $this->assertArrayHasKey('allocated', $status['categories']['meal']);
+        $this->assertArrayHasKey('used', $status['categories']['meal']);
+        $this->assertArrayHasKey('remaining', $status['categories']['meal']);
+        $this->assertEquals(0, $status['categories']['meal']['used']);
+    }
+
+    public function test_non_subscription_student_pos_lookup_has_null_monthly_status(): void
+    {
+        $student = Student::factory()->nonSubscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+            'qr_code' => 'SB-NOSUB001MNT',
+        ]);
+
+        $response = $this->asManager()->postJson('/api/v1/pos/students/lookup', [
+            'type' => 'qr',
+            'value' => 'SB-NOSUB001MNT',
+        ]);
+
+        $response->assertOk();
+        $this->assertNull($response->json('student.subscription_monthly_status'));
+    }
+
+    public function test_monthly_subscription_status_counts_completed_subscription_orders_only(): void
+    {
+        $student = Student::factory()->subscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+        ]);
+
+        BranchSubscriptionConfig::factory()->create([
+            'branch_id' => $this->branch->id,
+            'meal_daily_limit' => 1,
+            'snack_daily_limit' => 1,
+            'drink_daily_limit' => 1,
+            'extra_daily_limit' => 1,
+        ]);
+
+        $cashier = User::factory()->create();
+        $cashier->assignRole('cashier');
+
+        $mealItem = PosMenuItem::factory()->subscriptionEligible()->create([
+            'branch_id' => $this->branch->id,
+            'category' => MenuCategory::Meal->value,
+        ]);
+
+        // Completed subscription order this month → should count
+        $completedOrder = Order::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'subscription',
+            'status' => 'completed',
+        ]);
+        OrderItem::factory()->create([
+            'order_id' => $completedOrder->id,
+            'pos_menu_item_id' => $mealItem->id,
+            'quantity' => 2,
+        ]);
+
+        // Voided subscription order → should NOT count
+        $voidedOrder = Order::factory()->voided()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'subscription',
+        ]);
+        OrderItem::factory()->create([
+            'order_id' => $voidedOrder->id,
+            'pos_menu_item_id' => $mealItem->id,
+            'quantity' => 5,
+        ]);
+
+        // Cash order → should NOT count
+        $cashOrder = Order::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'cash',
+            'status' => 'completed',
+        ]);
+        OrderItem::factory()->create([
+            'order_id' => $cashOrder->id,
+            'pos_menu_item_id' => $mealItem->id,
+            'quantity' => 3,
+        ]);
+
+        $status = $student->currentMonthSubscriptionStatus();
+
+        if ($status === null) {
+            $this->markTestSkipped('Current month is not a school month.');
+        }
+
+        $mealStatus = $status['categories']['meal'];
+        $this->assertEquals(2, $mealStatus['used']);
+        $this->assertEquals($mealStatus['allocated'] - 2, $mealStatus['remaining']);
+        $this->assertEquals(0, $status['categories']['snack']['used']);
+    }
+
     public function test_daily_status_counts_only_completed_subscription_orders_from_today(): void
     {
         $student = Student::factory()->subscription()->create([
@@ -336,5 +463,52 @@ class StudentDetailTest extends TestCase
         $this->assertEquals(1, $mealStatus['used']);
         $this->assertEquals(3, $mealStatus['limit']);
         $this->assertEquals(2, $mealStatus['remaining']);
+    }
+
+    private function baseUpdatePayload(array $overrides = []): array
+    {
+        return array_merge([
+            'first_name' => 'Juan',
+            'last_name' => 'Dela Cruz',
+            'grade_level' => 'Grade 3',
+            'birthday' => '2015-01-15',
+        ], $overrides);
+    }
+
+    public function test_update_student_number_succeeds(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->putJson("/api/v1/students/{$student->id}", $this->baseUpdatePayload([
+            'student_number' => 'NEW-2025-999',
+        ]));
+
+        $response->assertOk();
+        $this->assertDatabaseHas('students', ['id' => $student->id, 'student_number' => 'NEW-2025-999']);
+    }
+
+    public function test_duplicate_student_number_per_branch_fails_on_update(): void
+    {
+        $studentA = Student::factory()->create(['branch_id' => $this->branch->id, 'student_number' => 'TAKEN-001']);
+        $studentB = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asManager()->putJson("/api/v1/students/{$studentB->id}", $this->baseUpdatePayload([
+            'student_number' => 'TAKEN-001',
+        ]));
+
+        $response->assertUnprocessable();
+        $response->assertJsonValidationErrors(['student_number']);
+    }
+
+    public function test_clearing_student_number_to_null_succeeds(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id, 'student_number' => 'CLEAR-001']);
+
+        $response = $this->asManager()->putJson("/api/v1/students/{$student->id}", $this->baseUpdatePayload([
+            'student_number' => null,
+        ]));
+
+        $response->assertOk();
+        $this->assertNull($student->fresh()->student_number);
     }
 }

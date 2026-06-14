@@ -157,4 +157,47 @@ class ParentManagementTest extends TestCase
 
         $this->getJson('/api/v1/references/parents')->assertForbidden();
     }
+
+    public function test_parent_list_only_returns_parents_in_active_branch(): void
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $otherStudent = Student::factory()->create(['branch_id' => $otherBranch->id]);
+
+        $otherParent = ParentUser::create([
+            'first_name' => 'Ana',
+            'last_name' => 'Cruz',
+            'email' => 'ana.cruz@example.com',
+            'password' => null,
+            'email_verified_at' => null,
+        ]);
+        $otherParent->students()->attach($otherStudent->id, [
+            'linked_at' => now(),
+            'linked_by' => $this->manager->id,
+            'wallet_alert_threshold' => 0,
+        ]);
+
+        $response = $this->asManager()->getJson('/api/v1/references/parents');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonFragment(['email' => 'maria.santos@example.com'])
+            ->assertJsonMissing(['email' => 'ana.cruz@example.com']);
+    }
+
+    public function test_parent_with_no_student_link_not_returned_in_list(): void
+    {
+        ParentUser::create([
+            'first_name' => 'Ghost',
+            'last_name' => 'User',
+            'email' => 'ghost@example.com',
+            'password' => null,
+            'email_verified_at' => null,
+        ]);
+
+        $response = $this->asManager()->getJson('/api/v1/references/parents');
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonMissing(['email' => 'ghost@example.com']);
+    }
 }

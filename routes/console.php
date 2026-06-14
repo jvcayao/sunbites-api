@@ -13,3 +13,6 @@ Schedule::command('activitylog:clean')->daily();
 
 // Prune failed queue jobs older than 7 days
 Schedule::command('queue:prune-failed --hours=168')->weekly();
+
+// Expire pre-registrations that have passed their expiry date
+Schedule::command('pre-registrations:expire')->dailyAt('00:00');
