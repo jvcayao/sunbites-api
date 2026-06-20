@@ -236,10 +236,14 @@ feedbacks
 ```
 
 ### Kitchen Staff View (References > Feedback in POS app)
-- List of all feedback for the active branch
-- Unread badge count on sidebar
-- Mark as read, reply to feedback (reply sent as email to parent)
-- Filter by rating, category, date, read/unread
+- List of all feedback for the active branch (branch-scoped, newest first)
+- Search by message text or student name (debounced)
+- "Unread only" toggle filter
+- Pagination (25 per page)
+- Click to open detail drawer — shows message, existing reply, mark-read button, reply textarea
+- Mark as read sets `is_read = true`
+- Reply saves `admin_reply` (sanitized), sets `replied_at`, sends `FeedbackReplyMail` to parent
+- Unread feedback count badge in POS app sidebar
 
 ---
 

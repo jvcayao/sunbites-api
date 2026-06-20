@@ -295,33 +295,144 @@ Same layout as Meal Planner Editor (month tabs + week tabs + grid) but all cells
 
 ---
 
-## Screen: Feedback
+## Screen: Feedback (Parent Portal)
 
 **Route:** `portal.sunbites.com.ph/feedback`
 **Layout:** `PortalLayout`
 
+The page has two sections stacked vertically: a submit form at the top, then the parent's previous feedback history below.
+
+### Section 1 — Submit Feedback
+
 ```
 ┌──────────────────────────────────────────────────┐
-│  💬 Send Feedback                                │
+│  Submit Feedback                                  │
 ├──────────────────────────────────────────────────┤
+│                                                   │
+│  About (optional)                                 │
+│  [General / Not about a specific student ▾]      │
+│                                                   │
+│  Category *                                       │
+│  [Select a category… ▾]                          │
+│    Options: Food Quality / Service /              │
+│    Portion Size / Cleanliness / General           │
 │                                                   │
 │  Rating *                                         │
 │  ☆ ☆ ☆ ☆ ☆  (tap stars 1–5)                      │
 │                                                   │
-│  Category *                                       │
-│  [Food Quality ▾]                                │
-│                                                   │
-│  Student (optional)                               │
-│  [Maria Santos ▾]                                │
-│                                                   │
-│  Message (optional)                               │
+│  Message *  (min 10 characters)                   │
+│  [________________________________]               │
 │  [________________________________]               │
 │                                                   │
-│  [─── Submit Feedback ───]                       │
+│                    [Submit Feedback →]            │
 └──────────────────────────────────────────────────┘
 ```
 
-Star rating: 5 clickable stars, filled = `text-yellow-400`, empty = `text-muted`
+- Star rating: 5 interactive buttons; filled = `text-amber-400`, empty = `text-muted-foreground/30`
+- Student selector: dropdown of the parent's linked students; "General" option when no specific student
+- Validation: Zod schema; field-level errors on submit; button disabled while pending
+- On success: toast "Feedback submitted. Thank you!"; form resets; feedback list invalidated
+
+### Section 2 — My Previous Feedback
+
+```
+┌──────────────────────────────────────────────────┐
+│  My Previous Feedback                             │
+├──────────────────────────────────────────────────┤
+│                                                   │
+│  ┌────────────────────────────────────────────┐  │
+│  │  [Food Quality]          Jun 10, 2026       │  │
+│  │  The sinigang was overcooked today…         │  │
+│  │                                             │  │
+│  │  ┌── Staff Reply ─────────────────────┐    │  │
+│  │  │ Thank you for letting us know!     │    │  │
+│  │  │ We'll address this tomorrow.       │    │  │
+│  │  │                              Jun 11 │    │  │
+│  │  └────────────────────────────────────┘    │  │
+│  └────────────────────────────────────────────┘  │
+│                                                   │
+│  ┌────────────────────────────────────────────┐  │
+│  │  [Service]               Jun 5, 2026        │  │
+│  │  Staff were very accommodating today.       │  │
+│  └────────────────────────────────────────────┘  │
+│                                                   │
+└──────────────────────────────────────────────────┘
+```
+
+- Each card: `rounded-xl border bg-card`
+- Category badge: colored by category (green = Food Quality, blue = Service, amber = Portion Size, purple = Cleanliness, muted = General)
+- Admin reply block: `bg-primary/5 border-primary/20` — shows reply text + replied_at date
+- Empty state: dashed border card with `MessageSquare` icon + "No feedback submitted yet."
+- Loading state: 2 skeleton cards
+
+---
+
+## Screen: References > Feedback (POS App — Kitchen Staff)
+
+**Route:** `pos.sunbites.com.ph/references/feedback`
+**Layout:** `KitchenLayout`
+**Roles:** Admin, Manager, Supervisor
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  References                                                       │
+│  Feedback                                                         │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  [Search feedback…      ]   [● Unread only]                      │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ [💬]  [Food Quality] [Unread]                            │    │
+│  │       The sinigang was overcooked today…                 │    │
+│  │       Maria Santos (2024-001) · Jun 10, 2026             │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ [💬]  [Service] [Replied]                                │    │
+│  │       Staff were great! Very accommodating…              │    │
+│  │       General · Jun 5, 2026                              │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│                                                                   │
+│  1–25 of 48        [← Prev]  1 / 2  [Next →]                   │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+- Feedback cards: `rounded-xl border bg-card border-l-4 border-l-destructive`; unread items have `bg-primary/5` tint
+- `[Unread]` badge: `bg-primary/10 text-primary border-primary/30`
+- `[Replied]` badge: same styling
+- Click: opens FeedbackDetailSheet (right-side drawer)
+- Search: debounced 300ms, resets to page 1
+- "Unread only" toggle: shadcn `Switch`
+
+**FeedbackDetailSheet (right drawer, Sheet component):**
+
+```
+┌────── Food Quality Feedback ─────────────────────────┐
+│  [Food Quality] [Unread]                              │
+│  Food Quality Feedback                                │
+│  From: Maria Santos (2024-001) · Jun 10, 2026         │
+│                                                        │
+│  ┌── Message ─────────────────────────────────────┐  │
+│  │ The sinigang was overcooked today and the       │  │
+│  │ portion seemed smaller than usual.              │  │
+│  └────────────────────────────────────────────────┘  │
+│                                                        │
+│           [Mark as Read]                               │
+│                                                        │
+│  Write a Reply                                         │
+│  [____________________________________________]        │
+│  [____________________________________________]        │
+│                                                        │
+│                     [Send Reply]                       │
+└────────────────────────────────────────────────────────┘
+```
+
+- Sheet: `sm:max-w-lg`, scrollable
+- Message block: `bg-muted/30 border rounded-lg`
+- Existing reply block: `bg-primary/5 border-primary` — shown above reply textarea when `admin_reply` is set; textarea pre-filled
+- "Mark as Read" button: shown only when `is_read = false`; hidden after marking
+- Textarea: min-length 5, max 2000 characters
+- On reply success: toast "Reply sent."; drawer closes; list invalidated
+- On mark-read success: toast "Marked as read."; badge removed from card
 
 ---
 
