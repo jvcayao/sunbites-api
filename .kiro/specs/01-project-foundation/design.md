@@ -124,6 +124,7 @@ Shown after login when a staff member has access to multiple branches. Uses the 
 │📋 Enrollment                                        │
 │👥 Students                                          │
 │🛒 POS                                               │
+│🔔 Reminders          (Spec 11 — payment reminders)  │
 │                                                     │
 │  ── Reports ──                                      │
 │  ⊞ Dashboard                                        │
@@ -132,13 +133,21 @@ Shown after login when a staff member has access to multiple branches. Uses the 
 │  👛 Wallet Report                                   │
 │  📦 Inventory Report                               │
 │  🧾 Daily Summary                                   │
+│  🏦 Billing Report                                  │
+│  💳 Credits          (Admin/Manager only)           │
+│  📋 Activity Log     (Admin/Manager only)           │
 │                                                     │
 │  ── References ──                                   │
 │  👨‍💼 Users                                           │
+│  👪 Parents                                         │
 │  🏫 Branches                                        │
 │  🍽️ Meal Planner                                    │
 │  📦 Inventory                                       │
-│  📋 Activity Log                                    │
+│  💬 Feedback                                        │
+│  📣 Announcements    (Spec 12)                      │
+│  📥 Notifications    (Spec 12 — staff inbox)        │
+│  📝 Pre-Registrations (Spec 13)                     │
+│  ⚙️ System Settings  (Admin only — Spec 09)         │
 │                                                     │
 │  ◀  [Logout]                                        │
 └──────────┴──────────────────────────────────────────┘

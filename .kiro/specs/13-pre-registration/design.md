@@ -1,4 +1,4 @@
-# Spec 12 — Design
+# Spec 13 — Design
 
 ## Overview
 
@@ -236,7 +236,7 @@ $branch->users->each(function (User $staff) use ($preRegistration) {
 });
 ```
 
-Channel: `PrivateChannel("staff.{$staff->id}")` — same infrastructure as Spec 11.
+Channel: `PrivateChannel("staff.{$staff->id}")` — same infrastructure as Spec 12.
 
 Staff POS notification bell count increases. Clicking the notification navigates to `/pre-registrations/{id}`.
 
@@ -422,10 +422,10 @@ DB::transaction(function () use ($preReg) {
 
 ## Dependencies
 
-| What Spec 12 needs | Source |
+| What Spec 13 needs | Source |
 |---|---|
-| `notifications` table + Reverb + `staff.{id}` channel | Spec 10 + 11 |
+| `notifications` table + Reverb | Spec 10 Task 1 |
+| `staff.{id}` channel auth + POS EchoProvider + NotificationBell | Spec 12 Tasks 2 + 6 + 7 |
 | `ParentProvisioningService` | Spec 07 |
 | Enrollment business logic (`EnrollmentService`) | Spec 05 (extract to service) |
 | `pre_registration_expiry_days` system config | Spec 09 seeder extension |
-| Staff notification bell (inbound) | Spec 11 |

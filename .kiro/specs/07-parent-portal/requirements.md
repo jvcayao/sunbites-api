@@ -18,7 +18,7 @@ Parent accounts are **provisioned automatically at enrollment** — there is no 
 - All portal API routes are protected by `auth:sanctum` + `ability:parent` middleware
 
 ### Token Storage
-- Parent token stored in Zustand memory only — never `localStorage` or `sessionStorage`
+- Parent token stored in `sessionStorage` via Zustand `persist` middleware — survives page refresh (required for `EchoProvider` to reinitialize Echo on reload without losing channel subscription)
 - `~/sunbites-portal` Zustand auth store holds the token; the API client reads it and attaches `Authorization: Bearer {token}` to every request
 
 ### Rate Limiting
@@ -37,7 +37,8 @@ parents
   profile_photo_path (string, nullable)
   email_verified_at  (timestamp, nullable — null = not yet activated; set on first password set)
   remember_token     (string, nullable)
-  created_at, updated_at
+  disabled_at        (timestamp, nullable — set when staff disables the account; null = active)
+  created_at, updated_at, deleted_at (soft delete)
 ```
 
 `email_verified_at` serves as the activation flag. An account with `email_verified_at = null` is provisioned but not yet activated — the parent cannot log in.
@@ -235,10 +236,14 @@ feedbacks
 ```
 
 ### Kitchen Staff View (References > Feedback in POS app)
-- List of all feedback for the active branch
-- Unread badge count on sidebar
-- Mark as read, reply to feedback (reply sent as email to parent)
-- Filter by rating, category, date, read/unread
+- List of all feedback for the active branch (branch-scoped, newest first)
+- Search by message text or student name (debounced)
+- "Unread only" toggle filter
+- Pagination (25 per page)
+- Click to open detail drawer — shows message, existing reply, mark-read button, reply textarea
+- Mark as read sets `is_read = true`
+- Reply saves `admin_reply` (sanitized), sets `replied_at`, sends `FeedbackReplyMail` to parent
+- Unread feedback count badge in POS app sidebar
 
 ---
 
@@ -261,9 +266,13 @@ This page gives kitchen staff a full view of all parent accounts and their linke
   - `Resend Activation Email` — visible only when `email_verified_at` is null; rate-limited max 3 per 24 hours
   - `Send Password Reset Email` — visible only when `email_verified_at` is not null
 
-### No Delete / Edit from This Page
-- Parent accounts are not deleted from this page; they are unlinked from a student via the student's Contacts tab
-- Parent profile info (name, email) is not editable from this page; parents edit their own profile from the portal
+### Account Management Actions (Admin/Manager Only)
+- **Disable** — sets `disabled_at`; prevents parent from logging in (blocked at auth middleware) without removing their data or links
+- **Enable** — clears `disabled_at`; restores login access
+- **Soft-delete** — sets `deleted_at`; hides account from active list; parent cannot log in
+- **Restore** — clears `deleted_at`; recovers soft-deleted account
+
+Parent profile info (name, email) is not editable from this page; parents edit their own profile from the portal.
 
 ---
 
@@ -280,11 +289,13 @@ All portal routes under `auth:sanctum` + `ability:parent` middleware unless note
 | GET | `/api/v1/portal/profile` | parent | Get parent profile — returns `profile_photo_url` (full public URL), not raw path |
 | PATCH | `/api/v1/portal/profile` | parent | Update name, phone, address (no password) |
 | POST | `/api/v1/portal/profile/change-password` | parent | Change password — requires `current_password`, `password`, `password_confirmation` |
+| POST | `/api/v1/portal/profile/photo` | parent | Upload profile photo (MIME whitelist: jpeg/png/webp, max 2MB) |
 | GET | `/api/v1/portal/dashboard` | parent | Dashboard data for linked students |
 | GET | `/api/v1/portal/students` | parent | Linked students list |
 | GET | `/api/v1/portal/students/{id}/activity` | parent | Spending activity (IDOR-protected) |
 | GET | `/api/v1/portal/students/{id}/wallet` | parent | Wallet history (IDOR-protected) |
-| PUT | `/api/v1/portal/students/{id}/wallet-alert` | parent | Set alert threshold (IDOR-protected) |
+| PATCH | `/api/v1/portal/students/{id}/wallet/alert` | parent | Set wallet alert threshold (IDOR-protected via policy) |
+| GET | `/api/v1/portal/students/{id}/payment-history` | parent | Subscription monthly payment history — only for subscription-type students (IDOR-protected) |
 | GET | `/api/v1/portal/meal-planner` | parent | Read-only meal planner |
 | GET | `/api/v1/portal/feedback` | parent | Own feedback list |
 | POST | `/api/v1/portal/feedback` | parent | Submit feedback |
@@ -293,8 +304,13 @@ POS staff routes (under `ability:staff`):
 
 | Method | Route | Roles | Description |
 |---|---|---|---|
-| GET | `/api/v1/parents` | admin, manager, supervisor | Paginated parent list with filters |
-| GET | `/api/v1/parents/{parent}` | admin, manager, supervisor | Parent detail with linked students |
+| GET | `/api/v1/references/parents` | admin, manager, supervisor | Paginated parent list with filters |
+| GET | `/api/v1/references/parents/{parent}` | admin, manager, supervisor | Parent detail with linked students (including soft-deleted) |
+| POST | `/api/v1/references/parents/{parent}/resend-activation` | admin, manager, supervisor | Resend activation email (rate-limited, only when not activated) |
+| POST | `/api/v1/references/parents/{parent}/disable` | admin, manager | Disable parent account (`disabled_at` set) |
+| POST | `/api/v1/references/parents/{parent}/enable` | admin, manager | Re-enable disabled parent account |
+| DELETE | `/api/v1/references/parents/{parent}` | admin, manager | Soft-delete parent account (`deleted_at` set) |
+| POST | `/api/v1/references/parents/{parent}/restore` | admin, manager | Restore soft-deleted parent account |
 
 Feedback reply and read endpoints are in the POS app under `ability:staff` (defined alongside Feedback in Spec 07 implementation).
 
@@ -302,48 +318,57 @@ Feedback reply and read endpoints are in the POS app under `ability:staff` (defi
 
 ## Requirements
 
-- [ ] `parents` table: `password` nullable (null until activated); `email_verified_at` null = not activated
-- [ ] `parent_student` pivot table: `parent_id`, `student_id`, `linked_at`, `linked_by`, `wallet_alert_threshold`; UNIQUE KEY `(parent_id, student_id)`
-- [ ] `feedbacks` table with `category` enum (TitleCase) and `admin_reply` field
-- [ ] Parent Sanctum token endpoint: `POST /api/v1/portal/auth/login` issues token with `parent` ability
-- [ ] Login blocked with 401 `account_not_activated` error if `email_verified_at` is null
-- [ ] Portal login page shows "not activated" message and directs parent to contact the canteen
-- [ ] All portal API routes protected by `auth:sanctum` + `ability:parent`
-- [ ] Parent token stored in `~/sunbites-portal` Zustand auth store (memory only — not localStorage)
-- [ ] `POST /api/v1/portal/auth/forgot-password` always returns generic "If an account exists, we'll send an email"; server sends activation email if not activated, reset email if activated
-- [ ] `POST /api/v1/portal/auth/reset-password` — sets password, sets `email_verified_at = now()`, works for both initial activation and password reset
-- [ ] Activation link opens `portal.sunbites.com.ph/activate?token=...&email=...`; on success redirects to login with toast
-- [ ] Rate limiting: login, forgot-password — max 5 attempts per 5 minutes per IP
-- [ ] Parent profile edit page — photo upload: MIME whitelist (jpeg/png/webp), max 2MB; stored on public disk; API returns `profile_photo_url` (full public URL)
-- [ ] `POST /api/v1/portal/profile/change-password` — dedicated endpoint; requires `current_password`, `password`, `password_confirmation`; 422 if current password is wrong
-- [ ] No self-registration — no `/register` route on the portal
-- [ ] No manual student link request flow — no `parent_student_requests` table
-- [ ] Parent dashboard: outstanding credit alert card (when `credit_balance > 0`), wallet card, spending summary, recent purchases
-- [ ] Student selector (tabs or dropdown) when parent has multiple linked students
-- [ ] "No students linked" informational card when `parent_student` is empty for authenticated parent
-- [ ] IDOR protection: `/api/v1/portal/students/{id}/activity` and `/api/v1/portal/students/{id}/wallet` verify `parent_student` link ownership via `ParentStudentPolicy::view()` before returning any data (403 if not linked)
-- [ ] Wallet alert threshold update: `ParentStudentPolicy` ownership check before updating `parent_student` record
-- [ ] `WalletAlertJob` queued when wallet withdrawal drops balance below `wallet_alert_threshold`
-- [ ] Spending breakdown with date range filter (day/week/month view)
-- [ ] Wallet transaction history table
-- [ ] Meal planner read-only page at `portal.sunbites.com.ph/meal-plan` — reads from `weekly_meal_plans`; branch-scoped via linked student; branch selector if multiple branches
-- [ ] Month tabs show all 10 school months (Jun–Mar) as pill buttons, horizontally scrollable on mobile
-- [ ] When selected week is published (`visible_to_parents = true`): render full meal grid with all 5 columns (Ulam, Vegetables, Fruit, Soup, Snacks)
-- [ ] When selected week is unpublished (`visible_to_parents = false`): show "Meal plan for this week is not yet available." card instead of the table
-- [ ] "Meal Plan" link in portal top nav
-- [ ] Feedback form: rating, category, message (`strip_tags()` before storage); student selector
-- [ ] `admin_reply` sanitized with `strip_tags()` before storage; rendered as plain text
-- [ ] Feedback list and reply functionality in POS app (References > Feedback)
-- [ ] Feedback reply email sent to parent
-- [ ] Unread feedback count badge in POS app sidebar
-- [ ] `student_contacts.email` is informational only — not used for portal auth or IDOR checks; `parent_student` pivot is the canonical link
-- [ ] Portal layout (`PortalLayout`) in `~/sunbites-portal` — top nav, no sidebar, mobile-responsive
-- [ ] Auth pages in `app/(auth)/` route group in `~/sunbites-portal`
-- [ ] Dashboard and portal pages in `app/(portal)/` route group
-- [ ] **Parent Management Page** at `pos.sunbites.com.ph/references/parents`: paginated table (Name, Email, Activation Status, Linked Students count, Registered Date, Last Login); filter by activation status and branch; search by name or email
-- [ ] Branch filter on parent list: `GET /api/v1/references/parents?branch_id=` — filters to parents who have at least one linked student in the given branch; when `X-Branch-Id` header is present, default to filtering by the active branch
-- [ ] Parent detail drawer/page: profile info, linked students list (with links to student detail), `Resend Activation Email` (when not activated, rate-limited) and `Send Password Reset Email` (when activated) actions
-- [ ] `GET /api/v1/parents` — staff-only; paginated, filterable; returns parent list with linked student count
-- [ ] `GET /api/v1/parents/{parent}` — staff-only; returns full parent detail with linked students array
-- [ ] Log `parent.activated` (properties: parent_email, activated_at)
-- [ ] Log `parent.password_reset` (properties: parent_email)
+- [x] `parents` table: `password` nullable (null until activated); `email_verified_at` null = not activated
+- [x] `parent_student` pivot table: `parent_id`, `student_id`, `linked_at`, `linked_by`, `wallet_alert_threshold`; UNIQUE KEY `(parent_id, student_id)`
+- [x] `feedbacks` table with `category` enum (TitleCase) and `admin_reply` field
+- [x] Parent Sanctum token endpoint: `POST /api/v1/portal/auth/login` issues token with `parent` ability
+- [x] Login blocked with 401 `account_not_activated` error if `email_verified_at` is null
+- [x] Portal login page shows "not activated" message and directs parent to contact the canteen
+- [x] All portal API routes protected by `auth:sanctum` + `ability:parent`
+- [x] Parent token stored in `~/sunbites-portal` Zustand auth store via `sessionStorage` persist middleware — survives page refresh; required for `EchoProvider` to reinitialize on reload
+- [x] `POST /api/v1/portal/auth/forgot-password` always returns generic "If an account exists, we'll send an email"; server sends activation email if not activated, reset email if activated
+- [x] `POST /api/v1/portal/auth/reset-password` — sets password, sets `email_verified_at = now()`, works for both initial activation and password reset
+- [x] Activation link opens `portal.sunbites.com.ph/activate?token=...&email=...`; on success redirects to login with toast
+- [x] Rate limiting: login, forgot-password — max 5 attempts per 5 minutes per IP
+- [x] Parent profile edit page — photo upload: MIME whitelist (jpeg/png/webp), max 2MB; stored on public disk; API returns `profile_photo_url` (full public URL)
+- [x] `POST /api/v1/portal/profile/change-password` — dedicated endpoint; requires `current_password`, `password`, `password_confirmation`; 422 if current password is wrong
+- [x] No self-registration — no `/register` route on the portal
+- [x] No manual student link request flow — no `parent_student_requests` table
+- [x] Parent dashboard: outstanding credit alert card (when `credit_balance > 0`), wallet card, spending summary, recent purchases
+- [x] Student selector (tabs or dropdown) when parent has multiple linked students
+- [x] "No students linked" informational card when `parent_student` is empty for authenticated parent
+- [x] IDOR protection: `/api/v1/portal/students/{id}/activity` and `/api/v1/portal/students/{id}/wallet` verify `parent_student` link ownership via `ParentStudentPolicy::view()` before returning any data (403 if not linked)
+- [x] `GET /api/v1/portal/students/{student}/payment-history` — returns all `StudentMonthlyPayment` records for the student; 403 if not linked; 422 if not a subscription student
+- [x] Wallet alert threshold update: `PATCH /api/v1/portal/students/{student}/wallet/alert`; `ParentStudentPolicy` ownership check before updating `parent_student` record
+- [x] `WalletAlertJob` queued when wallet withdrawal drops balance below `wallet_alert_threshold`
+- [x] Spending breakdown with date range filter (day/week/month view)
+- [x] Wallet transaction history table
+- [x] Meal planner read-only page at `portal.sunbites.com.ph/meal-plan` — reads from `weekly_meal_plans`; branch-scoped via linked student; branch selector if multiple branches
+- [x] Month tabs show all 10 school months (Jun–Mar) as pill buttons, horizontally scrollable on mobile
+- [x] When selected week is published (`visible_to_parents = true`): render full meal grid with all 5 columns (Ulam, Vegetables, Fruit, Soup, Snacks)
+- [x] When selected week is unpublished (`visible_to_parents = false`): show "Meal plan for this week is not yet available." card instead of the table
+- [x] "Meal Plan" link in portal top nav
+- [x] Feedback form: rating, category, message (`strip_tags()` before storage); student selector
+- [x] `admin_reply` sanitized with `strip_tags()` before storage; rendered as plain text
+- [x] Feedback list and reply functionality in POS app (References > Feedback)
+- [x] Feedback reply email sent to parent
+- [x] Unread feedback count badge in POS app sidebar
+- [x] `student_contacts.email` is informational only — not used for portal auth or IDOR checks; `parent_student` pivot is the canonical link
+- [x] Portal layout (`PortalLayout`) in `~/sunbites-portal` — top nav, no sidebar, mobile-responsive
+- [x] Auth pages in `app/(auth)/` route group in `~/sunbites-portal`
+- [x] Dashboard and portal pages in `app/(portal)/` route group
+- [x] **Parent Management Page** at `pos.sunbites.com.ph/references/parents`: paginated table (Name, Email, Activation Status, Linked Students count, Registered Date, Last Login); filter by activation status and branch; search by name or email
+- [x] Branch filter on parent list: `GET /api/v1/references/parents?branch_id=` — filters to parents who have at least one linked student in the given branch; when `X-Branch-Id` header is present, default to filtering by the active branch
+- [x] Parent detail drawer/page: profile info, linked students list (with links to student detail), `Resend Activation Email` (when not activated, rate-limited) and `Send Password Reset Email` (when activated) actions
+- [x] `GET /api/v1/references/parents` — staff-only; paginated, filterable; returns parent list with linked student count
+- [x] `GET /api/v1/references/parents/{parent}` — staff-only; returns full parent detail with linked students array; includes soft-deleted parents
+- [x] `parents` table `disabled_at` column (timestamp, nullable) — set when account is disabled
+- [x] `parents` table soft-delete support (`deleted_at`) via Laravel `SoftDeletes` trait
+- [x] `POST /api/v1/references/parents/{parent}/resend-activation` — resend activation email; admin/manager/supervisor; rate-limited max 3 per 24 hours; 422 if already activated
+- [x] `POST /api/v1/references/parents/{parent}/disable` — admin/manager only; sets `disabled_at`; disabled parents cannot log in
+- [x] `POST /api/v1/references/parents/{parent}/enable` — admin/manager only; clears `disabled_at`
+- [x] `DELETE /api/v1/references/parents/{parent}` — admin/manager only; soft-deletes parent (`deleted_at` set)
+- [x] `POST /api/v1/references/parents/{parent}/restore` — admin/manager only; restores soft-deleted parent (clears `deleted_at`)
+- [x] Login endpoint rejects disabled parents (`disabled_at` is not null) with 401 error
+- [x] Log `parent.activated` (properties: parent_email, activated_at)
+- [x] Log `parent.password_reset` (properties: parent_email)

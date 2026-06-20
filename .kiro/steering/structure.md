@@ -38,19 +38,25 @@ tests/
 
 ```
 app/
-  (auth)/login/         ← AuthLayout
+  (auth)/
+    login/              ← AuthLayout
+    reset-password/     ← password reset page (linked from admin-triggered reset email)
   (kitchen)/            ← KitchenLayout (collapsible sidebar)
     dashboard/
-    pos/
     enrollment/
     students/
-    reminders/          ← Spec 10
+    reminders/          ← Spec 11
+    notifications/      ← Spec 12 (staff inbox)
+    announcements/      ← Spec 12
+    pre-registrations/  ← Spec 13
     reports/
     references/
       users/
       parents/
       branches/
       system-settings/  ← Spec 09
+  (pos)/                ← POS-specific layout group
+    pos/                ← main POS checkout screen
 components/
   layouts/
     kitchen-layout.tsx
@@ -72,12 +78,19 @@ __tests__/
 
 ```
 app/
-  (auth)/login/
+  (auth)/
+    login/
+    activate/           ← account activation (sets password on first login)
+    forgot-password/    ← forgot password request form
   (portal)/             ← PortalLayout (top nav)
     dashboard/
     students/
     notifications/      ← Spec 10
+    meal-plan/          ← Spec 04 (read-only meal planner)
+    feedback/           ← Spec 07 (feedback form + list)
     profile/
+  (public)/
+    pre-register/       ← Spec 13 (public pre-registration form, no auth required)
 components/
   layouts/
     portal-layout.tsx
@@ -127,24 +140,15 @@ __tests__/
 | 02 | Roles & Permissions | Complete | Complete |
 | 03 | Branch & Tenant | Complete | Complete |
 | 04 | Menu & Products | Complete | Complete |
-| 05 | Student Management | Complete (tasks 12–13 pending) | Complete (tasks 12–13 pending) |
+| 05 | Student Management | Complete | Complete |
 | 06 | POS & Checkout | Complete | Complete |
 | 07 | Parent Portal | Complete | Complete |
 | 08 | Reports & Dashboard | Complete | Complete |
 | 09 | System Configuration | Complete | Complete |
-| 10 | Notifications & Reminders | Not started (includes Reverb broadcasting) | Not started (includes Echo provider) |
-| 11 | Announcements | Not started | Not started (includes POS Echo provider + staff inbox) |
-| 12 | Pre-Registration | Not started | Not started (public portal page + POS approval queue) |
-
-**Spec 05 pending tasks:**
-- Task 12: Soft-deleted student filter & restore (backend migration + controller + frontend toggle)
-- Task 13: Nullable/editable student number (migration + controller + frontend)
-
-**Spec 10 scope (notifications-and-reminders):**
-- Laravel `notifications` table + `parent_payment_reminders` tracking table
-- `PaymentReminderNotification` class (database channel, queued)
-- Portal: notification bell, notifications page, student payment history
-- POS: reminder bell count, Reminders nav item, Reminders page (eligible parents + send), reminder detail page
+| 10 | Notifications | Complete | Complete |
+| 11 | Payment Reminders | Complete | Complete |
+| 12 | Announcements | Complete | Complete |
+| 13 | Pre-Registration | Complete | Complete |
 
 ## Shared Contracts
 
@@ -169,4 +173,4 @@ All kitchen API requests include `X-Branch-Id` header. The `SetActiveBranch` mid
 ### Auth token storage
 
 - Staff token: in-memory Zustand store (`lib/store/auth.ts`) — Bearer token sent as `Authorization: Bearer {token}` header
-- Parent token: currently `sessionStorage` via Zustand `persist` middleware (Spec 07 task 8.3 is unresolved — original spec said memory-only but code was not updated). **Decision pending before Spec 10**: memory-only causes Echo to lose its token on page refresh; sessionStorage survives refresh but is less secure. `EchoProvider` reads the token from `useAuthStore` — whichever storage is chosen, the token must be present when Echo initialises.
+- Parent token: `sessionStorage` via Zustand `persist` middleware — token survives page refresh, which is required for the `EchoProvider` to reinitialize Echo on page load without losing the channel subscription. `EchoProvider` reads the token from `useAuthStore`.

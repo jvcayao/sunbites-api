@@ -58,8 +58,8 @@ Shown in the topbar for Admin users and multi-branch users:
 - Cashiers with single branch: plain non-clickable pill (no switch)
 
 ```
-  [🏫 Antipolo Branch]            ← read-only for Cashier
-  [🏫 Antipolo Branch  ⇄ Switch]  ← clickable for Admin/Manager/Supervisor
+  [🏫 Antipolo Branch]            ← read-only for single-branch staff (Cashier, Supervisor)
+  [🏫 Antipolo Branch  ⇄ Switch]  ← clickable for Admin / multi-branch users only
 ```
 
 ---

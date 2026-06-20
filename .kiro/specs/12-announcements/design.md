@@ -1,8 +1,8 @@
-# Spec 11 — Design
+# Spec 12 — Design
 
 ## Overview
 
-Announcements are staff-authored messages broadcast to a selected group of parents or co-workers. The feature reuses the `notifications` table from Spec 10 (polymorphic — both `ParentUser` and `User` are notifiable), adds a new `announcements` table as the parent record, and extends Reverb broadcasting to include a `staff.{userId}` private channel.
+Announcements are staff-authored messages broadcast to a selected group of parents or co-workers. The feature reuses the `notifications` table from Spec 10 (polymorphic — both `ParentUser` and `User` are notifiable), adds a new `announcements` table as the parent record, and uses the `staff.{userId}` private channel established by Spec 10.
 
 ---
 
@@ -44,18 +44,9 @@ Uses `HasBranch` trait — branch-scoped on list/show queries.
 
 No changes. Both `ParentUser` and `User` write to the same table via `notifiable_type` / `notifiable_id`. The `data` JSON column stores `announcement_id` to allow fetching recipients for the detail view.
 
-### `User` model change
+### `User` model
 
-Add `Notifiable` trait (one line — no migration):
-```php
-use Illuminate\Notifications\Notifiable;
-
-class User extends Authenticatable
-{
-    use Notifiable; // ← add this
-    // ...
-}
-```
+The `Notifiable` trait was added to `User` in Spec 10 (required for staff notification bell). No further model changes needed for Spec 12.
 
 ---
 
@@ -97,13 +88,7 @@ public function broadcastAs(): string
 
 ## Channel Authorization
 
-Add to `routes/channels.php` (alongside the `parents.{parentId}` channel from Spec 10):
-
-```php
-Broadcast::channel('staff.{userId}', function (User $user, int $userId) {
-    return $user->id === $userId;
-});
-```
+The `staff.{userId}` private channel was registered in `routes/channels.php` by Spec 10. No changes to channel authorization needed for Spec 12 — `AnnouncementNotification` broadcasts on the existing channel.
 
 ---
 
@@ -161,20 +146,18 @@ export default function KitchenLayout({ children }) {
 
 ## POS Header Layout
 
-Two distinct bells:
+Single bell rule (corrected in Task 9):
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  [≡] Sunbites POS          [🔔 2]  [📢 3]  [Branch ▾]       │
-│                               ↑       ↑                      │
-│                     Notification  Reminder                   │
-│                     (inbox: msgs  (outbound:                 │
-│                      received)    unsent parents)            │
+│  [≡] Sunbites POS                [🔔 2]  [Branch ▾]          │
+│                                     ↑                        │
+│                           NotificationBell (inbound)         │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-- `NotificationBell` (🔔) — inbound; unread count of announcements received by this staff member; user-scoped
-- `ReminderBell` (already in Spec 10) — outbound; count of parents not yet notified for the upcoming school month; branch-scoped
+- `NotificationBell` (🔔) — inbound; unread count of staff notifications (announcements + pre-registration alerts); user-scoped; placed in header
+- `ReminderBell` (Spec 11) — outbound; count of parents not yet sent a payment reminder; branch-scoped; placed in **sidebar nav only**, not the header
 
 ---
 
@@ -277,11 +260,11 @@ Route: `app/(kitchen)/notifications/page.tsx`
 
 ## Dependency on Spec 10
 
-| What Spec 11 needs | Where it comes from |
+| What Spec 12 needs | Where it comes from |
 |---|---|
 | `notifications` table | Spec 10 Task 1 |
-| Reverb installed + `channels.php` | Spec 10 Task 2 |
-| `parents.{id}` channel auth | Spec 10 Task 2 |
-| Portal `EchoProvider` | Spec 10 Task 7 |
+| Reverb installed + `channels.php` | Spec 10 Task 1 |
+| `parents.{id}` channel auth | Spec 10 Task 1 |
+| Portal `EchoProvider` | Spec 10 Task 5 |
 
-Spec 10 must be complete before Spec 11 Task 3 onwards.
+Spec 10 must be complete before Spec 12 Task 3 onwards.
