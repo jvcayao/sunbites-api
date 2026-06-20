@@ -131,6 +131,17 @@
   - [x] Transaction history list (type, amount, date) via `useQuery`
   - [x] "Alert Setting" section: number input "Alert me when balance drops below ₱___"; pre-filled with current `wallet_alert_threshold` from pivot; save via `useMutation` → `PATCH /api/v1/portal/students/{student}/wallet/alert`; set to 0 to disable
 
+## 13.5 Payment History (Portal — Subscription Students Only)
+
+### 13.5.1 Backend
+- [x] `Portal\StudentPaymentHistoryController::index(Student $student)` — IDOR-protected (403 if not linked); 422 if student is non-subscription; returns all `StudentMonthlyPayment` records sorted by school year and month order (Jun → Mar)
+- [x] Route: `GET /api/v1/portal/students/{student}/payment-history`
+
+### 13.5.2 Frontend
+- [x] "Payment History" tab added to `app/(portal)/students/[id]/page.tsx` — visible only when `student_type === 'subscription'`; renders monthly payment rows with month, year, amount, status, and paid date
+
+---
+
 ## 14. Meal Planner (Portal)
 
 ### 14.1 Backend

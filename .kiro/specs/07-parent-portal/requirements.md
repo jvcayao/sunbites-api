@@ -289,11 +289,13 @@ All portal routes under `auth:sanctum` + `ability:parent` middleware unless note
 | GET | `/api/v1/portal/profile` | parent | Get parent profile — returns `profile_photo_url` (full public URL), not raw path |
 | PATCH | `/api/v1/portal/profile` | parent | Update name, phone, address (no password) |
 | POST | `/api/v1/portal/profile/change-password` | parent | Change password — requires `current_password`, `password`, `password_confirmation` |
+| POST | `/api/v1/portal/profile/photo` | parent | Upload profile photo (MIME whitelist: jpeg/png/webp, max 2MB) |
 | GET | `/api/v1/portal/dashboard` | parent | Dashboard data for linked students |
 | GET | `/api/v1/portal/students` | parent | Linked students list |
 | GET | `/api/v1/portal/students/{id}/activity` | parent | Spending activity (IDOR-protected) |
 | GET | `/api/v1/portal/students/{id}/wallet` | parent | Wallet history (IDOR-protected) |
-| PUT | `/api/v1/portal/students/{id}/wallet-alert` | parent | Set alert threshold (IDOR-protected) |
+| PATCH | `/api/v1/portal/students/{id}/wallet/alert` | parent | Set wallet alert threshold (IDOR-protected via policy) |
+| GET | `/api/v1/portal/students/{id}/payment-history` | parent | Subscription monthly payment history — only for subscription-type students (IDOR-protected) |
 | GET | `/api/v1/portal/meal-planner` | parent | Read-only meal planner |
 | GET | `/api/v1/portal/feedback` | parent | Own feedback list |
 | POST | `/api/v1/portal/feedback` | parent | Submit feedback |
@@ -336,7 +338,8 @@ Feedback reply and read endpoints are in the POS app under `ability:staff` (defi
 - [x] Student selector (tabs or dropdown) when parent has multiple linked students
 - [x] "No students linked" informational card when `parent_student` is empty for authenticated parent
 - [x] IDOR protection: `/api/v1/portal/students/{id}/activity` and `/api/v1/portal/students/{id}/wallet` verify `parent_student` link ownership via `ParentStudentPolicy::view()` before returning any data (403 if not linked)
-- [x] Wallet alert threshold update: `ParentStudentPolicy` ownership check before updating `parent_student` record
+- [x] `GET /api/v1/portal/students/{student}/payment-history` — returns all `StudentMonthlyPayment` records for the student; 403 if not linked; 422 if not a subscription student
+- [x] Wallet alert threshold update: `PATCH /api/v1/portal/students/{student}/wallet/alert`; `ParentStudentPolicy` ownership check before updating `parent_student` record
 - [x] `WalletAlertJob` queued when wallet withdrawal drops balance below `wallet_alert_threshold`
 - [x] Spending breakdown with date range filter (day/week/month view)
 - [x] Wallet transaction history table

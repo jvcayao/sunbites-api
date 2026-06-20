@@ -464,6 +464,7 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | POST | `/api/v1/students/{student}/regenerate-qr` | admin, manager, supervisor | Regenerate QR code |
 | PATCH | `/api/v1/students/{student}/status` | admin, manager, supervisor | Change enrollment status |
 | POST | `/api/v1/students/{student}/wallet/top-up` | admin, manager, supervisor | Wallet top-up |
+| GET | `/api/v1/wallet/{student}/history` | admin, manager, supervisor | Wallet transaction history — purchases and top-ups, paginated, filterable by type and search |
 | POST | `/api/v1/students/{student}/credit/settle` | admin, manager | Settle outstanding credit |
 | GET | `/api/v1/students/{student}/payments` | admin, manager, supervisor | Monthly payment records |
 | PATCH | `/api/v1/students/{student}/payments/{payment}` | admin, manager | Toggle month paid/unpaid |
@@ -472,6 +473,8 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | POST | `/api/v1/branch-monthly-amounts` | admin, manager, supervisor | Create/upsert a month config |
 | PUT | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Update a specific month config record |
 | DELETE | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Delete a month config record |
+| GET | `/api/v1/pos/subscription-config` | all staff | Daily per-category limits (meal/snack/drink/extra) for the active branch |
+| PUT | `/api/v1/pos/subscription-config` | admin, manager, supervisor | Update daily category limits |
 | GET | `/api/v1/students/{student}/contacts` | admin, manager, supervisor | List contacts for a student |
 | POST | `/api/v1/students/{student}/contacts` | admin, manager, supervisor | Add a new contact (triggers parent provisioning if email given) |
 | PUT | `/api/v1/students/{student}/contacts/{contact}` | admin, manager, supervisor | Update a contact |
@@ -544,7 +547,11 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [x] `POST /api/v1/students/{student}/payments/range` — add subscription period for existing student; validate no overlap on `(student_id, school_month, year)`; roles: admin, manager, supervisor
 - [x] Student detail Payment tab: show `year` alongside month in each payment row
 - [x] Student detail Payment tab: `[+ Add Subscription Period]` button (admin/manager/supervisor) — opens dialog with same range picker + preview table
-- [x] New page: `pos.sunbites.com.ph/references/subscription-config` — year selector, table of configured months (Month | Days | Amount | Actions), "Add Month" button, inline or modal edit, show default vs configured indicator
+- [x] New page: `pos.sunbites.com.ph/references/subscription-config` — two sections: (1) daily category limits panel, (2) year selector + table of configured months (Month | Days | Amount | Actions), "Add Month" button, inline or modal edit, show default vs configured indicator
+- [x] `branch_subscription_configs` table — `branch_id` (FK, unique), `meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit` (all integer, default 1)
+- [x] `SubscriptionConfigController::show()` — `GET /api/v1/pos/subscription-config`; uses `firstOrCreate` with defaults of 1 per category
+- [x] `SubscriptionConfigController::update()` — `PUT /api/v1/pos/subscription-config`; validates each limit as integer 0–10; admin, manager, supervisor only
+- [x] `StudentLookupController` reads `BranchSubscriptionConfig::forBranch()` to build `subscription_daily_status` (used/limit/remaining per category) returned in POS lookup response
 - [x] **Enrollment → parent provisioning**: `EnrollmentController::store()` loops contacts; for each contact with a non-null email, calls `ParentProvisioningService::provision(email, name, studentId, enrolledBy)` — find-or-create `parents` record, create `parent_student` pivot, dispatch `ParentWelcomeMail` if account is new
 - [x] `ParentProvisioningService` — reusable service used by enrollment and contact CRUD; idempotent: calling twice with same email+student does not create duplicate pivot
 - [x] `parent_student` pivot row: `parent_id`, `student_id`, `linked_at`, `linked_by`, `wallet_alert_threshold (decimal, default 0)`

@@ -480,6 +480,32 @@ Opens from the `[+ Add Subscription Period]` button on the Payment tab of Studen
 **Layout:** `KitchenLayout`
 **Roles:** Admin, Manager, Supervisor
 
+The page has two sections: **Daily Limits** (per-category POS allowances) at the top, then **Monthly Billing Amounts** (subscription billing per school month) below.
+
+### Section 1 — Daily Category Limits
+
+Controls how many items per category a subscription student may take in a single day at the POS. Stored in `branch_subscription_configs` per branch. Managed by `SubscriptionConfigController`.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Daily Category Limits                                        │
+│  Max items per category a subscription student may take/day   │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Meal    [1]   Snack   [1]   Drink   [1]   Extra   [1]      │
+│                                                              │
+│                              [Save Limits]                   │
+└──────────────────────────────────────────────────────────────┘
+```
+
+- Four integer inputs (min 0, max 10), one per category (Meal / Snack / Drink / Extra)
+- Pre-filled from `GET /api/v1/references/subscription-config` — creates record with defaults (1 each) if none exists
+- Save triggers `PUT /api/v1/references/subscription-config`
+- Optimistic update; success toast "Daily limits saved."
+- Used at POS checkout to enforce subscription student allowances (`StudentLookupController` reads these limits for `subscription_daily_status`)
+
+### Section 2 — Monthly Billing Amounts
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │ 📅 Subscription Config                                        │
