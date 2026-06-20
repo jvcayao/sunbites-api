@@ -4,10 +4,12 @@ The Parent Portal lives at `portal.sunbites.com.ph`. It is the `~/sunbites-porta
 
 ---
 
-## Screen: Registration
+## Screen: Account Activation
 
-**Route:** `portal.sunbites.com.ph/register`
+**Route:** `portal.sunbites.com.ph/activate?token=...&email=...`
 **Layout:** `AuthLayout` (centered card, no nav)
+
+> Parent accounts are **not self-registered**. They are created automatically during enrollment. The parent receives an activation email with a one-time link. This page handles first-time password setup.
 
 ```
 ┌──────────────────────────────────────────────────┐
@@ -15,45 +17,52 @@ The Parent Portal lives at `portal.sunbites.com.ph`. It is the `~/sunbites-porta
 │  │  S   │  Sunbites Kitchen                      │
 │  ╰──────╯  School Canteen Portal                 │
 │                                                   │
-│  Create Your Parent Account                       │
+│  Set Your Password                               │
 │                                                   │
-│  First Name *           Last Name *              │
-│  [______________]       [______________]          │
+│  Welcome! Your canteen account is ready.         │
+│  Create a password to activate your account.    │
 │                                                   │
-│  Email Address *                                  │
-│  [__________________________________]             │
+│  New Password *                                  │
+│  [__________________________________]            │
 │                                                   │
-│  Phone Number                                     │
-│  [__________________________________]             │
+│  Confirm Password *                              │
+│  [__________________________________]            │
 │                                                   │
-│  Password *             Confirm Password *        │
-│  [______________]       [______________]          │
-│                                                   │
-│  [────── Create Account ──────]                  │
-│                                                   │
-│  Already have an account?  Sign In               │
+│  [────── Activate Account ──────]               │
 └──────────────────────────────────────────────────┘
 ```
 
-After registration: redirect to email verification notice page.
+On success: redirect to `/login` with toast "Account activated! You can now log in."
 
-**Email Verification Notice:**
+Token is read from the URL query string `?token=...&email=...` (Laravel PasswordBroker format). Expired or invalid token shows an error card with a message: "This activation link has expired or is invalid. Please contact the canteen to resend it."
+
+---
+
+## Screen: Forgot Password (Portal)
+
+**Route:** `portal.sunbites.com.ph/forgot-password`
+**Layout:** `AuthLayout`
+
 ```
 ┌──────────────────────────────────────────────────┐
 │  ╭──────╮                                        │
-│  │  S   │                                        │
-│  ╰──────╯                                        │
+│  │  S   │  Sunbites Kitchen                      │
+│  ╰──────╯  School Canteen Portal                 │
 │                                                   │
-│  ✉️  Verify Your Email                            │
+│  Reset Your Password                             │
 │                                                   │
-│  We've sent a verification link to:              │
-│  ana@email.com                                    │
+│  Enter your email and we'll send you a link.     │
 │                                                   │
-│  Click the link in your email to continue.       │
+│  Email Address *                                 │
+│  [__________________________________]            │
 │                                                   │
-│  [Resend Verification Email]                      │
+│  [────── Send Reset Link ──────]                │
+│                                                   │
+│  ← Back to Sign In                              │
 └──────────────────────────────────────────────────┘
 ```
+
+On submit (any email — valid or not): show generic message "If an account with this email exists, we'll send you a link." This prevents account enumeration. Server sends the appropriate email: activation email if not yet activated, reset email if already activated.
 
 ---
 
@@ -78,9 +87,20 @@ After registration: redirect to email verification notice page.
 │                                                   │
 │  [────── Sign In ──────]                         │
 │                                                   │
-│  Don't have an account?  Register                │
+│  ℹ️  Don't have an account?                      │
+│     Contact the canteen to get access.           │
 └──────────────────────────────────────────────────┘
 ```
+
+**Not-yet-activated error state:**
+```
+  ┌────────────────────────────────────────────────┐
+  │  ⚠️  Your account has not been activated yet.  │
+  │      Check your email for the activation link,  │
+  │      or contact the canteen to resend it.       │
+  └────────────────────────────────────────────────┘
+```
+Shown as an orange/amber banner above the form when the API returns `account_not_activated` error.
 
 ---
 
@@ -235,48 +255,6 @@ Alert threshold: inline input + `[Save]` button via `useMutation`; success toast
 
 ---
 
-## Screen: Student Linking Request
-
-**Route:** `portal.sunbites.com.ph/link-student`
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  Link a Student                                          │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  Branch *                                                │
-│  (●) 🏫 Antipolo Branch   ( ) 🏫 Iloilo Branch         │
-│                                                          │
-│  Student Name or Student Number *                        │
-│  [______________________________]                        │
-│  [search results dropdown...]                            │
-│                                                          │
-│  Relationship *                                          │
-│  [Mother ▾]                                              │
-│  (Mother / Father / Legal Guardian / Other)             │
-│                                                          │
-│  [Submit Request]                                        │
-└──────────────────────────────────────────────────────────┘
-```
-
-Search results show minimal data only — partial first name, grade level, branch.
-
-After submission:
-```
-  ✅ Your request has been submitted.
-     You will be notified once approved.
-```
-
-**Pending requests on dashboard:**
-```
-  ┌── Linked Students ──────────────────────────────────┐
-  │  Maria Santos         [Approved ✅]  Grade 3 Mabini  │
-  │  Carlos Pendiente     [Pending ⏳]   Awaiting review │
-  └──────────────────────────────────────────────────────┘
-```
-
----
-
 ## Screen: Weekly Meal Plan (Read-Only)
 
 **Route:** `portal.sunbites.com.ph/meal-plan`
@@ -375,22 +353,68 @@ Star rating: 5 clickable stars, filled = `text-yellow-400`, empty = `text-muted`
 
 ---
 
-## Screen: Link Requests Review (POS App — Kitchen Staff)
+## Screen: Parent Management (POS App — Kitchen Staff)
 
-**Route:** `pos.sunbites.com.ph/references/link-requests`
+**Route:** `pos.sunbites.com.ph/references/parents`
 **Layout:** `KitchenLayout`
-**Sidebar badge:** unread count on "Link Requests"
+**Roles:** Admin, Manager, Supervisor
+
+Parent accounts are created automatically at enrollment — there is no manual linking queue. This page gives staff a global view of all parent accounts across their active branch.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ References > Link Requests                                       │
+│ References > Parents                                             │
 ├──────────────────────────────────────────────────────────────────┤
-│  Parent Name        Email             Student       Status  Actions │
-│  Ana Santos        ana@email.com     Maria Santos  [Pending] [✓][✕] │
-│  Pedro dela Cruz   pedro@email.com   Juan Cruz     [Approved ✅]     │
-│  Carla Reyes       carla@email.com   Sofia Reyes   [Rejected ✕]      │
+│  [Search name or email...]   [Activation ▾]   [Branch ▾]        │
+├──────────────────────────────────────────────────────────────────┤
+│  Name              Email              Status      Linked  Date   │
+├──────────────────────────────────────────────────────────────────┤
+│  Ana Santos        ana@email.com     [Activated] 2        May 24 │
+│  Pedro Cruz        pedro@email.com   [Pending ⏳]  1       Jun 01 │
+│  Carla Reyes       carla@email.com   [Disabled 🚫] 1      Jun 05 │
+└──────────────────────────────────────────────────────────────────┘
+  [← 1  2  3 →]
+```
+
+**Status badges:**
+- `[Activated ✅]` — `bg-green-100 text-green-700` — `email_verified_at` is set
+- `[Pending ⏳]` — `bg-yellow-100 text-amber-700` — activation email sent, not yet activated
+- `[Disabled 🚫]` — `bg-red-100 text-destructive` — `disabled_at` is set
+- `[Deleted 🗑]` — muted — soft-deleted (`deleted_at` is set)
+
+---
+
+## Screen: Parent Detail (POS App)
+
+**Route:** `pos.sunbites.com.ph/references/parents/{id}` (or side-drawer)
+**Layout:** `KitchenLayout`
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ← Parents     Ana Santos                       [⋮ Actions]      │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Name: Ana Santos            Status: [Activated ✅]             │
+│  Email: ana@email.com         Registered: May 24, 2026           │
+│  Phone: 09171234567           Last Login: Jun 01, 2026           │
+│                                                                  │
+│  ── Linked Students ─────────────────────────────────────────   │
+│  ┌── Maria Santos ─────────────────────────────────────────┐    │
+│  │  Grade 3 – Section Mabini  |  Antipolo Branch  [View →] │    │
+│  └──────────────────────────────────────────────────────────┘   │
+│  ┌── Carlos Santos ────────────────────────────────────────┐    │
+│  │  Grade 1 – Section Luna    |  Antipolo Branch  [View →] │    │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-**Approve:** creates `parent_student` record, sends email, badge decrements
-**Reject `[✕]`:** opens dialog requiring reason input before confirming
+**`[⋮ Actions]` dropdown (Admin/Manager only):**
+- `Resend Activation Email` — visible only when `email_verified_at` is null; rate-limited max 3/24hr
+- `Send Password Reset Email` — visible only when `email_verified_at` is not null
+- `Disable Account` — sets `disabled_at`; grayed out if already disabled
+- `Enable Account` — clears `disabled_at`; grayed out if not disabled
+- `Delete Account` — soft-deletes; shows confirmation dialog
+- `Restore Account` — visible only on soft-deleted parents; clears `deleted_at`
+
+Supervisor role: sees `Resend Activation Email` only — no disable/enable/delete/restore actions.

@@ -92,7 +92,7 @@
   - [x] Non-subscription student card: purple left border, wallet-only info box (purple tint), "Load Wallet" button (purple)
   - [x] Enrollment status badge: color-coded, clickable to open status picker popover
   - [x] Red "₱X Credit Owed" badge when `credit_balance > 0`
-  - [ ] Payment reminder banner — moved to Spec 10 (Notifications & Reminders)
+  - [x] Payment reminder banner — implemented in Spec 11 (Payment Reminders)
   - [x] Checkbox column for multi-select; floating action bar when ≥1 selected: `[🖨️ Print QR Codes]` `[✕ Clear Selection]`
   - [x] Batch QR print preview modal: 2 or 4 cards per row selector, `[🖨️ Print All]` button
   - [x] Print layout (`@media print`): 4 cards per row on A4, no sidebar/topbar/chrome

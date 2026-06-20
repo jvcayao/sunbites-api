@@ -20,8 +20,8 @@
 │  ┌──── Add New Item ─────────────────────────────────┐      │
 │  │  Item Name *         Price (₱) *                  │      │
 │  │  [________________]  [________]                   │      │
-│  │  Category *                                        │      │
-│  │  [meal ▾         ]                                │      │
+│  │  Category *          Subscription Eligible *       │      │
+│  │  [meal ▾         ]   [Not configured ▾]           │      │
 │  │                              [+ Add Item]         │      │
 │  └────────────────────────────────────────────────────┘      │
 │                                                               │
@@ -70,6 +70,7 @@
 - Name input: `text-sm`
 - Price: number input with ₱ prefix label
 - Category: shadcn `Select` with options: Meal / Snack / Drink / Extra
+- Subscription Eligible: shadcn `Select` with options: Not configured (null) / Yes / No — controls `is_subscription_item` field; determines POS checkout behaviour under subscription payment
 - `[+ Add Item]`: primary button
 - Validation: inline errors under each field
 

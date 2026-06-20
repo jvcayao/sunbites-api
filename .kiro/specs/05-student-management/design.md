@@ -327,6 +327,7 @@ All: `text-[11px] font-bold px-3 py-1 rounded-full border cursor-pointer` — cl
 
 **`[⋮ Actions]` dropdown:**
 - Change Enrollment Status
+- Change Student Type (Subscription ↔ Non-Subscription) — Admin/Manager only; confirmation required; warns that payment records will be affected
 - Top Up Wallet
 - Print QR Code
 - Remove Student (with confirmation)

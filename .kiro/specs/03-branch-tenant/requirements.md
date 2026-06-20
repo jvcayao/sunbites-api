@@ -119,16 +119,16 @@ Located in **References > Branches** in the POS app.
 
 ## Requirements
 
-- [ ] `branches` table seeded with Antipolo and Iloilo
-- [ ] `SetActiveBranch` middleware reads `X-Branch-Id` header, validates user access, binds `app('active_branch')`
-- [ ] `HasBranch` trait auto-scopes queries and auto-fills `branch_id` on create
-- [ ] `BranchScope` skips silently when `app('active_branch')` is null (seeders, Artisan commands, queue workers, tests)
-- [ ] `withoutBranch()` escape hatch available for queries that must bypass the scope
-- [ ] Branch selector page at `pos.sunbites.com.ph/branch` — shown after login when staff has 2+ branches
-- [ ] Branch selection stores active branch in Zustand; all subsequent API calls include `X-Branch-Id` header
-- [ ] Branch switcher in `KitchenLayout` topbar redirects to branch selector page; Admin can switch to any branch
-- [ ] Branch switcher visible to Admin and multi-branch users; Cashier/Supervisor with single branch see read-only pill
-- [ ] Branch management API in References (admin only): list, edit name/address/gcash, toggle active/inactive
-- [ ] Toggle active/inactive with guard against deactivating last active branch (returns 422)
-- [ ] All scoped models tested — queries must not leak cross-branch data
-- [ ] Log `branches.switched` when user switches active branch (properties: from_branch_id, to_branch_id)
+- [x] `branches` table seeded with Antipolo and Iloilo
+- [x] `SetActiveBranch` middleware reads `X-Branch-Id` header, validates user access, binds `app('active_branch')`
+- [x] `HasBranch` trait auto-scopes queries and auto-fills `branch_id` on create
+- [x] `BranchScope` skips silently when `app('active_branch')` is null (seeders, Artisan commands, queue workers, tests)
+- [x] `withoutBranch()` escape hatch available for queries that must bypass the scope
+- [x] Branch selector page at `pos.sunbites.com.ph/branch` — shown after login when staff has 2+ branches
+- [x] Branch selection stores active branch in Zustand; all subsequent API calls include `X-Branch-Id` header
+- [x] Branch switcher in `KitchenLayout` topbar redirects to branch selector page; Admin can switch to any branch
+- [x] Branch switcher visible to Admin and multi-branch users; Cashier/Supervisor with single branch see read-only pill
+- [x] Branch management API in References (admin only): list, edit name/address/gcash, toggle active/inactive
+- [x] Toggle active/inactive with guard against deactivating last active branch (returns 422)
+- [x] All scoped models tested — queries must not leak cross-branch data
+- [x] Log `branches.switched` when user switches active branch (properties: from_branch_id, to_branch_id)

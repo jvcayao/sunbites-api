@@ -180,7 +180,7 @@
   │                      │  │                      │
   │  ₱30.00              │  │  ₱25.00              │
   │  [SNACK]             │  │  [SNACK]             │
-  │  ⚠ Not Mapped        │  │  ⚙ Not Set Up        │
+  │  ⚠ Not linked        │  │  ⚙ Not Set Up        │
   └──────────────────────┘  └──────────────────────┘
        (unmapped — disabled)    (is_subscription_item=null — disabled for all)
 ```
@@ -190,7 +190,7 @@
 - **Inventory status on cards** (driven by `inventory_status` + `has_inventory_mapping` from API):
   - `OUT`: card at `opacity-40 cursor-not-allowed`; click disabled; no cart add; badge: `bg-red-50 text-destructive text-[10px]` — "✕ Out of Stock"
   - `LOW`: card clickable; warning badge: `bg-yellow-50 text-amber-700 border-yellow-300 text-[10px]` — "⚠ Low Stock"
-  - `has_inventory_mapping = false`: card at `opacity-60 cursor-not-allowed`; click disabled; badge: `bg-orange-50 text-orange-700 text-[10px]` — "⚠ Not Mapped"
+  - `has_inventory_mapping = false`: card at `opacity-60 cursor-not-allowed`; click disabled; badge: `bg-orange-50 text-orange-700 text-[10px]` — "⚠ Not linked"
 - **Subscription status on cards** (driven by `is_subscription_item` from API):
   - `is_subscription_item = null`: card at `opacity-40 cursor-not-allowed`; click disabled for **all** payment methods; badge: `bg-gray-100 text-gray-500 text-[10px]` — "⚙ Not Set Up"
   - `is_subscription_item = true`: show blue badge top-left: `bg-blue-50 text-blue-700 border-blue-200 text-[10px]` — "🔵 SUB"; clickable for all payment methods

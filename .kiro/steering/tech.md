@@ -10,10 +10,10 @@ inclusion: always
 |---|---|---|
 | API backend | Laravel | 13 |
 | PHP | PHP | 8.5 |
-| POS & admin frontend | Next.js (App Router) | [NEEDS INPUT: confirm Next.js version] |
-| Parent portal frontend | Next.js (App Router) | [NEEDS INPUT: confirm Next.js version] |
+| POS & admin frontend | Next.js (App Router) | 16.2.6 |
+| Parent portal frontend | Next.js (App Router) | 16.2.6 |
 | React | React | 19 |
-| Database | MySQL (via Docker/Sail) | [NEEDS INPUT: MySQL version] |
+| Database | MySQL (via Docker/Sail) | 8.0 |
 | Container / local dev | Laravel Sail | 1 |
 
 ## Libraries and Tools
@@ -80,17 +80,24 @@ Staff role hierarchy for middleware: `admin > manager > supervisor > (regular st
 
 ### Real-Time Broadcasting (Reverb)
 
-Laravel Reverb is the WebSocket server. Broadcasting uses **private channels** so only the authenticated parent receives their own notifications.
+Laravel Reverb is the WebSocket server. Broadcasting uses **private channels** so only the authenticated recipient receives their own notifications.
+
+Two private channel namespaces:
+- `parents.{id}` — `ParentUser` recipients (portal app): payment reminders, announcements
+- `staff.{id}` — `User` recipients (POS app): announcements, pre-registration alerts
 
 **Backend setup:**
-- `routes/channels.php` — `Broadcast::channel('parents.{parentId}', ...)` validates the authenticated parent matches the channel ID
-- Notification class implements `ShouldBroadcast`; `broadcastOn()` returns `PrivateChannel("parents.{$parent->id}")`
-- Channel auth route: `POST /api/v1/portal/broadcasting/auth` — scoped to `auth:parents`
+- `routes/channels.php` — `Broadcast::channel('parents.{parentId}', ...)` and `Broadcast::channel('staff.{userId}', ...)` — each validates the authenticated user matches the channel ID
+- Notification class implements `ShouldBroadcast`; `broadcastOn()` returns the appropriate `PrivateChannel`
+- Channel auth routes registered inside the authenticated route groups (not via top-level `Broadcast::routes()`):
+  - Portal: `POST /api/v1/portal/broadcasting/auth` — scoped to `auth:parents`
+  - Kitchen: `POST /api/v1/broadcasting/auth` — scoped to `auth:sanctum`
 
-**Frontend setup (portal only):**
-- `EchoProvider` (`components/providers/echo-provider.tsx`) — Client Component; initialises `laravel-echo` once with the Sanctum Bearer token from Zustand store
-- Wrapped around the portal layout in `app/(portal)/layout.tsx`
-- Components subscribe via `echo.private('parents.{id}').listen('EventName', callback)` then `queryClient.invalidateQueries(...)` on event receipt
+**Frontend setup (both apps):**
+- `EchoProvider` (`components/providers/echo-provider.tsx`) — Client Component; initialises `laravel-echo` once with the Sanctum Bearer token from Zustand store; disconnects on token removal (logout)
+- Portal: wrapped in `app/(portal)/layout.tsx`; subscribes to `parents.{id}` channel
+- POS: wrapped in `app/(kitchen)/layout.tsx`; subscribes to `staff.{id}` channel
+- Components subscribe via `echo.private('channel.{id}').listen('EventName', callback)` then `queryClient.invalidateQueries(...)` on event receipt
 
 **Environment variables (Next.js):**
 ```
