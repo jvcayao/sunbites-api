@@ -65,7 +65,7 @@
 - [x] `POST /api/v1/portal/auth/logout` — `auth:parents`, `ability:parent`
 
 ### 8.3 Frontend (`~/sunbites-portal`)
-- [ ] Zustand auth store token storage — **DECISION NEEDED**: original spec said memory-only, but `lib/store/auth.ts` still uses `persist` + `sessionStorage`. With Reverb (Spec 10), memory-only causes logout on page refresh. Options: (a) keep sessionStorage, (b) memory-only + reconnect Echo on re-auth. Resolve before Spec 10 Task 7.
+- [x] Zustand auth store token storage — **RESOLVED**: portal uses `sessionStorage` via Zustand `persist` middleware. This allows `EchoProvider` to reinitialize the Echo connection on page refresh without requiring re-authentication. Implemented in `lib/store/auth.ts`.
 - [x] `lib/api/auth.ts` — add `forgotPassword(email)` and `resetPassword(token, email, password, passwordConfirmation)` methods — done: implemented in `lib/api/portal.ts` as `portalAuthApi.forgotPassword/resetPassword`
 - [x] Login page — handle `account_not_activated` error: show message "Your account has not been activated yet. Check your email or contact the canteen."
 - [x] Forgot password page at `app/(auth)/forgot-password/page.tsx` — email input, generic success message on submit
@@ -130,6 +130,17 @@
   - [x] Current wallet balance card
   - [x] Transaction history list (type, amount, date) via `useQuery`
   - [x] "Alert Setting" section: number input "Alert me when balance drops below ₱___"; pre-filled with current `wallet_alert_threshold` from pivot; save via `useMutation` → `PATCH /api/v1/portal/students/{student}/wallet/alert`; set to 0 to disable
+
+## 13.5 Payment History (Portal — Subscription Students Only)
+
+### 13.5.1 Backend
+- [x] `Portal\StudentPaymentHistoryController::index(Student $student)` — IDOR-protected (403 if not linked); 422 if student is non-subscription; returns all `StudentMonthlyPayment` records sorted by school year and month order (Jun → Mar)
+- [x] Route: `GET /api/v1/portal/students/{student}/payment-history`
+
+### 13.5.2 Frontend
+- [x] "Payment History" tab added to `app/(portal)/students/[id]/page.tsx` — visible only when `student_type === 'subscription'`; renders monthly payment rows with month, year, amount, status, and paid date
+
+---
 
 ## 14. Meal Planner (Portal)
 
@@ -204,11 +215,16 @@
 - [x] `Kitchen\ParentController::show(ParentUser $parent)` — parent profile + linked students
 - [x] Routes: `GET /api/v1/references/parents`, `POST /api/v1/references/parents/{parent}/resend-activation`
 - [x] Route: `GET /api/v1/references/parents/{parent}`
+- [x] `POST /api/v1/references/parents/{parent}/disable` — sets `disabled_at`; disabled parents cannot log in (401)
+- [x] `POST /api/v1/references/parents/{parent}/enable` — clears `disabled_at`
+- [x] `DELETE /api/v1/references/parents/{parent}` — soft-delete (sets `deleted_at` via `SoftDeletes`)
+- [x] `POST /api/v1/references/parents/{parent}/restore` — restores soft-deleted parent; requires `withTrashed()` binding
 
 ### 18.2 Frontend (POS)
 - [x] `app/(kitchen)/references/parents/page.tsx` — list table with search, status filter, click to detail drawer
 - [x] Add "Parents" to References navigation
 - [x] `lib/api/parents.ts`, `types/parent.ts`
+- [x] Parent detail ⋮ Actions dropdown — Disable / Enable / Delete / Restore actions (role-gated: Supervisor sees only Resend Activation)
 
 ## 19. Update EnrollmentController
 - [x] Call `ParentProvisioningService::provision()` for each contact with non-null email

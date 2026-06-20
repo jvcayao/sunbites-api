@@ -60,11 +60,17 @@ APP_DOMAIN=sunbites.com.ph        # production (API served at api.sunbites.com.p
 | Package | Purpose |
 |---|---|
 | `laravel/sanctum` | Token-based API authentication |
+| `laravel/fortify` | Staff password reset backend (email dispatch + token validation) |
 | `spatie/laravel-permission` | Role and permission management |
 | `bavix/laravel-wallet` | Student wallet (balance, deposits, charges) |
 | `maatwebsite/excel` | Excel/CSV report exports |
 | `spatie/laravel-activitylog` | Audit trail for all kitchen app actions |
-| `binafy/laravel-cart` | POS cart management |
+| `laravel/reverb` | First-party WebSocket server for real-time notifications |
+| `resend/resend-laravel` | Transactional email delivery (activation, reminders, alerts) |
+| `spatie/laravel-flare` | Error monitoring and reporting |
+| `sentry/sentry-laravel` | Error tracking and alerting |
+| `league/flysystem-aws-s3-v3` | S3-compatible cloud file storage (staff/parent photos) |
+| `binafy/laravel-cart` | POS cart management (installed; cart logic is currently Zustand client-side) |
 
 ---
 
@@ -355,36 +361,36 @@ Toast messages are triggered from:
 ## Requirements
 
 **Laravel API**
-- [ ] `config/sunbites.php` with all constants: `credit_limit`, `loyalty_point_threshold`, `daily_meal_rate`, `school_months`, `grade_levels`
-- [ ] `config/cors.php` allows `localhost:3000`, `localhost:3001` (local) and production Next.js domains; never wildcard
-- [ ] Sanctum installed and configured: token expiry set, all protected routes use `auth:sanctum`
-- [ ] API routes in `routes/api.php` prefixed `/api/v1/`
-- [ ] `APP_DEBUG=false` in production — API never exposes stack traces or raw SQL errors
-- [ ] `BranchSeeder`, `PermissionSeeder`, `PosMenuItemSeeder`, `WeeklyMealPlanSeeder`, `InventoryItemSeeder` run in correct order
-- [ ] `php artisan sunbites:create-admin` command — interactive, validates email uniqueness and password policy
-- [ ] `spatie/laravel-activitylog` installed, `activity_log` table migrated
-- [ ] Auth event listeners registered: login success, failed login (with IP), logout → `auth` log
-- [ ] `LogsActivity` trait on `User` with explicit `$logAttributes` allowlist; excludes sensitive fields
-- [ ] All activity entries include `branch_id` in `properties`
-- [ ] Soft-deleted records retained indefinitely — no auto-purge
+- [x] `config/sunbites.php` with all constants: `credit_limit`, `loyalty_point_threshold`, `daily_meal_rate`, `school_months`, `grade_levels`
+- [x] `config/cors.php` allows `localhost:3000`, `localhost:3001` (local) and production Next.js domains; never wildcard
+- [x] Sanctum installed and configured: token expiry set, all protected routes use `auth:sanctum`
+- [x] API routes in `routes/api.php` prefixed `/api/v1/`
+- [x] `APP_DEBUG=false` in production — API never exposes stack traces or raw SQL errors
+- [x] `BranchSeeder`, `PermissionSeeder`, `PosMenuItemSeeder`, `WeeklyMealPlanSeeder`, `InventoryItemSeeder` run in correct order
+- [x] `php artisan sunbites:create-admin` command — interactive, validates email uniqueness and password policy
+- [x] `spatie/laravel-activitylog` installed, `activity_log` table migrated
+- [x] Auth event listeners registered: login success, failed login (with IP), logout → `auth` log
+- [x] `LogsActivity` trait on `User` with explicit `$logAttributes` allowlist; excludes sensitive fields
+- [x] All activity entries include `branch_id` in `properties`
+- [x] Soft-deleted records retained indefinitely — no auto-purge
 
 **Next.js — Both Apps**
-- [ ] Next.js project initialized with TypeScript strict mode, Tailwind v4, App Router
-- [ ] `NEXT_PUBLIC_API_URL` environment variable configured for local and production
-- [ ] `lib/api/client.ts` base fetch wrapper with auth header, error parsing, 401 auto-logout
-- [ ] TanStack Query v5 `QueryClient` provider at root layout
-- [ ] Sonner `<Toaster position="top-center" />` at root layout
-- [ ] Zustand auth store: token in memory, cleared on logout
-- [ ] Tailwind v4 color tokens configured in `globals.css` via `@theme`
-- [ ] Poppins font loaded (weights 400, 600, 700, 800) from Google Fonts
-- [ ] No dark mode
-- [ ] `AppLogo` component with `full` and `icon` variants
-- [ ] shadcn/ui initialized with sunbites color tokens
+- [x] Next.js project initialized with TypeScript strict mode, Tailwind v4, App Router
+- [x] `NEXT_PUBLIC_API_URL` environment variable configured for local and production
+- [x] `lib/api/client.ts` base fetch wrapper with auth header, error parsing, 401 auto-logout
+- [x] TanStack Query v5 `QueryClient` provider at root layout
+- [x] Sonner `<Toaster position="top-center" />` at root layout
+- [x] Zustand auth store: token in memory, cleared on logout
+- [x] Tailwind v4 color tokens configured in `globals.css` via `@theme`
+- [x] Poppins font loaded (weights 400, 600, 700, 800) from Google Fonts
+- [x] No dark mode
+- [x] `AppLogo` component with `full` and `icon` variants
+- [x] shadcn/ui initialized with sunbites color tokens
 
 **Next.js — sunbites-pos only**
-- [ ] `KitchenLayout` with collapsible sidebar and topbar
-- [ ] `AuthLayout` centered card shell for login page
+- [x] `KitchenLayout` with collapsible sidebar and topbar
+- [x] `AuthLayout` centered card shell for login page
 
 **Next.js — sunbites-portal only**
-- [ ] `PortalLayout` with top navigation bar, mobile hamburger
-- [ ] `AuthLayout` centered card shell for login page
+- [x] `PortalLayout` with top navigation bar, mobile hamburger
+- [x] `AuthLayout` centered card shell for login page

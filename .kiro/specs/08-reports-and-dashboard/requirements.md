@@ -171,7 +171,7 @@ Roles: Admin, Manager, Supervisor
 ### Export
 - Excel export covers the stock snapshot, filtered log history, AND discrepancy summary
 - Filename: `inventory-report-{branch}-{from}-{to}.xlsx`
-- Three sheets: "Current Stock" (snapshot), "Movement History" (filtered logs), "Discrepancy" (manual adjustment summary)
+- Two sheets: "Current Stock" (snapshot) and "Movement History" (filtered logs); Discrepancy Summary is shown as a UI section below Movement History only — not exported to Excel
 - Export restricted to Admin/Manager (Supervisor excluded) — enforced server-side
 
 ---
@@ -352,39 +352,40 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 
 ## Requirements
 
-- [ ] `staff_daily_statuses` table with `status` enum (Working/Off/OnLeave/Emergency/OnBreak — TitleCase); UNIQUE(user_id, date)
-- [ ] Dashboard stat cards: Total Students, Enrolled, Meals Today, Revenue Today, Walk-In Orders, Wallet Transactions
-- [ ] Today's transactions table (last 10 orders, "View Full History" link to POS page)
-- [ ] Low stock alerts widget on dashboard
-- [ ] Outstanding credit alerts widget on dashboard (students with `credit_balance > 0`)
-- [ ] Staff Roster widget: employee cards with inline status dropdown; status updates via `useMutation` → `POST /api/v1/dashboard/staff-status` (regular authenticated API endpoint)
-- [ ] Top 5 items today widget (horizontal list, by order quantity)
-- [ ] Sales report at `pos.sunbites.com.ph/reports/sales` with all filters and summary panel
-- [ ] Student report at `pos.sunbites.com.ph/reports/students` with filters and summary
-- [ ] Wallet report at `pos.sunbites.com.ph/reports/wallet` (Admin/Manager only)
-- [ ] Inventory report at `pos.sunbites.com.ph/reports/inventory` — stock snapshot + log history with date range filter
-- [ ] Inventory report summary cards: OUT count, LOW count, OVER count (when applicable)
-- [ ] Inventory report log history table: date range filter (preset + custom), type filter, item filter; paginated 25/page
-- [ ] Inventory report export: two-sheet Excel — "Current Stock" snapshot + "Movement History" filtered logs; restricted to Admin/Manager server-side
-- [ ] Daily summary at `pos.sunbites.com.ph/reports/daily-summary` (printable, `@media print` hides UI chrome)
-- [ ] Excel exports for all 4 reports via maatwebsite/excel
-- [ ] Export restricted to Admin and Manager — enforced server-side in `ReportPolicy::export()`, not just frontend button
-- [ ] `StudentsExport` uses explicit field allowlist — government ID fields never included
-- [ ] All reports strictly branch-scoped
-- [ ] Admin can switch branch (via branch switcher) and see reports for either branch
-- [ ] Report pages use loading states (`useQuery` with skeleton placeholders) during data fetch
-- [ ] `ReportPolicy` — view (admin/manager/supervisor), export (admin/manager)
-- [ ] Activity Log Viewer at `pos.sunbites.com.ph/reports/activity` (Admin/Manager only)
-- [ ] Activity log filters: date range, user dropdown, log_name/category, free-text search
-- [ ] Activity log table: date/time, user, action, category badge, subject link, expandable properties
-- [ ] Activity log entries are immutable — no delete or edit actions
-- [ ] Subscription Billing report at `pos.sunbites.com.ph/reports/billing` with school year/month/status/grade filters and summary panel
-- [ ] Billing table: student name, number, grade, section, month/year, amount due, status badge, paid-on date, recorded-by; sorted unpaid-first
-- [ ] `BillingReportExport` — Admin/Manager only; includes summary totals row; filename `billing-report-{branch}-{month}-{year}.xlsx`
-- [ ] Credit Collection report at `pos.sunbites.com.ph/reports/credits` — Admin/Manager only (Supervisor excluded)
-- [ ] Credit report filters: date range, type (All/Charged/Settled/Voided), student search
-- [ ] Credit report table: date/time, student, grade, type badge (Charged=red/Settled=green/Voided=muted), amount, order #, notes, staff
-- [ ] Credit report summary: total charged, settled, voided, and net outstanding for the period
-- [ ] Credit report entries are immutable — no delete or edit; no export
-- [ ] "Reports" group in `KitchenLayout` sidebar: Dashboard, Sales, Students, Wallet, Inventory, Daily Summary, Billing
-- [ ] "Activity Log" and "Credits" links visible to Admin/Manager only
+- [x] `staff_daily_statuses` table with `status` enum (Working/Off/OnLeave/Emergency/OnBreak — TitleCase); UNIQUE(user_id, date)
+- [x] Dashboard stat cards: Total Students, Enrolled, Meals Today, Revenue Today, Walk-In Orders, Wallet Transactions
+- [x] Today's transactions table (last 10 orders, "View Full History" link to POS page)
+- [x] Low stock alerts widget on dashboard
+- [x] Outstanding credit alerts widget on dashboard (students with `credit_balance > 0`)
+- [x] Staff Roster widget: employee cards with inline status dropdown; status updates via `useMutation` → `POST /api/v1/dashboard/staff-status` (regular authenticated API endpoint)
+- [x] Top 5 items today widget (horizontal list, by order quantity)
+- [x] Sales report at `pos.sunbites.com.ph/reports/sales` with all filters and summary panel
+- [x] Student report at `pos.sunbites.com.ph/reports/students` with filters and summary
+- [x] Wallet report at `pos.sunbites.com.ph/reports/wallet` (Admin/Manager only)
+- [x] Inventory report at `pos.sunbites.com.ph/reports/inventory` — stock snapshot + log history with date range filter
+- [x] Inventory report summary cards: OUT count, LOW count, OVER count (when applicable)
+- [x] Inventory report log history table: date range filter (preset + custom), type filter, item filter; paginated 25/page
+- [x] Inventory report: Discrepancy Summary section below Movement History — groups `Manual` log entries by item for the selected date range; columns: Item Name, # of Manual Adjustments, Net Units Adjusted, Last Adjusted Date; net negative = red, net positive = green; empty state when no manual logs exist
+- [x] Inventory report export: three-sheet Excel — "Current Stock" (snapshot), "Movement History" (filtered logs), "Discrepancy" (manual adjustment summary); restricted to Admin/Manager server-side
+- [x] Daily summary at `pos.sunbites.com.ph/reports/daily-summary` (printable, `@media print` hides UI chrome)
+- [x] Excel exports for all 4 reports via maatwebsite/excel
+- [x] Export restricted to Admin and Manager — enforced server-side in `ReportPolicy::export()`, not just frontend button
+- [x] `StudentsExport` uses explicit field allowlist — government ID fields never included
+- [x] All reports strictly branch-scoped
+- [x] Admin can switch branch (via branch switcher) and see reports for either branch
+- [x] Report pages use loading states (`useQuery` with skeleton placeholders) during data fetch
+- [x] `ReportPolicy` — view (admin/manager/supervisor), export (admin/manager)
+- [x] Activity Log Viewer at `pos.sunbites.com.ph/reports/activity` (Admin/Manager only)
+- [x] Activity log filters: date range, user dropdown, log_name/category, free-text search
+- [x] Activity log table: date/time, user, action, category badge, subject link, expandable properties
+- [x] Activity log entries are immutable — no delete or edit actions
+- [x] Subscription Billing report at `pos.sunbites.com.ph/reports/billing` with school year/month/status/grade filters and summary panel
+- [x] Billing table: student name, number, grade, section, month/year, amount due, status badge, paid-on date, recorded-by; sorted unpaid-first
+- [x] `BillingReportExport` — Admin/Manager only; includes summary totals row; filename `billing-report-{branch}-{month}-{year}.xlsx`
+- [x] Credit Collection report at `pos.sunbites.com.ph/reports/credits` — Admin/Manager only (Supervisor excluded)
+- [x] Credit report filters: date range, type (All/Charged/Settled/Voided), student search
+- [x] Credit report table: date/time, student, grade, type badge (Charged=red/Settled=green/Voided=muted), amount, order #, notes, staff
+- [x] Credit report summary: total charged, settled, voided, and net outstanding for the period
+- [x] Credit report entries are immutable — no delete or edit; no export
+- [x] "Reports" group in `KitchenLayout` sidebar: Dashboard, Sales, Students, Wallet, Inventory, Daily Summary, Billing
+- [x] "Activity Log" and "Credits" links visible to Admin/Manager only

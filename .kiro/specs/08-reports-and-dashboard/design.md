@@ -287,7 +287,7 @@
 - Info note below table: muted text explaining what manual adjustments indicate
 
 **Export button:** Admin/Manager only — Supervisor sees report but not the export button (enforced server-side too)
-- Export generates three sheets: "Current Stock", "Movement History", "Discrepancy"
+- Export generates two sheets: "Current Stock" and "Movement History"; the Discrepancy Summary is displayed as a UI-only section below Movement History and is not included in the Excel export
 
 ---
 

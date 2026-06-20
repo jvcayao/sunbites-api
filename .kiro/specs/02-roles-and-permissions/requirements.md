@@ -216,33 +216,33 @@ Full spec in Spec 07. Summary:
 
 ## Requirements
 
-- [ ] `users` table with all fields: personal info, contact, address, employment, PH government IDs
-- [ ] All government ID fields nullable — no format enforcement
-- [ ] Government IDs excluded from API responses for all roles except Admin — enforced via `UserResource`
-- [ ] Rate limiting on staff login endpoint: max 5 attempts/minute per IP
-- [ ] Password policy on account creation and reset: min 8 chars, 1 uppercase, 1 number
-- [ ] Staff profile photo: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation
-- [ ] `full_name` computed accessor on User model
-- [ ] Soft delete on `users` table; `is_active` boolean for deactivation
-- [ ] `branch_user` pivot table for branch assignments
-- [ ] Sanctum token issued on login with `staff` ability; revoked on logout
-- [ ] Login rejects users with no branch assignment with clear error message in API response
-- [ ] Login returns user data including assigned branches — POS app routes to branch selector when 2+ branches
-- [ ] Password reset flow: admin triggers reset email from User Management; `/api/v1/auth/password/email` and `/api/v1/auth/password/reset` endpoints
-- [ ] POS login page has no self-service forgot password link — shows informational message only
-- [ ] Spatie roles seeded: `admin`, `manager`, `supervisor`, `cashier`
-- [ ] All permissions defined and seeded via `PermissionSeeder`
-- [ ] `SetActiveBranch` middleware reads `X-Branch-Id` header, validates access, binds branch to container
-- [ ] `UserResource` with role-based field filtering (government IDs hidden from non-admin)
-- [ ] User management CRUD API endpoints (admin only)
-- [ ] Branch assignment API on each user (admin only)
-- [ ] Deactivate/reactivate account endpoints
-- [ ] `UserPolicy` covering view, create, update, deactivate, delete
-- [ ] Log `auth.login` on successful login (properties: IP, branch)
-- [ ] Log `auth.failed` on failed login attempt (properties: email attempted, IP)
-- [ ] Log `auth.logout` on logout
-- [ ] Log `auth.password_reset` when a staff password is reset (properties: reset triggered by)
-- [ ] Log `users.created` when a new user account is created (properties: role assigned)
-- [ ] Log `users.updated` when user profile is edited (dirty-tracked)
-- [ ] Log `users.deleted` when a user is deactivated/soft-deleted
-- [ ] Log `users.role_changed` when a user's role is changed (properties: old role, new role)
+- [x] `users` table with all fields: personal info, contact, address, employment, PH government IDs
+- [x] All government ID fields nullable — no format enforcement
+- [x] Government IDs excluded from API responses for all roles except Admin — enforced via `UserResource`
+- [x] Rate limiting on staff login endpoint: max 5 attempts/minute per IP
+- [x] Password policy on account creation and reset: min 8 chars, 1 uppercase, 1 number
+- [x] Staff profile photo: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation
+- [x] `full_name` computed accessor on User model
+- [x] Soft delete on `users` table; `is_active` boolean for deactivation
+- [x] `branch_user` pivot table for branch assignments
+- [x] Sanctum token issued on login with `staff` ability; revoked on logout
+- [x] Login rejects users with no branch assignment with clear error message in API response
+- [x] Login returns user data including assigned branches — POS app routes to branch selector when 2+ branches
+- [x] Password reset flow: admin triggers reset email from User Management; `/api/v1/auth/password/email` and `/api/v1/auth/password/reset` endpoints
+- [x] POS login page has no self-service forgot password link — shows informational message only
+- [x] Spatie roles seeded: `admin`, `manager`, `supervisor`, `cashier`
+- [x] All permissions defined and seeded via `PermissionSeeder`
+- [x] `SetActiveBranch` middleware reads `X-Branch-Id` header, validates access, binds branch to container
+- [x] `UserResource` with role-based field filtering (government IDs hidden from non-admin)
+- [x] User management CRUD API endpoints (admin only)
+- [x] Branch assignment API on each user (admin only)
+- [x] Deactivate/reactivate account endpoints
+- [x] `UserPolicy` covering view, create, update, deactivate, delete
+- [x] Log `auth.login` on successful login (properties: IP, branch)
+- [x] Log `auth.failed` on failed login attempt (properties: email attempted, IP)
+- [x] Log `auth.logout` on logout
+- [x] Log `auth.password_reset` when a staff password is reset (properties: reset triggered by)
+- [x] Log `users.created` when a new user account is created (properties: role assigned)
+- [x] Log `users.updated` when user profile is edited (dirty-tracked)
+- [x] Log `users.deleted` when a user is deactivated/soft-deleted
+- [x] Log `users.role_changed` when a user's role is changed (properties: old role, new role)

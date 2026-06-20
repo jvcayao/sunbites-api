@@ -1,4 +1,4 @@
-# Spec 11 — Tasks
+# Spec 12 — Tasks
 
 ## Task 1: Database & Model
 

@@ -464,6 +464,7 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | POST | `/api/v1/students/{student}/regenerate-qr` | admin, manager, supervisor | Regenerate QR code |
 | PATCH | `/api/v1/students/{student}/status` | admin, manager, supervisor | Change enrollment status |
 | POST | `/api/v1/students/{student}/wallet/top-up` | admin, manager, supervisor | Wallet top-up |
+| GET | `/api/v1/wallet/{student}/history` | admin, manager, supervisor | Wallet transaction history — purchases and top-ups, paginated, filterable by type and search |
 | POST | `/api/v1/students/{student}/credit/settle` | admin, manager | Settle outstanding credit |
 | GET | `/api/v1/students/{student}/payments` | admin, manager, supervisor | Monthly payment records |
 | PATCH | `/api/v1/students/{student}/payments/{payment}` | admin, manager | Toggle month paid/unpaid |
@@ -472,6 +473,8 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 | POST | `/api/v1/branch-monthly-amounts` | admin, manager, supervisor | Create/upsert a month config |
 | PUT | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Update a specific month config record |
 | DELETE | `/api/v1/branch-monthly-amounts/{id}` | admin, manager, supervisor | Delete a month config record |
+| GET | `/api/v1/pos/subscription-config` | all staff | Daily per-category limits (meal/snack/drink/extra) for the active branch |
+| PUT | `/api/v1/pos/subscription-config` | admin, manager, supervisor | Update daily category limits |
 | GET | `/api/v1/students/{student}/contacts` | admin, manager, supervisor | List contacts for a student |
 | POST | `/api/v1/students/{student}/contacts` | admin, manager, supervisor | Add a new contact (triggers parent provisioning if email given) |
 | PUT | `/api/v1/students/{student}/contacts/{contact}` | admin, manager, supervisor | Update a contact |
@@ -520,41 +523,45 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [x] Log `wallet.inline_reload` on POS inline reload (properties: amount, payment_method, cashier, order context)
 - [x] Log `wallet.credit_settled` (properties: amount_settled, settled_by)
 - [x] Log `payments.recorded` (properties: school_month, year, status, amount, recorded_by)
-- [ ] Soft-deleted students viewable via `?deleted=1` filter on the student list endpoint
-- [ ] `POST /api/v1/students/{student}/restore` — restore a soft-deleted student; `.withTrashed()` route binding; roles: admin, manager, supervisor; logs `students.restored`
-- [ ] No force delete endpoint — permanent deletion is not supported
-- [ ] `student_number` is nullable in the `students` table — migration required to ALTER the column
-- [ ] Enrollment validation: `student_number` changed from `required` to `nullable` — uniqueness still enforced per branch when a value is provided
-- [ ] `StudentController::update()` — add `student_number` to editable fields with `Rule::unique('students')->where(branch_id)->ignore($student->id)->whereNotNull('student_number')` uniqueness validation
-- [ ] Student detail profile edit form — show editable `student_number` field alongside existing profile fields
-- [ ] Enrollment form — `student_number` field labelled as "Student No. (optional)"
-- [ ] `BranchMonthlyAmountController::store()` and `update()` — accept optional `amount` field in request; if provided, store it directly instead of computing `days × daily_meal_rate`; if absent, compute from current `daily_meal_rate` system config value
-- [ ] Student detail Payment tab — for `unpaid` payments only: show an `[Edit Amount]` inline button next to the toggle; opens a small dialog with a decimal input pre-filled with current amount; on save: `PATCH /api/v1/students/{student}/payments/{payment}` with `{ amount }`; updates the `amount` column without changing status
-- [ ] `PaymentController::updateAmount(Request, Student, StudentMonthlyPayment)` — new action on existing PATCH route: if request only contains `amount` (no status toggle), update the `amount` field on the payment record; only allowed on `unpaid` payments; roles: admin, manager
-- [ ] Migration: add `year` (int) column to `student_monthly_payments`; drop old unique key `(student_id, school_month)`; add new unique key `(student_id, school_month, year)`
-- [ ] Migration: add `year` (int) and `days` (int) columns to `branch_monthly_amounts`; drop old unique key `(branch_id, school_month)`; add new unique key `(branch_id, school_month, year)`
-- [ ] `config/sunbites.php`: keep `daily_meal_rate` and `school_months.*.days` as fallback defaults; `school_months.*.amount` is no longer authoritative but may remain for reference
-- [ ] Enrollment form: replace fixed 10-month seeding with subscription period date range picker (start month+year, end month+year); default June [current year] → March [current year + 1]
-- [ ] Enrollment form: preview table showing each month in range with resolved days+amount before submit
-- [ ] `EnrollmentController::store()`: accept `subscription_start` (month+year) and `subscription_end` (month+year); generate one payment row per calendar month in that range; resolve amount from `branch_monthly_amounts` for the given year, else fallback to `daily_meal_rate × default_days`
-- [ ] `GET /api/v1/branch-monthly-amounts?year=YYYY` — list all configured months for active branch + specified year
-- [ ] `POST /api/v1/branch-monthly-amounts` — create/upsert a month config (branch from active branch, school_month, year, days, amount computed as `daily_meal_rate × days`)
-- [ ] `PUT /api/v1/branch-monthly-amounts/{id}` — update days (and recompute amount); roles: admin, manager, supervisor
-- [ ] `DELETE /api/v1/branch-monthly-amounts/{id}` — delete a month config record; roles: admin, manager, supervisor
-- [ ] `POST /api/v1/students/{student}/payments/range` — add subscription period for existing student; validate no overlap on `(student_id, school_month, year)`; roles: admin, manager, supervisor
-- [ ] Student detail Payment tab: show `year` alongside month in each payment row
-- [ ] Student detail Payment tab: `[+ Add Subscription Period]` button (admin/manager/supervisor) — opens dialog with same range picker + preview table
-- [ ] New page: `pos.sunbites.com.ph/references/subscription-config` — year selector, table of configured months (Month | Days | Amount | Actions), "Add Month" button, inline or modal edit, show default vs configured indicator
-- [ ] **Enrollment → parent provisioning**: `EnrollmentController::store()` loops contacts; for each contact with a non-null email, calls `ParentProvisioningService::provision(email, name, studentId, enrolledBy)` — find-or-create `parents` record, create `parent_student` pivot, dispatch `ParentWelcomeMail` if account is new
-- [ ] `ParentProvisioningService` — reusable service used by enrollment and contact CRUD; idempotent: calling twice with same email+student does not create duplicate pivot
-- [ ] `parent_student` pivot row: `parent_id`, `student_id`, `linked_at`, `linked_by`, `wallet_alert_threshold (decimal, default 0)`
-- [ ] Student detail Contacts tab: lists all `student_contacts` with portal account status badge (`Activated` / `Pending Activation` / `No Email`)
-- [ ] `StudentContactController::store()` — add contact; calls `ParentProvisioningService` if email present; enforces max 3 contacts per student
-- [ ] `StudentContactController::update()` — edit contact; handles email change (re-provision parent with new email; remove old pivot if old email no longer associated with any contact for this student)
-- [ ] `StudentContactController::destroy()` — delete contact; removes linked `parent_student` pivot; enforces min 1 contact remains
-- [ ] `StudentContactController::resendActivation()` — sends activation email (if `email_verified_at` null) or password reset email (if activated); rate-limited: max 3 per guardian per 24 hours
-- [ ] Enrollment success screen shows "Activation email sent to {email}" for each contact email provided
-- [ ] Log `student_contact.added` (properties: contact_name, email_provided, parent_provisioned)
-- [ ] Log `student_contact.updated` (properties: dirty fields)
-- [ ] Log `student_contact.deleted` (properties: contact_name)
-- [ ] Log `parent.activation_resent` (properties: parent_email, sent_by)
+- [x] Soft-deleted students viewable via `?deleted=1` filter on the student list endpoint
+- [x] `POST /api/v1/students/{student}/restore` — restore a soft-deleted student; `.withTrashed()` route binding; roles: admin, manager, supervisor; logs `students.restored`
+- [x] No force delete endpoint — permanent deletion is not supported
+- [x] `student_number` is nullable in the `students` table — migration required to ALTER the column
+- [x] Enrollment validation: `student_number` changed from `required` to `nullable` — uniqueness still enforced per branch when a value is provided
+- [x] `StudentController::update()` — add `student_number` to editable fields with `Rule::unique('students')->where(branch_id)->ignore($student->id)->whereNotNull('student_number')` uniqueness validation
+- [x] Student detail profile edit form — show editable `student_number` field alongside existing profile fields
+- [x] Enrollment form — `student_number` field labelled as "Student No. (optional)"
+- [x] `BranchMonthlyAmountController::store()` and `update()` — accept optional `amount` field in request; if provided, store it directly instead of computing `days × daily_meal_rate`; if absent, compute from current `daily_meal_rate` system config value
+- [x] Student detail Payment tab — for `unpaid` payments only: show an `[Edit Amount]` inline button next to the toggle; opens a small dialog with a decimal input pre-filled with current amount; on save: `PATCH /api/v1/students/{student}/payments/{payment}` with `{ amount }`; updates the `amount` column without changing status
+- [x] `PaymentController::updateAmount(Request, Student, StudentMonthlyPayment)` — new action on existing PATCH route: if request only contains `amount` (no status toggle), update the `amount` field on the payment record; only allowed on `unpaid` payments; roles: admin, manager
+- [x] Migration: add `year` (int) column to `student_monthly_payments`; drop old unique key `(student_id, school_month)`; add new unique key `(student_id, school_month, year)`
+- [x] Migration: add `year` (int) and `days` (int) columns to `branch_monthly_amounts`; drop old unique key `(branch_id, school_month)`; add new unique key `(branch_id, school_month, year)`
+- [x] `config/sunbites.php`: keep `daily_meal_rate` and `school_months.*.days` as fallback defaults; `school_months.*.amount` is no longer authoritative but may remain for reference
+- [x] Enrollment form: replace fixed 10-month seeding with subscription period date range picker (start month+year, end month+year); default June [current year] → March [current year + 1]
+- [x] Enrollment form: preview table showing each month in range with resolved days+amount before submit
+- [x] `EnrollmentController::store()`: accept `subscription_start` (month+year) and `subscription_end` (month+year); generate one payment row per calendar month in that range; resolve amount from `branch_monthly_amounts` for the given year, else fallback to `daily_meal_rate × default_days`
+- [x] `GET /api/v1/branch-monthly-amounts?year=YYYY` — list all configured months for active branch + specified year
+- [x] `POST /api/v1/branch-monthly-amounts` — create/upsert a month config (branch from active branch, school_month, year, days, amount computed as `daily_meal_rate × days`)
+- [x] `PUT /api/v1/branch-monthly-amounts/{id}` — update days (and recompute amount); roles: admin, manager, supervisor
+- [x] `DELETE /api/v1/branch-monthly-amounts/{id}` — delete a month config record; roles: admin, manager, supervisor
+- [x] `POST /api/v1/students/{student}/payments/range` — add subscription period for existing student; validate no overlap on `(student_id, school_month, year)`; roles: admin, manager, supervisor
+- [x] Student detail Payment tab: show `year` alongside month in each payment row
+- [x] Student detail Payment tab: `[+ Add Subscription Period]` button (admin/manager/supervisor) — opens dialog with same range picker + preview table
+- [x] New page: `pos.sunbites.com.ph/references/subscription-config` — two sections: (1) daily category limits panel, (2) year selector + table of configured months (Month | Days | Amount | Actions), "Add Month" button, inline or modal edit, show default vs configured indicator
+- [x] `branch_subscription_configs` table — `branch_id` (FK, unique), `meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit` (all integer, default 1)
+- [x] `SubscriptionConfigController::show()` — `GET /api/v1/pos/subscription-config`; uses `firstOrCreate` with defaults of 1 per category
+- [x] `SubscriptionConfigController::update()` — `PUT /api/v1/pos/subscription-config`; validates each limit as integer 0–10; admin, manager, supervisor only
+- [x] `StudentLookupController` reads `BranchSubscriptionConfig::forBranch()` to build `subscription_daily_status` (used/limit/remaining per category) returned in POS lookup response
+- [x] **Enrollment → parent provisioning**: `EnrollmentController::store()` loops contacts; for each contact with a non-null email, calls `ParentProvisioningService::provision(email, name, studentId, enrolledBy)` — find-or-create `parents` record, create `parent_student` pivot, dispatch `ParentWelcomeMail` if account is new
+- [x] `ParentProvisioningService` — reusable service used by enrollment and contact CRUD; idempotent: calling twice with same email+student does not create duplicate pivot
+- [x] `parent_student` pivot row: `parent_id`, `student_id`, `linked_at`, `linked_by`, `wallet_alert_threshold (decimal, default 0)`
+- [x] Student detail Contacts tab: lists all `student_contacts` with portal account status badge (`Activated` / `Pending Activation` / `No Email`)
+- [x] `StudentContactController::store()` — add contact; calls `ParentProvisioningService` if email present; enforces max 3 contacts per student
+- [x] `StudentContactController::update()` — edit contact; handles email change (re-provision parent with new email; remove old pivot if old email no longer associated with any contact for this student)
+- [x] `StudentContactController::destroy()` — delete contact; removes linked `parent_student` pivot; enforces min 1 contact remains
+- [x] `StudentContactController::resendActivation()` — sends activation email (if `email_verified_at` null) or password reset email (if activated); rate-limited: max 3 per guardian per 24 hours
+- [x] Enrollment success screen shows "Activation email sent to {email}" for each contact email provided
+- [x] Log `student_contact.added` (properties: contact_name, email_provided, parent_provisioned)
+- [x] Log `student_contact.updated` (properties: dirty fields)
+- [x] Log `student_contact.deleted` (properties: contact_name)
+- [x] Log `parent.activation_resent` (properties: parent_email, sent_by)

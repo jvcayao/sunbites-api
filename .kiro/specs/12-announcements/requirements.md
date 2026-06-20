@@ -1,8 +1,10 @@
-# Spec 11 — Announcements
+# Spec 12 — Announcements
 
 ## Introduction
 
-Announcements allow Admin, Manager, and Supervisor roles to compose and send custom notification messages to either parents or co-workers registered in the system. Recipients receive the message instantly via their notification bell (real-time through Reverb) and can read or delete it from their inbox. This is a staff-authored broadcast — distinct from the automated payment reminders in Spec 10.
+Announcements allow Admin, Manager, and Supervisor roles to compose and send custom notification messages to either parents or co-workers registered in the system. Recipients receive the message instantly via their notification bell (real-time through Reverb) and can read or delete it from their inbox. This is a staff-authored broadcast — distinct from the automated payment reminders in Spec 11.
+
+**Depends on:** Spec 10 (Notifications — Reverb, notifications table, EchoProvider, NotificationBell infrastructure)
 
 ---
 

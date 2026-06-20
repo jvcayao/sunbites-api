@@ -253,69 +253,69 @@ Each POS menu item optionally maps to one or more inventory items via `pos_menu_
 ## Requirements
 
 **POS Menu Items**
-- [ ] `pos_menu_items` table with `branch_id`, `name`, `price`, `category`, `is_available`, `is_subscription_item` (nullable boolean), `sort_order`
-- [ ] `HasBranch` trait applied
-- [ ] `LogsActivity` trait applied with `$logAttributes` allowlist: `name`, `price`, `category`, `is_available`, `is_subscription_item`, `sort_order`
-- [ ] Default items seeded per branch (7 items as listed) with `is_subscription_item = false`
-- [ ] Migration for new items: `is_subscription_item` nullable boolean, default null; existing rows updated to `false`
-- [ ] API endpoints: list, create, update, toggle availability, delete — under `role:admin,manager`
-- [ ] `GET /api/v1/pos/menu-items` — returns all items for active branch including `is_subscription_item`
-- [ ] `POST /api/v1/pos/menu-items` — create (accepts `is_subscription_item: nullable boolean`)
-- [ ] `PUT /api/v1/pos/menu-items/{item}` — update (accepts `is_subscription_item: nullable boolean`)
-- [ ] `POST /api/v1/pos/menu-items/{item}/toggle` — flip is_available
-- [ ] `DELETE /api/v1/pos/menu-items/{item}` — delete
-- [ ] Menu Mgmt sub-tab on POS page in POS app (Admin/Manager only)
-- [ ] **Layout: "Add New Item" form shown at the top; item cards grid displayed below** — staff can add without scrolling past the list
-- [ ] Item cards with availability toggle (instant), "Link Stock" button (opens inline Linked Stock panel), and delete (with confirmation)
-- [ ] Inline "Add New Item" form: name + price + category + **Subscription Eligible select** (Not configured / Yes / No) + Add button
-- [ ] Items with `is_subscription_item = null` greyed out and not selectable on POS (for all customers)
-- [ ] Items with `is_subscription_item = true` show blue "Subscription" badge on POS item card
-- [ ] `PosMenuItemFactory`: add `subscriptionEligible()` and `notSubscriptionEligible()` states; default definition sets `is_subscription_item = false`
+- [x] `pos_menu_items` table with `branch_id`, `name`, `price`, `category`, `is_available`, `is_subscription_item` (nullable boolean), `sort_order`
+- [x] `HasBranch` trait applied
+- [x] `LogsActivity` trait applied with `$logAttributes` allowlist: `name`, `price`, `category`, `is_available`, `is_subscription_item`, `sort_order`
+- [x] Default items seeded per branch (7 items as listed) with `is_subscription_item = false`
+- [x] Migration for new items: `is_subscription_item` nullable boolean, default null; existing rows updated to `false`
+- [x] API endpoints: list, create, update, toggle availability, delete — under `role:admin,manager`
+- [x] `GET /api/v1/pos/menu-items` — returns all items for active branch including `is_subscription_item`
+- [x] `POST /api/v1/pos/menu-items` — create (accepts `is_subscription_item: nullable boolean`)
+- [x] `PUT /api/v1/pos/menu-items/{item}` — update (accepts `is_subscription_item: nullable boolean`)
+- [x] `POST /api/v1/pos/menu-items/{item}/toggle` — flip is_available
+- [x] `DELETE /api/v1/pos/menu-items/{item}` — delete
+- [x] Menu Mgmt sub-tab on POS page in POS app (Admin/Manager only)
+- [x] **Layout: "Add New Item" form shown at the top; item cards grid displayed below** — staff can add without scrolling past the list
+- [x] Item cards with availability toggle (instant), "Link Stock" button (opens inline Linked Stock panel), and delete (with confirmation)
+- [x] Inline "Add New Item" form: name + price + category + **Subscription Eligible select** (Not configured / Yes / No) + Add button
+- [x] Items with `is_subscription_item = null` greyed out and not selectable on POS (for all customers)
+- [x] Items with `is_subscription_item = true` show blue "Subscription" badge on POS item card
+- [x] `PosMenuItemFactory`: add `subscriptionEligible()` and `notSubscriptionEligible()` states; default definition sets `is_subscription_item = false`
 
 **Weekly Meal Planner**
-- [ ] `weekly_meal_plans` table with unique constraint on `(branch_id, school_month, week_number, day_of_week)`
-- [ ] `snacks` column (nullable string) added to `weekly_meal_plans`
-- [ ] `HasBranch` trait applied
-- [ ] Default week seeded for all months × 4 weeks per branch (includes default Snacks values)
-- [ ] `meal_planner_week_visibility` table: `(branch_id, school_month, week_number, visible_to_parents)`; unique key on `(branch_id, school_month, week_number)`
-- [ ] Seeder: all 40 week combinations seeded as `visible_to_parents = true` per branch
-- [ ] `GET /api/v1/references/meal-planner` — returns week data for given month + week + active branch (includes `snacks` field + `visible_to_parents` boolean for current week)
-- [ ] `PATCH /api/v1/references/meal-planner` — upserts all 5 rows including `snacks` (Admin, Manager only)
-- [ ] `POST /api/v1/references/meal-planner/reset` — restores default pattern including `snacks` (Admin, Manager only)
-- [ ] `PATCH /api/v1/references/meal-planner/week-visibility` — sets `visible_to_parents` for the given month + week (Admin, Manager only); requires confirmation on frontend
-- [ ] Meal Planner page in POS app: month tabs + week tabs + week visibility toggle + editable grid (Admin/Manager) or read-only (Supervisor/Cashier)
-- [ ] Grid includes Snacks as 5th column with `bg-purple-50` cell background; no per-column eye icons
-- [ ] Week visibility toggle shown between week tabs and grid; Admin/Manager can toggle; Supervisor/Cashier see read-only badge
-- [ ] Toggling week visibility prompts confirmation: "Publish [Month] — Week [N] to Parents?" or "Hide [Month] — Week [N] from Parents?"
-- [ ] Toast on save: success message referencing which month/week was saved
-- [ ] `GET /api/v1/portal/meal-planner` — read-only endpoint; returns week data only if `visible_to_parents = true` for that week; returns a "not published" indicator otherwise
+- [x] `weekly_meal_plans` table with unique constraint on `(branch_id, school_month, week_number, day_of_week)`
+- [x] `snacks` column (nullable string) added to `weekly_meal_plans`
+- [x] `HasBranch` trait applied
+- [x] Default week seeded for all months × 4 weeks per branch (includes default Snacks values)
+- [x] `meal_planner_week_visibility` table: `(branch_id, school_month, week_number, visible_to_parents)`; unique key on `(branch_id, school_month, week_number)`
+- [x] Seeder: all 40 week combinations seeded as `visible_to_parents = true` per branch
+- [x] `GET /api/v1/references/meal-planner` — returns week data for given month + week + active branch (includes `snacks` field + `visible_to_parents` boolean for current week)
+- [x] `PATCH /api/v1/references/meal-planner` — upserts all 5 rows including `snacks` (Admin, Manager only)
+- [x] `POST /api/v1/references/meal-planner/reset` — restores default pattern including `snacks` (Admin, Manager only)
+- [x] `PATCH /api/v1/references/meal-planner/week-visibility` — sets `visible_to_parents` for the given month + week (Admin, Manager only); requires confirmation on frontend
+- [x] Meal Planner page in POS app: month tabs + week tabs + week visibility toggle + editable grid (Admin/Manager) or read-only (Supervisor/Cashier)
+- [x] Grid includes Snacks as 5th column with `bg-purple-50` cell background; no per-column eye icons
+- [x] Week visibility toggle shown between week tabs and grid; Admin/Manager can toggle; Supervisor/Cashier see read-only badge
+- [x] Toggling week visibility prompts confirmation: "Publish [Month] — Week [N] to Parents?" or "Hide [Month] — Week [N] from Parents?"
+- [x] Toast on save: success message referencing which month/week was saved
+- [x] `GET /api/v1/portal/meal-planner` — read-only endpoint; returns week data only if `visible_to_parents = true` for that week; returns a "not published" indicator otherwise
 
 **Inventory**
-- [ ] `inventory_items` table — fields: `branch_id`, `name`, `quantity`, `unit`, `restock_threshold`, `overstock_threshold` (nullable), `cost_per_unit` (nullable), `is_archived` (bool, default false), timestamps
-- [ ] `inventory_logs` table — fields: `branch_id`, `inventory_item_id` (FK), `order_id` (nullable FK → orders), `adjusted_by` (FK → users), `type` (enum: restock/waste/manual/sale), `quantity_change`, `stock_after`, `item_name_snapshot` (string), `reason`, `created_at`
-- [ ] `pos_menu_item_inventory` pivot table — `pos_menu_item_id` (FK), `inventory_item_id` (FK), `quantity_used` (integer, default 1)
-- [ ] `HasBranch` trait applied to `inventory_items`
-- [ ] `LogsActivity` trait applied with `$logAttributes` allowlist
-- [ ] Status accessor: OUT (qty=0), LOW (qty ≤ restock_threshold), OVER (qty > overstock_threshold when set), OK (otherwise)
-- [ ] `is_archived` global scope — archived items excluded from active list; separate archive/unarchive actions
-- [ ] Default inventory items seeded per branch (updated to packaged goods: Juice Tetra Pack, Graham Crackers, Bread Roll, Biscuit, Banana Cue)
-- [ ] API endpoints for inventory management under `role:admin,manager,supervisor`
-- [ ] `InventoryController::store()` — auto-creates `Restock` log if `quantity > 0` on creation (`reason = "Initial stock"`, `adjusted_by = auth user`)
-- [ ] `InventoryController::adjust()` — accepts types: restock/waste/manual only; `sale` type rejected with 422; snapshots `item_name_snapshot` on every log
-- [ ] `InventoryController::archive()` / `unarchive()` — soft-hide items; archived items excluded from active list
-- [ ] `InventoryController::history()` — cross-item log view; filters: `from`, `to`, `type`, `item_id`; paginated 25/page; branch-scoped
-- [ ] `InventoryIngredientController` — CRUD for `pos_menu_item_inventory`: list ingredients per menu item, attach (with quantity_used), detach
-- [ ] `GET /api/v1/pos/menu-items` response includes `inventory_status` (derived: OUT/LOW/OVER/OK) and `has_inventory_mapping` (boolean) per item
-- [ ] Inventory tab on POS page: table with status badges (OK/LOW/OUT/OVER); Adjust modal shows Restock/Waste/Manual types only (no Sale)
-- [ ] References > Inventory uses a **2-tab layout**: Tab 1 "Inventory" (Add form at top, active items list below, archived items collapsed at bottom); Tab 2 "History" (cross-item log view with filters)
-- [ ] Full inventory CRUD in References > Inventory (Inventory tab) — including overstock_threshold and cost_per_unit fields; archive/unarchive actions; Add form above the list
-- [ ] Cross-item Inventory History in References > Inventory (History tab): all logs, date range + type + item filters, paginated, color-coded
-- [ ] **Linked Stock** panel on Menu Mgmt tab (not "Ingredients" / "Ingredient Mapping"): per menu item, manage which inventory items are deducted per sale; button on card labelled "Link Stock"; panel title "Linked Stock: {name}"; warning "Not linked" badge when unmapped; action buttons "Add Link" / "Remove"
-- [ ] POS menu grid: OUT items greyed out and unselectable; LOW items show warning badge; unmapped items show "Not linked" badge
-- [ ] `inventory_logs` entry created on every quantity change (manual or auto)
-- [ ] Log `menu.item_created` when a POS menu item is added
-- [ ] Log `menu.item_toggled` when availability is toggled
-- [ ] Log `menu.item_deleted` when a POS menu item is deleted
-- [ ] Log `meal_planner.saved` when a meal planner week is saved (properties: month, week_number, branch)
-- [ ] Log `inventory.adjusted` when stock quantity changes (properties: item name, old_qty, change, new_qty, reason, type)
-- [ ] Log `inventory.sale_deducted` when checkout auto-deducts stock (properties: item name, qty_deducted, stock_after, order_id)
+- [x] `inventory_items` table — fields: `branch_id`, `name`, `quantity`, `unit`, `restock_threshold`, `overstock_threshold` (nullable), `cost_per_unit` (nullable), `is_archived` (bool, default false), timestamps
+- [x] `inventory_logs` table — fields: `branch_id`, `inventory_item_id` (FK), `order_id` (nullable FK → orders), `adjusted_by` (FK → users), `type` (enum: restock/waste/manual/sale), `quantity_change`, `stock_after`, `item_name_snapshot` (string), `reason`, `created_at`
+- [x] `pos_menu_item_inventory` pivot table — `pos_menu_item_id` (FK), `inventory_item_id` (FK), `quantity_used` (integer, default 1)
+- [x] `HasBranch` trait applied to `inventory_items`
+- [x] `LogsActivity` trait applied with `$logAttributes` allowlist
+- [x] Status accessor: OUT (qty=0), LOW (qty ≤ restock_threshold), OVER (qty > overstock_threshold when set), OK (otherwise)
+- [x] `is_archived` global scope — archived items excluded from active list; separate archive/unarchive actions
+- [x] Default inventory items seeded per branch (updated to packaged goods: Juice Tetra Pack, Graham Crackers, Bread Roll, Biscuit, Banana Cue)
+- [x] API endpoints for inventory management under `role:admin,manager,supervisor`
+- [x] `InventoryController::store()` — auto-creates `Restock` log if `quantity > 0` on creation (`reason = "Initial stock"`, `adjusted_by = auth user`)
+- [x] `InventoryController::adjust()` — accepts types: restock/waste/manual only; `sale` type rejected with 422; snapshots `item_name_snapshot` on every log
+- [x] `InventoryController::archive()` / `unarchive()` — soft-hide items; archived items excluded from active list
+- [x] `InventoryController::history()` — cross-item log view; filters: `from`, `to`, `type`, `item_id`; paginated 25/page; branch-scoped
+- [x] `InventoryIngredientController` — CRUD for `pos_menu_item_inventory`: list ingredients per menu item, attach (with quantity_used), detach
+- [x] `GET /api/v1/pos/menu-items` response includes `inventory_status` (derived: OUT/LOW/OVER/OK) and `has_inventory_mapping` (boolean) per item
+- [x] Inventory tab on POS page: table with status badges (OK/LOW/OUT/OVER); Adjust modal shows Restock/Waste/Manual types only (no Sale)
+- [x] References > Inventory uses a **2-tab layout**: Tab 1 "Inventory" (Add form at top, active items list below, archived items collapsed at bottom); Tab 2 "History" (cross-item log view with filters)
+- [x] Full inventory CRUD in References > Inventory (Inventory tab) — including overstock_threshold and cost_per_unit fields; archive/unarchive actions; Add form above the list
+- [x] Cross-item Inventory History in References > Inventory (History tab): all logs, date range + type + item filters, paginated, color-coded
+- [x] **Linked Stock** panel on Menu Mgmt tab (not "Ingredients" / "Ingredient Mapping"): per menu item, manage which inventory items are deducted per sale; button on card labelled "Link Stock"; panel title "Linked Stock: {name}"; warning "Not linked" badge when unmapped; action buttons "Add Link" / "Remove"
+- [x] POS menu grid: OUT items greyed out and unselectable; LOW items show warning badge; unmapped items show "Not linked" badge
+- [x] `inventory_logs` entry created on every quantity change (manual or auto)
+- [x] Log `menu.item_created` when a POS menu item is added
+- [x] Log `menu.item_toggled` when availability is toggled
+- [x] Log `menu.item_deleted` when a POS menu item is deleted
+- [x] Log `meal_planner.saved` when a meal planner week is saved (properties: month, week_number, branch)
+- [x] Log `inventory.adjusted` when stock quantity changes (properties: item name, old_qty, change, new_qty, reason, type)
+- [x] Log `inventory.sale_deducted` when checkout auto-deducts stock (properties: item name, qty_deducted, stock_after, order_id)

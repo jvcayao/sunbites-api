@@ -27,6 +27,12 @@
 │  │  ─────────────────────────────────────────────────  │   │
 │  │  Loyalty Point Threshold  ₱1,000.00  [Edit]         │   │
 │  │  (₱) Amount spent to earn one loyalty point.        │   │
+│  │  ─────────────────────────────────────────────────  │   │
+│  │  Payment Reminder Days    14         [Edit]         │   │
+│  │  Days before due date to send payment reminders.    │   │
+│  │  ─────────────────────────────────────────────────  │   │
+│  │  Pre-Registration Expiry  30         [Edit]         │   │
+│  │  Days before an unprocessed pre-reg entry expires.  │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ⓘ Changes take effect immediately across the system.       │

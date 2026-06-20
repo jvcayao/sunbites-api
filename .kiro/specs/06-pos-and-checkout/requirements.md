@@ -408,71 +408,71 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 
 ## Requirements
 
-- [ ] `orders` and `order_items` tables with all fields
-- [ ] Cart managed entirely client-side in Zustand on the POS frontend — no server-side session cart
-- [ ] POS page layout: left item grid + right cart panel
-- [ ] Category tab navigation on item grid (meal/snack/drink/extra)
-- [ ] Item search across categories (debounced, `F2` shortcut)
-- [ ] QR/student input: auto-focused on page load and after every completed order; `autocomplete="off"`; `onBlur` re-focus with 50ms delay
-- [ ] **Global document-level `keydown` listener** — QR scanner captured even when the input is not focused; characters buffered in a hidden ref (`scanBufferRef`), never shown in the visible input
-- [ ] **QR value never displayed in input** — raw `SB-XXXXXXXXXXXX` string is captured silently in the ref buffer; only the student's name/details appear on screen after successful lookup
-- [ ] Scan detection: inter-keystroke timing < 100ms → characters go into hidden buffer; > 100ms → characters go into visible input (manual typing)
-- [ ] On global `Enter` with buffer matching `/^SB-[A-Za-z0-9]{12}$/` → fire QR lookup; clear buffer; input field unchanged
-- [ ] On `Enter` in visible input (manual mode) → name/number search
-- [ ] `POST /api/v1/pos/students/lookup` with `type: qr|search` — QR returns full student data; search returns minimal data only (id, full_name, grade_level, photo_path, enrollment_status — no wallet/credit/points)
-- [ ] **Change Student dialog** — shown when QR scan fires and a student is already selected; displays new student's name + grade; "Yes, Switch" replaces current; "No, Keep Current" dismisses
-- [ ] **Student Not Found dialog** — shown (not inline error) when QR lookup returns no match; text: "No student was found matching this QR code."; single "Close" button; current state preserved
-- [ ] Input cleared and re-focused after student is successfully selected
-- [ ] Walk-in / registered toggle
-- [ ] Enrollment status check at student selection time — blocks non-enrolled students immediately on select
-- [ ] Cart item CRUD in Zustand: add, update quantity, remove, clear
-- [ ] Payment method selector: Cash, GCash, Student Wallet, Subscription — Wallet and Subscription disabled for walk-in; Subscription only shown when student has `student_type = subscription`
-- [ ] Discount input restricted to Admin/Manager with reason required; discount block hidden when subscription payment is selected
-- [ ] Cash: tendered amount + live change calculation; Confirm disabled until tendered ≥ total
-- [ ] GCash: optional reference number field — alphanumeric max 50 chars, server-side validated if provided
-- [ ] Wallet: balance + "After" preview; red state if insufficient
-- [ ] Insufficient Funds Modal with "Reload Wallet" and "Use Credit" options
-- [ ] Inline POS wallet reload: amount locked to exact shortfall; logged with `meta.source = 'pos_inline_reload'`
-- [ ] Credit use: `is_credit`, `credit_amount` on orders; `credit_transactions` insert + atomic `credit_balance` increment in `DB::transaction()`
-- [ ] Credit blocked if `credit_balance + shortfall > CREDIT_LIMIT (₱300)`
-- [ ] Credit unavailable for walk-in customers
-- [ ] Wallet payment checkout wrapped in `DB::transaction()` with `lockForUpdate()` on student
-- [ ] Re-validate balance inside the lock before processing
-- [ ] Checkout creates Order and OrderItems with name/price snapshots
-- [ ] Pre-checkout inventory mapping check — reject order if any cart item has no inventory mapping; error: "One or more items are not configured for inventory tracking"
-- [ ] Pre-checkout stock check — reject order if any linked inventory item would go below 0; error: "[Item Name] is out of stock"
-- [ ] On successful checkout: deduct linked inventory items inside `DB::transaction()`; create `Sale` InventoryLog per item with `order_id`, `item_name_snapshot`, `adjusted_by = cashier_id`, `reason = "Order #{receipt_number}"`
-- [ ] POS menu grid reflects inventory status: OUT items greyed out and unselectable; LOW items show warning badge (driven by `inventory_status` field on menu items response)
-- [ ] Auto-generated receipt number: branch prefix + year + padded sequence (e.g. `ANT-2025-001001`)
-- [ ] Update `student.total_spent` and recalculate `student.points`; set `order.points_earned`
-- [ ] Zustand cart cleared on successful order completion
-- [ ] Receipt modal: optional print button; conditionally shows credit lines, points earned
-- [ ] Transaction history tab: date filter, payment method filter, student search
-- [ ] Void: reverses wallet via `refund()`; credit balance restoration via `credit_transactions` (type=Voided) + atomic `credit_balance` update; total_spent/points recalculation
-- [ ] Void: restore inventory stock — for each `InventoryLog` where `order_id = order.id` and `type = sale`, create reversal `Restock` log with positive quantity, `order_id`, `adjusted_by = voiding user`, `reason = "Void: Order #{receipt_number}"`; runs inside same `DB::transaction()`
-- [ ] Void blocked for Cashiers (403)
-- [ ] Order notes sanitized with `strip_tags()` server-side before storage
-- [ ] POS keyboard shortcuts: F1, F2, Ctrl+Enter, Escape, Alt+W, Alt+S, Alt+1/2/3/4, Delete
-- [ ] `OrderPolicy`: create (all roles), void (admin/manager/supervisor), view (all roles)
-- [ ] Log `pos.order_created` (properties: receipt_number, total, payment_method, student_id or "walk-in", cashier_id, is_credit)
-- [ ] Log `pos.order_voided` (properties: receipt_number, amount, void_reason, voided_by, payment_method)
-- [ ] Log `pos.discount_applied` when discount > 0 (properties: discount_type, amount, reason, receipt_number)
-- [ ] Log `wallet.inline_reload` on inline reload (properties: amount, payment_method, cashier_id, order context)
+- [x] `orders` and `order_items` tables with all fields
+- [x] Cart managed entirely client-side in Zustand on the POS frontend — no server-side session cart
+- [x] POS page layout: left item grid + right cart panel
+- [x] Category tab navigation on item grid (meal/snack/drink/extra)
+- [x] Item search across categories (debounced, `F2` shortcut)
+- [x] QR/student input: auto-focused on page load and after every completed order; `autocomplete="off"`; `onBlur` re-focus with 50ms delay
+- [x] **Global document-level `keydown` listener** — QR scanner captured even when the input is not focused; characters buffered in a hidden ref (`scanBufferRef`), never shown in the visible input
+- [x] **QR value never displayed in input** — raw `SB-XXXXXXXXXXXX` string is captured silently in the ref buffer; only the student's name/details appear on screen after successful lookup
+- [x] Scan detection: inter-keystroke timing < 100ms → characters go into hidden buffer; > 100ms → characters go into visible input (manual typing)
+- [x] On global `Enter` with buffer matching `/^SB-[A-Za-z0-9]{12}$/` → fire QR lookup; clear buffer; input field unchanged
+- [x] On `Enter` in visible input (manual mode) → name/number search
+- [x] `POST /api/v1/pos/students/lookup` with `type: qr|search` — QR returns full student data; search returns minimal data only (id, full_name, grade_level, photo_path, enrollment_status — no wallet/credit/points)
+- [x] **Change Student dialog** — shown when QR scan fires and a student is already selected; displays new student's name + grade; "Yes, Switch" replaces current; "No, Keep Current" dismisses
+- [x] **Student Not Found dialog** — shown (not inline error) when QR lookup returns no match; text: "No student was found matching this QR code."; single "Close" button; current state preserved
+- [x] Input cleared and re-focused after student is successfully selected
+- [x] Walk-in / registered toggle
+- [x] Enrollment status check at student selection time — blocks non-enrolled students immediately on select
+- [x] Cart item CRUD in Zustand: add, update quantity, remove, clear
+- [x] Payment method selector: Cash, GCash, Student Wallet, Subscription — Wallet and Subscription disabled for walk-in; Subscription only shown when student has `student_type = subscription`
+- [x] Discount input restricted to Admin/Manager with reason required; discount block hidden when subscription payment is selected
+- [x] Cash: tendered amount + live change calculation; Confirm disabled until tendered ≥ total
+- [x] GCash: optional reference number field — alphanumeric max 50 chars, server-side validated if provided
+- [x] Wallet: balance + "After" preview; red state if insufficient
+- [x] Insufficient Funds Modal with "Reload Wallet" and "Use Credit" options
+- [x] Inline POS wallet reload: amount locked to exact shortfall; logged with `meta.source = 'pos_inline_reload'`
+- [x] Credit use: `is_credit`, `credit_amount` on orders; `credit_transactions` insert + atomic `credit_balance` increment in `DB::transaction()`
+- [x] Credit blocked if `credit_balance + shortfall > CREDIT_LIMIT (₱300)`
+- [x] Credit unavailable for walk-in customers
+- [x] Wallet payment checkout wrapped in `DB::transaction()` with `lockForUpdate()` on student
+- [x] Re-validate balance inside the lock before processing
+- [x] Checkout creates Order and OrderItems with name/price snapshots
+- [x] Pre-checkout inventory mapping check — reject order if any cart item has no inventory mapping; error: "One or more items are not configured for inventory tracking"
+- [x] Pre-checkout stock check — reject order if any linked inventory item would go below 0; error: "[Item Name] is out of stock"
+- [x] On successful checkout: deduct linked inventory items inside `DB::transaction()`; create `Sale` InventoryLog per item with `order_id`, `item_name_snapshot`, `adjusted_by = cashier_id`, `reason = "Order #{receipt_number}"`
+- [x] POS menu grid reflects inventory status: OUT items greyed out and unselectable; LOW items show warning badge (driven by `inventory_status` field on menu items response)
+- [x] Auto-generated receipt number: branch prefix + year + padded sequence (e.g. `ANT-2025-001001`)
+- [x] Update `student.total_spent` and recalculate `student.points`; set `order.points_earned`
+- [x] Zustand cart cleared on successful order completion
+- [x] Receipt modal: optional print button; conditionally shows credit lines, points earned
+- [x] Transaction history tab: date filter, payment method filter, student search
+- [x] Void: reverses wallet via `refund()`; credit balance restoration via `credit_transactions` (type=Voided) + atomic `credit_balance` update; total_spent/points recalculation
+- [x] Void: restore inventory stock — for each `InventoryLog` where `order_id = order.id` and `type = sale`, create reversal `Restock` log with positive quantity, `order_id`, `adjusted_by = voiding user`, `reason = "Void: Order #{receipt_number}"`; runs inside same `DB::transaction()`
+- [x] Void blocked for Cashiers (403)
+- [x] Order notes sanitized with `strip_tags()` server-side before storage
+- [x] POS keyboard shortcuts: F1, F2, Ctrl+Enter, Escape, Alt+W, Alt+S, Alt+1/2/3/4, Delete
+- [x] `OrderPolicy`: create (all roles), void (admin/manager/supervisor), view (all roles)
+- [x] Log `pos.order_created` (properties: receipt_number, total, payment_method, student_id or "walk-in", cashier_id, is_credit)
+- [x] Log `pos.order_voided` (properties: receipt_number, amount, void_reason, voided_by, payment_method)
+- [x] Log `pos.discount_applied` when discount > 0 (properties: discount_type, amount, reason, receipt_number)
+- [x] Log `wallet.inline_reload` on inline reload (properties: amount, payment_method, cashier_id, order context)
 
 ### Subscription Feature Requirements
-- [ ] `branch_subscription_configs` table with per-branch per-category daily limits (`meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit`; all default 1; unique per branch)
-- [ ] `BranchSubscriptionConfig::forBranch(int $branchId)` — `firstOrCreate()` with default limits; same lazy-create pattern as `BranchMonthlyAmount::resolveAmount()`
-- [ ] `orders.payment_method` enum extended to include `subscription`
-- [ ] `POST /api/v1/pos/checkout` with `payment_method = subscription`: reject 422 if any cart item has `is_subscription_item !== true`; reject 422 if adding requested quantities would exceed a category's daily limit
-- [ ] Daily limit check counts only `status = completed` subscription orders from today (voided orders excluded automatically — no extra void-restoration logic needed)
-- [ ] `GET /api/v1/pos/students/{student}` and `POST /api/v1/pos/students/lookup?type=qr` include `subscription_daily_status` in response for subscription students (null for non-subscription)
-- [ ] `subscription_daily_status` shape: `{ meal: { used, limit, remaining }, snack: {...}, drink: {...}, extra: {...} }`
-- [ ] POS frontend: subscription payment method button available only when selected student has `student_type = subscription`
-- [ ] POS frontend: when subscription student is loaded, show per-category daily status in student card
-- [ ] POS frontend: show prominent red alert banner in student card if any daily category limit is already met today; banner must be visible without scrolling
-- [ ] POS frontend: checkout button disabled when `payment_method = subscription` and any requested category quantity would exceed its daily limit
-- [ ] POS frontend: `CartItem` type includes `category` field to enable front-end limit checking
-- [ ] POS frontend: items with `is_subscription_item = null` greyed out and unselectable for all payment methods
-- [ ] POS frontend: items with `is_subscription_item = true` show a blue "Subscription" badge on their card
-- [ ] POS frontend: for subscription payment, items with `is_subscription_item !== true` are additionally greyed out and unselectable
-- [ ] Admin/Manager References page: `GET/PUT /api/v1/pos/subscription-config` for per-category daily limit configuration (integer, min 0, max 10 per category)
+- [x] `branch_subscription_configs` table with per-branch per-category daily limits (`meal_daily_limit`, `snack_daily_limit`, `drink_daily_limit`, `extra_daily_limit`; all default 1; unique per branch)
+- [x] `BranchSubscriptionConfig::forBranch(int $branchId)` — `firstOrCreate()` with default limits; same lazy-create pattern as `BranchMonthlyAmount::resolveAmount()`
+- [x] `orders.payment_method` enum extended to include `subscription`
+- [x] `POST /api/v1/pos/checkout` with `payment_method = subscription`: reject 422 if any cart item has `is_subscription_item !== true`; reject 422 if adding requested quantities would exceed a category's daily limit
+- [x] Daily limit check counts only `status = completed` subscription orders from today (voided orders excluded automatically — no extra void-restoration logic needed)
+- [x] `GET /api/v1/pos/students/{student}` and `POST /api/v1/pos/students/lookup?type=qr` include `subscription_daily_status` in response for subscription students (null for non-subscription)
+- [x] `subscription_daily_status` shape: `{ meal: { used, limit, remaining }, snack: {...}, drink: {...}, extra: {...} }`
+- [x] POS frontend: subscription payment method button available only when selected student has `student_type = subscription`
+- [x] POS frontend: when subscription student is loaded, show per-category daily status in student card
+- [x] POS frontend: show prominent red alert banner in student card if any daily category limit is already met today; banner must be visible without scrolling
+- [x] POS frontend: checkout button disabled when `payment_method = subscription` and any requested category quantity would exceed its daily limit
+- [x] POS frontend: `CartItem` type includes `category` field to enable front-end limit checking
+- [x] POS frontend: items with `is_subscription_item = null` greyed out and unselectable for all payment methods
+- [x] POS frontend: items with `is_subscription_item = true` show a blue "Subscription" badge on their card
+- [x] POS frontend: for subscription payment, items with `is_subscription_item !== true` are additionally greyed out and unselectable
+- [x] Admin/Manager References page: `GET/PUT /api/v1/pos/subscription-config` for per-category daily limit configuration (integer, min 0, max 10 per category)
