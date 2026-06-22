@@ -164,6 +164,11 @@ class PaymentController extends Controller
                         $skipped[] = $schoolMonth->label().' '.$year;
                     } else {
                         $amount = BranchMonthlyAmount::resolveAmount($student->branch_id, $schoolMonth, $year);
+                        if ($amount == 0) {
+                            $current->addMonth();
+
+                            continue;
+                        }
                         $created[] = $student->monthlyPayments()->create([
                             'school_month' => $schoolMonth->value,
                             'year' => $year,

@@ -78,6 +78,11 @@ class EnrollmentService
             if ($schoolMonth !== null) {
                 $year = $current->year;
                 $amount = BranchMonthlyAmount::resolveAmount($student->branch_id, $schoolMonth, $year);
+                if ($amount == 0) {
+                    $current->addMonth();
+
+                    continue;
+                }
                 $student->monthlyPayments()->create([
                     'school_month' => $schoolMonth->value,
                     'year' => $year,
