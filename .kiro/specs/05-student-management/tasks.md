@@ -48,6 +48,7 @@
 - [x] Update `EnrollmentController::index()` — also return the subscription period preview data: for each school month, the effective `days` and `amount` for the default range (June [current year] → March [current year + 1]), resolved from `branch_monthly_amounts` or config fallback
 - [x] Update `EnrollmentController::store()` validation — add `subscription_start_month` (enum SchoolMonth, required if subscription), `subscription_start_year` (int, 4 digits), `subscription_end_month` (enum SchoolMonth, required if subscription), `subscription_end_year` (int, 4 digits); validate end is not before start
 - [x] Update `EnrollmentController::seedMonthlyPayments()` — replace fixed 10-month loop with a range-based loop from start month+year to end month+year; for each month, look up `branch_monthly_amounts` by `(branch_id, school_month, year)`, fall back to `daily_meal_rate × default_days` from config; each row now includes `year` column
+- [x] Update `EnrollmentService::seedMonthlyPayments()` — skip months where `BranchMonthlyAmount::resolveAmount()` returns `0`; no `StudentMonthlyPayment` record created for those months
 - [x] Update enrollment response to include `subscription_period` (e.g. `"June 2025 – March 2026"`) for the success screen
 
 ### 3.2 Frontend
@@ -166,6 +167,7 @@
   - [x] Create new `student_monthly_payments` rows (status=unpaid) for each month in range
   - [x] Return list of created payment records + skipped list
   - [x] Roles: admin, manager, supervisor
+  - [x] Skip months where resolved amount is `0` (i.e. `days = 0`) — same guard as `EnrollmentService::seedMonthlyPayments()`
 
 ### 8.2 Branch Monthly Amounts — Full CRUD
 - [x] `BranchMonthlyAmountController::index()` — `GET /api/v1/branch-monthly-amounts?year=YYYY`: returns all 10 school months for active branch+year, merges DB config with defaults, includes `is_configured` flag
@@ -179,6 +181,7 @@
   - `DELETE /api/v1/branch-monthly-amounts/{branchMonthlyAmount}`
 - [x] Update `BranchMonthlyAmountController::store()` — accept optional `amount` field; if provided use directly, otherwise compute `days × SystemConfiguration::getValue('daily_meal_rate', 135)`
 - [x] Update `BranchMonthlyAmountController::update()` — same optional `amount` override logic
+- [x] Update `BranchMonthlyAmountController::store()` and `update()` — change `days` validation from `min:1` to `min:0`; add `Rule::prohibitedIf($request->integer('days') === 0)` on the `amount` field — returns 422 with message "Amount override is not allowed when school days is 0."
 
 ### 8.3 Backend — Payment Amount Adjustment
 - [x] Add `PaymentController::updateAmount()` — dedicated `PATCH /api/v1/students/{student}/payments/{payment}/amount` route; updates `amount` column only on `unpaid` payments; roles: admin, manager
@@ -212,6 +215,8 @@
 - [x] `loading.tsx` skeleton created
 - [x] Update edit dialog — add optional "Amount Override" decimal input below the computed amount preview; if filled, include `amount` in the request payload; if empty, omit it (server computes from days × rate)
 - [x] Update `lib/api/students.ts` — update `createBranchMonthlyAmount` and `updateBranchMonthlyAmount` payloads to accept optional `amount?: number`
+- [x] Update edit dialog — change days input `min={1}` to `min={0}`; change inline guard from `days < 1` to `days < 0`; update error message to "Days must be between 0 and 31."
+- [x] Update edit dialog — when `days === 0`: clear and disable the Amount Override input; show helper text "No charge — month has no school activity. Students will not be billed for this month."; computed amount preview shows "₱0 (no charge)"
 
 ## 9. Photo Upload
 - [x] Student photo: MIME whitelist (jpeg/png/webp), max 2MB, server-side validation, stored in `storage/app/private/photos/students/`
@@ -234,6 +239,9 @@
 - [x] `PaymentRangeTest` (new, 4 tests) — happy path, skip-existing, end-before-start 422, cashier 403
 - [x] `PaymentControllerTest` — update existing toggle and record tests to assert `year` is in response/request
 - [x] Update `EnrollmentTest` factory states — `StudentFactory::subscriptionPayload()` should accept optional subscription period fields
+- [x] `BranchMonthlyAmountTest` — new: admin can create a month config with `days = 0` (assert 201, record saved); admin can update to `days = 0` (assert 200); `days = 0` with `amount` override returns 422 on `amount` field
+- [x] `EnrollmentTest` — new: enrolling a subscription student when one month has `days = 0` skips that month; assert `student_monthly_payments` count = total months in range minus 0-day months
+- [x] `PaymentRangeTest` — new: `POST /api/v1/students/{student}/payments/range` when a month in range has `days = 0` skips it; assert created count excludes that month
 
 ## 12. Soft-Deleted Student Filter & Restore
 

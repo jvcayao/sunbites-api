@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Models\Branch;
+use App\Models\BranchMonthlyAmount;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -231,6 +233,34 @@ class EnrollmentTest extends TestCase
             'first_name' => 'Juan',
             'student_number' => null,
         ]);
+    }
+
+    public function test_subscription_enrollment_skips_zero_day_months(): void
+    {
+        // Configure June 2025 as a 0-day month (no school activity)
+        BranchMonthlyAmount::create([
+            'branch_id' => $this->branch->id,
+            'school_month' => SchoolMonth::June->value,
+            'year' => 2025,
+            'days' => 0,
+            'amount' => 0,
+        ]);
+
+        $this->asManager()->postJson('/api/v1/enrollment', $this->validPayload(
+            array_merge(['student_number' => 'TEST-2025-ZERO'], $this->subscriptionFields([
+                'subscription_start_month' => 'june',
+                'subscription_start_year' => 2025,
+                'subscription_end_month' => 'august',
+                'subscription_end_year' => 2025,
+            ]))
+        ))->assertCreated();
+
+        $student = Student::where('student_number', 'TEST-2025-ZERO')->first();
+
+        // June is skipped; only July and August are seeded
+        $this->assertCount(2, $student->monthlyPayments);
+        $months = $student->monthlyPayments->pluck('school_month')->map->value->toArray();
+        $this->assertEqualsCanonicalizing(['july', 'august'], $months);
     }
 
     public function test_two_students_with_null_student_number_in_same_branch_both_succeed(): void

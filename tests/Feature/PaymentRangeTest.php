@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\SchoolMonth;
 use App\Models\Branch;
+use App\Models\BranchMonthlyAmount;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
 use App\Models\User;
@@ -109,6 +111,33 @@ class PaymentRangeTest extends TestCase
 
         $response->assertStatus(422);
         $response->assertJsonPath('errors.subscription_end_month.0', 'End month must be after start month.');
+    }
+
+    public function test_adding_range_skips_zero_day_months(): void
+    {
+        // Configure June 2025 as a 0-day month (no school activity)
+        BranchMonthlyAmount::create([
+            'branch_id' => $this->branch->id,
+            'school_month' => SchoolMonth::June->value,
+            'year' => 2025,
+            'days' => 0,
+            'amount' => 0,
+        ]);
+
+        $response = $this->asAdmin()->postJson("/api/v1/students/{$this->student->id}/payments/range", [
+            'subscription_start_month' => 'june',
+            'subscription_start_year' => 2025,
+            'subscription_end_month' => 'august',
+            'subscription_end_year' => 2025,
+        ]);
+
+        $response->assertStatus(201);
+        // June is skipped (0 days); only July and August are created
+        $response->assertJsonPath('created', 2);
+        $this->assertDatabaseCount('student_monthly_payments', 2);
+
+        $months = StudentMonthlyPayment::pluck('school_month')->toArray();
+        $this->assertNotContains('june', $months);
     }
 
     public function test_cashier_cannot_add_range(): void
