@@ -97,8 +97,9 @@
   - Validation: end must be on or after start in chronological school year order
   - Live preview table renders below pickers — updates on any picker change
   - Preview table columns: Month (e.g. "June 2025"), Days, Amount, Source indicator ("configured" = from `branch_monthly_amounts`, "default" = from config fallback)
-  - Preview table footer: total months count + total amount
+  - Preview table footer: total months count + total amount (only counts months with days > 0)
   - Source indicator: `text-xs text-muted-foreground` — "configured" in primary color, "default" in muted
+  - **0-day months**: rows where `days = 0` are shown with `text-muted-foreground opacity-60`, "—" in the Amount column, and a "⊘ No charge" badge; they are excluded from the total count and total amount in the footer
 - Photo: 80×80 circle placeholder, file input, preview swaps in on selection
 - **Student Number**: optional field — no `*` asterisk, no `required` attribute; placeholder text "e.g. ANT-2025-001"; can be left blank at enrollment and filled in later via the student detail edit form
 - Required fields: `*` red asterisk in label
@@ -561,15 +562,43 @@ Controls how many items per category a subscription student may take in a single
 │  Computed Amount                                      │
 │  ₱2,970  (₱135 × 22 days)  — live preview            │
 │                                                       │
+│  Amount Override (optional)                           │
+│  [__________________]                                 │
+│                                                       │
 │  [Cancel]                       [Save Configuration] │
 └──────────────────────────────────────────────────────┘
 ```
 
-- School days input: integer, min 1, max 31
+**When days = 0 (no school activity this month):**
+```
+┌──────────────────────────────────────────────────────┐
+│  Configure Month — June 2025                   [✕]   │
+├──────────────────────────────────────────────────────┤
+│                                                       │
+│  Month         Year                                   │
+│  [June ▾]      [2025 ▾]   (read-only when editing)   │
+│                                                       │
+│  School Days *                                        │
+│  [__0___]                                             │
+│                                                       │
+│  Computed Amount                                      │
+│  ₱0  (no charge)                                      │
+│                                                       │
+│  Amount Override                                      │
+│  [disabled — not available when days is 0]           │
+│  ⓘ No charge — month has no school activity.         │
+│     Students will not be billed for this month.       │
+│                                                       │
+│  [Cancel]                       [Save Configuration] │
+└──────────────────────────────────────────────────────┘
+```
+
+- School days input: integer, `min={0}`, max 31
+- When `days = 0`: amount preview shows "₱0 (no charge)"; Amount Override field is cleared and disabled; helper text shown: "No charge — month has no school activity. Students will not be billed for this month."
+- When `days > 0`: standard computed amount preview `(₱{daily_rate} × {days} days)` and Amount Override field is enabled as usual
 - Computed amount: `text-lg font-bold text-primary`, updates live as days changes
-- Formula shown inline: `(₱{daily_rate} × {days} days)`
-- Amount is always computed server-side as `daily_meal_rate × days` — not sent directly by client
-- On save: table row updates, success toast
+- Amount is computed server-side as `daily_meal_rate × days` unless an explicit override is provided — override is prohibited server-side when `days = 0`
+- On save: table row updates; if `days = 0`, amount column shows "₱0" and source shows "✅ Set"; success toast
 
 ---
 

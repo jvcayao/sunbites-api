@@ -211,6 +211,78 @@ class BranchMonthlyAmountTest extends TestCase
         ]);
     }
 
+    public function test_admin_can_create_month_config_with_zero_days(): void
+    {
+        $response = $this->asAdmin()->postJson('/api/v1/branch-monthly-amounts', [
+            'school_month' => 'june',
+            'year' => 2026,
+            'days' => 0,
+        ]);
+
+        $response->assertStatus(201);
+        $this->assertDatabaseHas('branch_monthly_amounts', [
+            'branch_id' => $this->branch->id,
+            'school_month' => 'june',
+            'year' => 2026,
+            'days' => 0,
+            'amount' => 0,
+        ]);
+    }
+
+    public function test_admin_can_update_month_config_to_zero_days(): void
+    {
+        $record = BranchMonthlyAmount::create([
+            'branch_id' => $this->branch->id,
+            'school_month' => SchoolMonth::June->value,
+            'year' => 2026,
+            'days' => 20,
+            'amount' => 20 * 135,
+        ]);
+
+        $response = $this->asAdmin()->putJson("/api/v1/branch-monthly-amounts/{$record->id}", [
+            'days' => 0,
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('branch_monthly_amounts', [
+            'id' => $record->id,
+            'days' => 0,
+            'amount' => 0,
+        ]);
+    }
+
+    public function test_store_rejects_amount_override_when_days_is_zero(): void
+    {
+        $response = $this->asAdmin()->postJson('/api/v1/branch-monthly-amounts', [
+            'school_month' => 'june',
+            'year' => 2026,
+            'days' => 0,
+            'amount' => 500,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['amount']);
+    }
+
+    public function test_update_rejects_amount_override_when_days_is_zero(): void
+    {
+        $record = BranchMonthlyAmount::create([
+            'branch_id' => $this->branch->id,
+            'school_month' => SchoolMonth::June->value,
+            'year' => 2026,
+            'days' => 20,
+            'amount' => 20 * 135,
+        ]);
+
+        $response = $this->asAdmin()->putJson("/api/v1/branch-monthly-amounts/{$record->id}", [
+            'days' => 0,
+            'amount' => 500,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['amount']);
+    }
+
     public function test_cashier_cannot_manage_branch_monthly_amounts(): void
     {
         $record = BranchMonthlyAmount::create([

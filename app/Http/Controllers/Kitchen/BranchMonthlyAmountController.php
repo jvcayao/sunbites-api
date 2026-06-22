@@ -43,8 +43,8 @@ class BranchMonthlyAmountController extends Controller
         $validated = $request->validate([
             'school_month' => ['required', Rule::enum(SchoolMonth::class)],
             'year' => ['required', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-            'days' => ['required', 'integer', 'min:1', 'max:31'],
-            'amount' => ['nullable', 'numeric', 'min:0'],
+            'days' => ['required', 'integer', 'min:0', 'max:31'],
+            'amount' => ['nullable', 'numeric', 'min:0', Rule::prohibitedIf($request->integer('days') === 0)],
         ]);
 
         $branchId = app('active_branch')->id;
@@ -70,8 +70,8 @@ class BranchMonthlyAmountController extends Controller
     public function update(Request $request, BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
     {
         $validated = $request->validate([
-            'days' => ['required', 'integer', 'min:1', 'max:31'],
-            'amount' => ['nullable', 'numeric', 'min:0'],
+            'days' => ['required', 'integer', 'min:0', 'max:31'],
+            'amount' => ['nullable', 'numeric', 'min:0', Rule::prohibitedIf($request->integer('days') === 0)],
         ]);
 
         $amount = isset($validated['amount'])
