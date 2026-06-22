@@ -31,15 +31,19 @@ Both `store()` and `update()` validation rules:
 - `days`: change `min:1` → `min:0`
 - `amount`: add `Rule::prohibitedIf($request->integer('days') === 0)` — returns 422 with message *"Amount override is not allowed when school days is 0."* when violated
 
-### 2. Backend — EnrollmentService
+### 2. Backend — EnrollmentService and PaymentController::addRange()
 
 **File:** `app/Services/EnrollmentService.php`
 
-In `seedMonthlyPayments()`, before creating a `StudentMonthlyPayment` for a month, resolve the `BranchMonthlyAmount` for that branch/month/year. If `days === 0`, skip that month — no record is created.
+In `seedMonthlyPayments()`, before creating a `StudentMonthlyPayment` for a month, resolve the amount via `BranchMonthlyAmount::resolveAmount()`. If the resolved amount is `0` (equivalent to `days === 0`, since amount overrides are prohibited when days = 0), skip that month — no record is created.
 
-- The check is on `days`, not on the resolved amount, to be explicit.
-- `BranchMonthlyAmount::resolveAmount()` is unchanged.
-- Only affects future enrollments. Students already enrolled with existing June payment records are unaffected.
+**File:** `app/Http/Controllers/Kitchen/PaymentController.php` — `addRange()` method
+
+The "Add Subscription Period" endpoint has **identical seeding logic** and must apply the same skip guard. Before creating a `StudentMonthlyPayment` in the loop, check the resolved amount; if `0`, skip that month.
+
+Shared rules for both:
+- `BranchMonthlyAmount::resolveAmount()` is unchanged — it already returns `0` correctly when `days = 0`.
+- Only affects future enrollments and future period additions. Students already enrolled with existing payment records are unaffected.
 
 ### 3. POS Frontend — subscription-config page
 
@@ -61,6 +65,10 @@ In `seedMonthlyPayments()`, before creating a `StudentMonthlyPayment` for a mont
 ### EnrollmentTest (backend)
 
 1. **New:** Enrolling a subscription student when June has `days = 0` skips the June `StudentMonthlyPayment` record. Assert the count of seeded payments equals total school months minus the 0-day months.
+
+### PaymentTest (backend)
+
+1. **New:** `POST /api/v1/students/{student}/payments/range` when June has `days = 0` skips the June record and does not create a `StudentMonthlyPayment` for that month. Assert the `created` count and `skipped` count in the response exclude the 0-day month.
 
 ## Out of Scope
 
