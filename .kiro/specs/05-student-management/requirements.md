@@ -311,6 +311,11 @@ The computed amount is the default — admins can override it directly in the UI
 
 If no record exists for a given school month + year combination, the system uses the default days from `config/sunbites.php` and computes the fallback amount at runtime.
 
+**Zero school days:** `days = 0` is a valid value. It means the business has no operation for that month (e.g. school starts in June on the academic calendar but the canteen only opens in July). Rules:
+- When `days = 0`, the amount is always `0` — any amount override is explicitly prohibited (returns 422).
+- At enrollment, months with `days = 0` are **skipped entirely** — no `student_monthly_payments` record is seeded for that month.
+- Parents are never exposed to school day counts; they only see amounts. A skipped month simply does not appear in their payment history.
+
 ### Default Days (System Fallback)
 | Month | Default Days | Default Amount |
 |---|---|---|
@@ -532,6 +537,8 @@ All routes under `auth:sanctum` + `ability:staff` middleware.
 - [x] Student detail profile edit form — show editable `student_number` field alongside existing profile fields
 - [x] Enrollment form — `student_number` field labelled as "Student No. (optional)"
 - [x] `BranchMonthlyAmountController::store()` and `update()` — accept optional `amount` field in request; if provided, store it directly instead of computing `days × daily_meal_rate`; if absent, compute from current `daily_meal_rate` system config value
+- [ ] `BranchMonthlyAmountController::store()` and `update()` — `days` validation: `min:0` (was `min:1`); if `days == 0`, the `amount` field is prohibited (`Rule::prohibitedIf`) — returns 422 with message "Amount override is not allowed when school days is 0."
+- [ ] `EnrollmentService::seedMonthlyPayments()` — before creating a `StudentMonthlyPayment` for a month, resolve the `BranchMonthlyAmount` for that branch/month/year; if `days === 0`, skip that month entirely (no record created); check is on `days` directly, not on resolved amount
 - [x] Student detail Payment tab — for `unpaid` payments only: show an `[Edit Amount]` inline button next to the toggle; opens a small dialog with a decimal input pre-filled with current amount; on save: `PATCH /api/v1/students/{student}/payments/{payment}` with `{ amount }`; updates the `amount` column without changing status
 - [x] `PaymentController::updateAmount(Request, Student, StudentMonthlyPayment)` — new action on existing PATCH route: if request only contains `amount` (no status toggle), update the `amount` field on the payment record; only allowed on `unpaid` payments; roles: admin, manager
 - [x] Migration: add `year` (int) column to `student_monthly_payments`; drop old unique key `(student_id, school_month)`; add new unique key `(student_id, school_month, year)`
