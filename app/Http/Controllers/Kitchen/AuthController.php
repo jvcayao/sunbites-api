@@ -79,7 +79,7 @@ class AuthController extends Controller
 
         $user = User::where('email', $request->email)->first();
 
-        if ($user) {
+        if ($user && $user->is_active) {
             $token = Password::createToken($user);
             Mail::to($user->email)->queue(new StaffResetPasswordMail($user, $token));
         }
