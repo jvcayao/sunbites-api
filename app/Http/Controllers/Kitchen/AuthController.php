@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Mail\StaffResetPasswordMail;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 
 class AuthController extends Controller
@@ -75,7 +77,12 @@ class AuthController extends Controller
     {
         $request->validate(['email' => ['required', 'email']]);
 
-        Password::sendResetLink($request->only('email'));
+        $user = User::where('email', $request->email)->first();
+
+        if ($user) {
+            $token = Password::createToken($user);
+            Mail::to($user->email)->queue(new StaffResetPasswordMail($user, $token));
+        }
 
         activity('auth')
             ->withProperties(['ip' => $request->ip()])

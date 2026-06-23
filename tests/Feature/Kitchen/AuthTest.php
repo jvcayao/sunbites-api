@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Kitchen;
 
+use App\Mail\StaffResetPasswordMail;
 use App\Models\Branch;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -216,5 +218,23 @@ class AuthTest extends TestCase
             ->getJson('/api/v1/auth/user');
 
         $response->assertOk();
+    }
+
+    public function test_forgot_password_queues_staff_reset_mail_for_active_user(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+
+        $response = $this->postJson('/api/v1/auth/password/email', [
+            'email' => $user->email,
+        ]);
+
+        $response->assertOk()
+            ->assertJson(['message' => 'Password reset link sent if the email exists.']);
+
+        Mail::assertQueued(StaffResetPasswordMail::class, function (StaffResetPasswordMail $mail) use ($user) {
+            return $mail->hasTo($user->email);
+        });
     }
 }
