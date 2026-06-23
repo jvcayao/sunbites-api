@@ -2,10 +2,12 @@
 
 namespace Tests\Feature\Kitchen;
 
+use App\Mail\StaffResetPasswordMail;
 use App\Models\Branch;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\Permission\PermissionRegistrar;
 use Tests\TestCase;
@@ -216,5 +218,65 @@ class AuthTest extends TestCase
             ->getJson('/api/v1/auth/user');
 
         $response->assertOk();
+    }
+
+    public function test_forgot_password_queues_staff_reset_mail_for_active_user(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+
+        $response = $this->postJson('/api/v1/auth/password/email', [
+            'email' => $user->email,
+        ]);
+
+        $response->assertOk()
+            ->assertJson(['message' => 'If an account with this email exists, you will receive an email shortly.']);
+
+        Mail::assertQueued(StaffResetPasswordMail::class, function (StaffResetPasswordMail $mail) use ($user) {
+            return $mail->hasTo($user->email);
+        });
+    }
+
+    public function test_forgot_password_does_not_queue_mail_for_inactive_user(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->inactive()->create();
+
+        $this->postJson('/api/v1/auth/password/email', [
+            'email' => $user->email,
+        ])->assertOk();
+
+        Mail::assertNothingQueued();
+    }
+
+    public function test_forgot_password_does_not_queue_mail_for_unknown_email(): void
+    {
+        Mail::fake();
+
+        $this->postJson('/api/v1/auth/password/email', [
+            'email' => 'nobody@example.com',
+        ])->assertOk();
+
+        Mail::assertNothingQueued();
+    }
+
+    public function test_forgot_password_reset_url_points_to_pos_app(): void
+    {
+        Mail::fake();
+
+        $user = User::factory()->create();
+
+        $this->postJson('/api/v1/auth/password/email', [
+            'email' => $user->email,
+        ])->assertOk();
+
+        Mail::assertQueued(StaffResetPasswordMail::class, function (StaffResetPasswordMail $mail) {
+            $posUrl = config('app.pos_url');
+            $url = $mail->content()->with['resetUrl'];
+
+            return str_starts_with($url, $posUrl) && str_contains($url, 'reset-password');
+        });
     }
 }

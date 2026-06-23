@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Mail\StaffResetPasswordMail;
 use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password as PasswordRule;
@@ -181,7 +183,9 @@ class UserManagementController extends Controller
     public function sendResetEmail(Request $request, User $user): JsonResponse
     {
         $this->authorize('update', $user);
-        Password::sendResetLink(['email' => $user->email]);
+
+        $token = Password::createToken($user);
+        Mail::to($user->email)->queue(new StaffResetPasswordMail($user, $token));
 
         activity('users')
             ->causedBy($request->user())

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Notifications\StaffResetPasswordNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -108,11 +107,6 @@ class User extends Authenticatable
     public function receivesBroadcastNotificationsOn(): string
     {
         return "staff.{$this->id}";
-    }
-
-    public function sendPasswordResetNotification($token)
-    {
-        $this->notify(new StaffResetPasswordNotification($token));
     }
 
     public function staffDailyStatuses(): HasMany
