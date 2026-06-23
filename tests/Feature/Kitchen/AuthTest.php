@@ -231,7 +231,7 @@ class AuthTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJson(['message' => 'Password reset link sent if the email exists.']);
+            ->assertJson(['message' => 'If an account with this email exists, you will receive an email shortly.']);
 
         Mail::assertQueued(StaffResetPasswordMail::class, function (StaffResetPasswordMail $mail) use ($user) {
             return $mail->hasTo($user->email);

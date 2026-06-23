@@ -88,7 +88,7 @@ class AuthController extends Controller
             ->withProperties(['ip' => $request->ip()])
             ->log('auth.password_reset_requested');
 
-        return response()->json(['message' => 'Password reset link sent if the email exists.']);
+        return response()->json(['message' => 'If an account with this email exists, you will receive an email shortly.']);
     }
 
     public function setBranch(Request $request): JsonResponse
