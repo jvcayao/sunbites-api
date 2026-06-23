@@ -365,21 +365,50 @@ All: `text-[11px] font-bold px-3 py-1 rounded-full border cursor-pointer` — cl
 - Inline validation: if a duplicate student number exists in the same branch, field-level error "This student number is already in use."
 - Included in the existing `PUT /api/v1/students/{student}` payload — no separate endpoint needed
 
-**Single QR Print Card Layout:**
+**Single QR Print Card Layout (ISO/IEC 7810 ID-1: 53.98mm × 85.6mm):**
+
+Card header color is determined by `student_type` via `getCardAccentColors(student.student_type)` in `lib/utils/card-accent-colors.ts` (sunbites-pos). All accent elements (border, photo border, grade text, footer tint) use the same palette.
+
+Subscription (red header):
 ```
-  ┌───────────────────────────────┐
-  │  [📷 photo or placeholder]    │
-  │                               │
-  │  Maria Santos                 │  ← bold, 18px
-  │  Grade 3 – Section Mabini    │  ← 13px muted
-  │                               │
+  ┌───────────────────────────────┐  ← border: #e5322a
+  │████ 🍽 SUNBITES KITCHEN ████│  ← bg: #e5322a, text: white
+  │████  Student Canteen ID  ████│
+  ├───────────────────────────────┤
+  │  [📷 photo or placeholder]    │  ← photo border: #e5322a
+  │  Maria Santos                 │  ← bold
+  │  Grade 3 – Section Mabini    │  ← color: #e5322a
+  │  🍽 Subscription              │
   │       ┌──────────────┐        │
-  │       │  [QR CODE]   │        │  ← 200×200px
+  │       │  [QR CODE]   │        │
   │       └──────────────┘        │
-  │  SB-K8mP3xNzQr4w             │  ← 11px mono
-  │  Antipolo Branch              │  ← 11px muted
+  │  SB-K8mP3xNzQr4w             │
+  ├───────────────────────────────┤
+  │  footer bg: #fff1f0           │  ← sb-red-50
   └───────────────────────────────┘
 ```
+
+Non-subscription (yellow header):
+```
+  ┌───────────────────────────────┐  ← border: #f4b400
+  │████ 🍽 SUNBITES KITCHEN ████│  ← bg: #f4b400, text: #1a1611 (dark ink)
+  │████  Student Canteen ID  ████│
+  ├───────────────────────────────┤
+  │  [📷 photo or placeholder]    │  ← photo border: #d69400
+  │  Juan dela Cruz               │  ← bold
+  │  Grade 5 – Section Bonifacio  │  ← color: #d69400
+  │  🍽 Non-Subscription          │
+  │       ┌──────────────┐        │
+  │       │  [QR CODE]   │        │
+  │       └──────────────┘        │
+  │  SB-aX7kLmN9pQr8s            │
+  ├───────────────────────────────┤
+  │  footer bg: #fffbeb           │  ← sb-yellow-50
+  └───────────────────────────────┘
+```
+
+**Color utility — `lib/utils/card-accent-colors.ts` (sunbites-pos):**
+Returns `{ headerBg, headerText, headerSubText, accentColor, avatarBg, borderColor, footerBg, footerBorder }` keyed by `StudentType`. Single source of truth for all three print locations.
 
 **Tab: Wallet**
 ```
