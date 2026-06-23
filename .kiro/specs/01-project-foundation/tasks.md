@@ -85,13 +85,20 @@
 
 ## 10. Next.js — Layout Shells (sunbites-pos)
 
-- [x] `KitchenLayout` (`components/layouts/kitchen-layout.tsx`):
-  - [x] Collapsible sidebar: 220px expanded, 60px icon-only collapsed
-  - [x] Sidebar: logo, branch indicator, role-aware nav items, collapse toggle, logout
-  - [x] Nav sections: main → Reports group → References group
-  - [x] Topbar: page title + branch switcher pill (admin) + user name + role badge
+- [x] `AppHeader` (`components/navigation/app-header.tsx`): Client Component
+  - [x] Left: `☰` hamburger button (calls `onMenuOpen`) · `icon.png` (32px) · stacked brand text
+  - [x] Center: current page name derived from `usePathname()` route map
+  - [x] Right: branch badge · notification bell · user avatar + name + role
+- [x] `AppNavSheet` (`components/navigation/app-nav-sheet.tsx`): shadcn/ui `Sheet`
+  - [x] Sheet header: `icon.png` + brand text + branch badge
+  - [x] Nav groups: Main → Reports → References (all items, role-filtered)
   - [x] Active nav item: `bg-primary/10 text-primary font-bold border-l-[3px] border-primary`
-- [x] `AuthLayout` (`components/layouts/auth-layout.tsx`): centered card, max-width 420px, no sidebar
+  - [x] All nav links call `onOpenChange(false)` on click
+  - [x] Logout button at bottom
+- [x] `KitchenLayout` (`components/layouts/kitchen-layout.tsx`):
+  - [x] Holds `menuOpen` state; passes `onMenuOpen` to `AppHeader`, `open/onOpenChange` to `AppNavSheet`
+  - [x] No static sidebar — full-width content area below `AppHeader`
+- [x] `AuthLayout` (`components/layouts/auth-layout.tsx`): centered card, max-width 420px, no nav
 
 ## 11. Next.js — Layout Shells (sunbites-portal)
 

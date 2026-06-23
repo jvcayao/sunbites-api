@@ -308,8 +308,8 @@ No dark mode.
 
 ### Logo Component
 A shared `AppLogo` component built as a React component in each app:
-- **Full variant** — circle icon + "Sunbites" wordmark + "Your Healthy Kitchen" tagline (used in sidebar, auth pages)
-- **Icon variant** — "S" circle only, 40×40px (used in collapsed sidebar state)
+- **Full variant** — circle icon + "Sunbites" wordmark + "Your Healthy Kitchen" tagline (used in auth pages)
+- **Icon variant** — uses `public/icon.png`, displayed in the nav sheet header and the top header bar alongside the brand text
 
 ---
 
@@ -333,11 +333,11 @@ Toast messages are triggered from:
 ## Layout Shells (sunbites-pos)
 
 ### KitchenLayout
-- Collapsible sidebar: 220px expanded, 60px icon-only collapsed
-- Sidebar: logo, branch indicator badge, role-aware nav items, collapse toggle, logout button
-- Nav sections: main nav → Reports group → References group
-- Topbar: page title + branch switcher pill (admin only) + user name + role badge
-- Main content: scrollable
+- No static sidebar — navigation is a floating Sheet panel triggered by a hamburger button
+- **Top header bar (56px):** `[☰]` hamburger · `icon.png` logo · stacked brand text ("Sunbites" / "Your healthy kitchen") · current page name (center) · branch badge · notification bell · user avatar + name/role (right)
+- **`AppNavSheet`:** slides in from the left on hamburger click; header shows logo + brand + branch badge; nav groups Main → Reports → References (all items, role-filtered); logout at bottom; closes on any link click
+- **`AppHeader`:** Client Component; derives current page name from `usePathname()`; accepts `onMenuOpen` callback
+- Main content: full-width, scrollable
 
 ### AuthLayout (POS)
 - Centered card, max-width 420px
@@ -384,11 +384,11 @@ Toast messages are triggered from:
 - [x] Tailwind v4 color tokens configured in `globals.css` via `@theme`
 - [x] Poppins font loaded (weights 400, 600, 700, 800) from Google Fonts
 - [x] No dark mode
-- [x] `AppLogo` component with `full` and `icon` variants
+- [x] `AppLogo` component with `full` and `icon` variants (`icon` variant uses `public/icon.png`)
 - [x] shadcn/ui initialized with sunbites color tokens
 
 **Next.js — sunbites-pos only**
-- [x] `KitchenLayout` with collapsible sidebar and topbar
+- [x] `KitchenLayout` with unified floating Sheet nav (`AppNavSheet`) and top header bar (`AppHeader`)
 - [x] `AuthLayout` centered card shell for login page
 
 **Next.js — sunbites-portal only**
