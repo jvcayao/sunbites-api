@@ -11,7 +11,6 @@ use App\Policies\ParentStudentPolicy;
 use App\Policies\ReportPolicy;
 use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
@@ -42,13 +41,6 @@ class AppServiceProvider extends ServiceProvider
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);
-
-        ResetPassword::createUrlUsing(function (mixed $notifiable, string $token): string {
-            return rtrim(config('app.pos_url'), '/').'/reset-password?'.http_build_query([
-                'token' => $token,
-                'email' => $notifiable->getEmailForPasswordReset(),
-            ]);
-        });
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
