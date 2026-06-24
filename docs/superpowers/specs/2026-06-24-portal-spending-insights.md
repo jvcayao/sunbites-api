@@ -124,9 +124,9 @@ Horizontal bars showing the breakdown of order payment methods for the current m
 | `wallet` | Wallet |
 | `cash` | Cash |
 | `subscription` | Plan |
-| `credit` | Credit |
+| `gcash` | GCash |
 
-Wallet bar fills with the student's accent color. Cash fills `#CBD5E1`. Plan fills `#34D399`. Credit fills `#FCA5A5`.
+Wallet bar fills with the student's accent color. Cash fills `#CBD5E1`. Plan fills `#34D399`. GCash fills `#0064D3`.
 
 For non-subscription students, `subscription` will always be `0` and its bar is not rendered.
 
@@ -187,7 +187,7 @@ Returns aggregated spending data. Single response, no pagination.
     "wallet": 65,
     "cash": 20,
     "subscription": 15,
-    "credit": 0
+    "gcash": 0
   },
   "ytd_total": 5950,
   "this_month_total": 1250,
@@ -257,7 +257,7 @@ $methods = (clone $orders)
     ->toArray();
 
 $total = array_sum($methods);
-$split = ['wallet' => 0, 'cash' => 0, 'subscription' => 0, 'credit' => 0];
+$split = ['wallet' => 0, 'cash' => 0, 'subscription' => 0, 'gcash' => 0];
 if ($total > 0) {
     foreach ($split as $key => $_) {
         $split[$key] = round((($methods[$key] ?? 0) / $total) * 100);
@@ -300,7 +300,7 @@ interface SpendingSummary {
     wallet: number;
     cash: number;
     subscription: number;
-    credit: number;
+    gcash: number;
   };
   ytd_total: number;
   this_month_total: number;
