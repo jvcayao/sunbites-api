@@ -55,7 +55,7 @@ class MealPlannerWeekVisibilityTest extends TestCase
         $this->cashier->assignRole('cashier');
         $this->cashier->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
-        $this->student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $this->student = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
 
         $this->parent = ParentUser::create([
             'first_name' => 'Maria',
