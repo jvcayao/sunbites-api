@@ -87,7 +87,7 @@ class SpendingSummaryController extends Controller
             ->groupBy('name')
             ->orderByDesc('count')
             ->limit(5)
-            ->get(['name', 'count']);
+            ->get();
 
         // Payment method split by order count for the current calendar month
         $methodCounts = $base()
