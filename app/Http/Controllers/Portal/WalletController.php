@@ -19,14 +19,31 @@ class WalletController extends Controller
 
         $validated = $request->validate([
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'type' => ['nullable', 'string', 'in:deposit,withdraw'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
         ]);
 
         $perPage = $validated['per_page'] ?? 20;
 
-        $transactions = Transaction::where('payable_type', Student::class)
+        $query = Transaction::where('payable_type', Student::class)
             ->where('payable_id', $student->id)
-            ->latest()
-            ->paginate($perPage);
+            ->latest();
+
+        if (! empty($validated['type'])) {
+            $query->where('type', $validated['type']);
+        }
+
+        if (! empty($validated['from'])) {
+            $query->whereDate('created_at', '>=', $validated['from']);
+        }
+
+        if (! empty($validated['to'])) {
+            $query->whereDate('created_at', '<=', $validated['to']);
+        }
+
+        $transactions = $query->paginate($perPage);
 
         $pivot = $request->user()->students()->wherePivot('student_id', $student->id)->first()?->pivot;
 
