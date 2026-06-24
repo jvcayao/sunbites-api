@@ -67,10 +67,12 @@ Mirrors the POS header layout but removes all staff-only actions.
 ```
 
 ### Avatar & Photo Upload
-- Displays `photo_path` if present; falls back to initials avatar.
-- Camera icon overlaid on the avatar. Clicking opens a native file picker (accept: `image/*`, max 5 MB client-side validation).
+- Student photos are stored on the **private** disk. They cannot be served as a plain URL — they require an authenticated streaming endpoint.
+- Displays the photo by fetching `GET /portal/students/{student}/photo` with an `Authorization: Bearer {token}` header, converting the binary response to a blob URL via `URL.createObjectURL()`, and using that as `<img src>`. A `useEffect` cleanup revokes the blob URL on unmount.
+- Falls back to an initials avatar when `photo_url` is `null`.
+- Camera icon overlaid on the avatar. Clicking opens a native file picker (accept: `image/jpeg,image/png,image/webp`, max 5 MB client-side validation).
 - On selection, uploads via `POST /portal/students/{student}/photo` (multipart form data, field name `photo`).
-- On success, invalidates the `["students"]` query cache to refresh the photo.
+- On success, invalidates the `["students"]` query cache so the photo refetches.
 - On error, shows a toast: "Photo upload failed. Please try again."
 
 ### Wallet Balance Box
@@ -82,15 +84,19 @@ Mirrors the POS header layout but removes all staff-only actions.
 ### Print QR
 - Calls `window.print()`.
 - A `@media print` stylesheet (scoped to a print-only div) hides all other page content and shows:
-  - QR code image (rendered from `qr_code` string via `qrcode` package)
+  - QR code (rendered from `qr_code` string via `react-qr-code` — consistent with POS)
   - Student full name
   - QR ID string
   - Sunbites branding
 
 ### Download QR
-- Renders QR to an off-screen `<canvas>` via `qrcode` package.
-- Converts canvas to PNG data URL via `canvas.toDataURL("image/png")`.
-- Triggers a programmatic `<a download="{student-name}-qr.png">` click.
+- `react-qr-code` renders an SVG element. To export as PNG:
+  1. Get a `ref` to the SVG element.
+  2. Serialize it to an SVG string via `XMLSerializer`.
+  3. Draw it onto an off-screen `<canvas>` using a `<img>` with an SVG data URI.
+  4. Export via `canvas.toDataURL("image/png")`.
+  5. Trigger a programmatic `<a download="{student-name}-qr.png">` click.
+- The canvas and SVG steps all happen client-side with no server round-trip.
 
 ---
 
@@ -186,18 +192,37 @@ Add `birthday`, `notes`, and `qr_code` to the map in `index()`:
 
 ### 2. New: `Portal/StudentPhotoController.php`
 
+Two methods on a single controller:
+
 ```
-POST /portal/students/{student}/photo
+POST /portal/students/{student}/photo   ← upload
+GET  /portal/students/{student}/photo   ← serve (stream private file)
 ```
 
-- Auth: `auth:parents` + ability `parent`
-- Policy check: parent must have the student linked (same as other portal student endpoints).
-- Validates: `photo` — required, image, max 5120 KB.
-- Stores to `storage/app/public/students/photos/` (same path convention as parent profile photos).
+**`store` (upload):**
+- Authorization: `$this->authorize('view', $student)` — goes through `ParentStudentPolicy::view()` which checks the `parent_student` pivot.
+- Validates: `photo` — required, mimes: jpeg,png,webp, max 5120 KB.
+- Deletes old photo from private disk if one exists.
+- Stores new photo to `photos/students` on the **private** disk (same location as POS).
 - Updates `$student->photo_path`.
-- Returns: `{ photo_path: string }`.
+- Returns: `{ photo_url: string }` — the URL of the serve endpoint, e.g. `url("/api/v1/portal/students/{$student->id}/photo")`.
 
-### 3. `Portal/ActivityController.php` — Add `payment_method` filter
+**`show` (serve):**
+- Authorization: same `$this->authorize('view', $student)`.
+- Returns 404 if `photo_path` is null.
+- Returns `Storage::disk('private')->response($student->photo_path)`.
+
+### 3. `Portal/StudentController.php` — Return `photo_url` not `photo_path`
+
+Replace `'photo_path' => $student->photo_path` with:
+
+```php
+'photo_url' => $student->photo_path
+    ? url("/api/v1/portal/students/{$student->id}/photo")
+    : null,
+```
+
+### 4. `Portal/ActivityController.php` — Add `payment_method` filter
 
 Accept optional `payment_method` query param (`cash`, `wallet`). Apply a `when()` condition to the orders query.
 
@@ -205,15 +230,16 @@ Accept optional `payment_method` query param (`cash`, `wallet`). Apply a `when()
 ->when($request->payment_method, fn ($q, $m) => $q->where('payment_method', $m))
 ```
 
-### 4. `Portal/WalletController.php` — Add `type` filter
+### 5. `Portal/WalletController.php` — Add `type` filter
 
 Accept optional `type` query param (`deposit`, `withdraw`). Apply to the wallet transactions query.
 
-The frontend sends `deposit` / `withdraw` directly (mapped from pill labels before the API call).
+The frontend maps pill labels to param values before calling the API: "Top-up" → `deposit`, "Deductions" → `withdraw`.
 
-### 5. `routes/portal-api.php` — Register new route
+### 6. `routes/portal-api.php` — Register new routes
 
 ```php
+Route::get('students/{student}/photo', [StudentPhotoController::class, 'show']);
 Route::post('students/{student}/photo', [StudentPhotoController::class, 'store']);
 ```
 
@@ -223,8 +249,9 @@ Route::post('students/{student}/photo', [StudentPhotoController::class, 'store']
 
 ### `types/portal.ts`
 
-Add to `StudentSummary`:
+Replace `photo_path` with `photo_url` in `StudentSummary`, and add missing fields:
 ```typescript
+photo_url: string | null;    // authenticated serve endpoint URL, null if no photo
 birthday: string | null;     // ISO date string "YYYY-MM-DD"
 notes: string | null;
 qr_code: string | null;
@@ -234,8 +261,15 @@ qr_code: string | null;
 
 Add to `studentsApi`:
 ```typescript
-uploadPhoto: async (id: number, file: File): Promise<{ photo_path: string }> => {
-  // Same multipart pattern as profileApi.uploadPhoto, targeting /portal/students/{id}/photo
+fetchPhoto: async (id: number): Promise<string | null> => {
+  // Fetches GET /portal/students/{id}/photo with auth header
+  // Returns a blob URL (URL.createObjectURL) or null on 404
+  // Caller is responsible for revoking via URL.revokeObjectURL() on unmount
+}
+
+uploadPhoto: async (id: number, file: File): Promise<{ photo_url: string }> => {
+  // Same multipart fetch pattern as profileApi.uploadPhoto
+  // POSTs to /portal/students/{id}/photo
 }
 ```
 
@@ -264,16 +298,18 @@ wallet: (id: number, params?: {
 
 ## Dependencies
 
-- `qrcode` npm package (for QR image rendering in the browser — check if already installed in sunbites-portal before adding).
+- `react-qr-code` npm package — already installed in `sunbites-pos`; must be added to `sunbites-portal`. Used for rendering the QR SVG and for the print layout.
 
 ---
 
 ## Tests
 
 ### Backend (PHPUnit)
-- `StudentControllerTest`: assert `birthday`, `notes`, `qr_code` are present in response.
-- `StudentPhotoControllerTest`: happy path upload updates `photo_path`; non-linked student returns 403; invalid file returns 422.
-- `ActivityControllerTest`: assert `payment_method=cash` filters out wallet orders.
+- `StudentControllerTest`: assert `birthday`, `notes`, `qr_code`, `photo_url` are present in response; `photo_url` is null when no photo; `photo_url` points to the serve endpoint when photo exists.
+- `StudentPhotoControllerTest`:
+  - `store`: happy path upload updates `photo_path`, returns `photo_url`; non-linked student returns 403; invalid file type returns 422; old photo is deleted from private disk.
+  - `show`: returns 200 with image response when photo exists; returns 404 when no photo; non-linked student returns 403.
+- `ActivityControllerTest`: assert `payment_method=cash` filters out wallet orders; `spending_total` reflects filtered results only.
 - `WalletControllerTest`: assert `type=deposit` filters out withdraw transactions.
 
 ### Frontend (Jest + RTL)
