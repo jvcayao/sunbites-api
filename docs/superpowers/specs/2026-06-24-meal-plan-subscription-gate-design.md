@@ -18,6 +18,7 @@ The weekly meal plan in the parent portal is currently accessible to all authent
 - Parents with **at least one subscription student** (including mixed households) can see and access the meal plan.
 - Access is enforced at both the **frontend** (nav hidden, route redirects) and **backend** (API returns 403).
 - The access flag must stay **accurate without requiring logout/login** — it updates reactively when student data is refreshed.
+- The portal logo (circle "S") must be replaced with the actual `icon.png` image across both `variant="icon"` and `variant="full"` of `AppLogo`.
 
 ---
 
@@ -152,7 +153,31 @@ if (!hasSubscriptionStudent) return null;
 
 The `return null` prevents the page content from flashing before the redirect fires. This handles direct URL access — a parent who bookmarked `/meal-plan` before their last subscription student was unenrolled will be silently redirected to the dashboard.
 
-### 4. Reactive flag sync in students hook
+### 4. `app-logo.tsx` — Replace circle "S" with `icon.png`
+
+**File:** `components/app-logo.tsx`
+
+Replace both the `icon` and `full` variant circle divs with a Next.js `Image` component pointing to `/icon.png` (served from `public/icon.png`):
+
+```typescript
+import Image from "next/image";
+
+// icon variant
+<Image src="/icon.png" alt="Sunbites" width={40} height={40} className={cn("rounded-full", className)} />
+
+// full variant
+<div className={cn("flex items-center gap-3", className)}>
+  <Image src="/icon.png" alt="Sunbites" width={40} height={40} className="rounded-full" />
+  <div className="flex flex-col">
+    <span className="text-base font-bold leading-tight text-foreground">Sunbites</span>
+    <span className="text-xs font-medium leading-tight text-muted-foreground">Your Healthy Kitchen</span>
+  </div>
+</div>
+```
+
+The `rounded-full` class preserves the circular crop if `icon.png` is square.
+
+### 5. Reactive flag sync in students hook
 
 **File:** `hooks/use-students.ts` (or wherever `GET /portal/students` is called)
 
