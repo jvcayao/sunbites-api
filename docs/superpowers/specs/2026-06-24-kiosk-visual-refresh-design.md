@@ -11,7 +11,7 @@
 
 A visual and animation refresh of the kiosk balance check page (`/kiosk`). The goal is to make the page feel warm, branded, and joyful — especially for students who scan and see a healthy balance. The page stays on a light background but gains prominent Sunbites branding, lively scanning feedback, and a celebration or gentle warning tied to the student's balance level.
 
-No backend changes. No new routes. One file changes: `page.tsx`. A new npm package (`canvas-confetti`) is added.
+No backend changes. No new routes. Three files change: `page.tsx`, `app/globals.css`, `package.json`. A new npm package (`canvas-confetti`) is added.
 
 ---
 
@@ -32,6 +32,8 @@ The tier replaces the previous three-tier color logic (`≥50 green`, `>0 orange
 ## Layout — All States
 
 The Sunbites logo is always visible at the top of the screen, regardless of state. It uses `AppLogo` with `variant="full"` and is positioned fixed at the top-center with comfortable vertical padding.
+
+**Logo styling by state:** In `scanning` and `loading` states the camera viewfinder fills the screen with a dark vignette — the logo must render white (`className="invert"`) so it's visible against the dark background. In `result`, `error`, and `camera-blocked` states the background is white, so the logo renders in its normal brand colors (no `invert`). The logo `invert` class is toggled based on `state === "scanning" || state === "loading"`.
 
 ```
 ┌────────────────────────────────────┐
@@ -119,7 +121,7 @@ function useCountUp(target: number, duration = 900): number {
 ```
 ┌──────────────────────────────────────────┐
 │                                          │  ← card, max-w-sm, centered
-│  Hi, [FirstName]! 👋                     │  ← friendly greeting, text-lg
+│  Hi, [FirstName]! 👋                     │  ← friendly greeting, text-lg. FirstName = student.name.split(' ')[0]
 │                                          │
 │    ●●●   YC   ●●●                        │  ← initials avatar (bg-primary)
 │    Yunix Cayao                           │  ← name, text-2xl bold
