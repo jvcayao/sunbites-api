@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Portal;
 
 use App\Enums\DayOfWeek;
 use App\Enums\SchoolMonth;
+use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Models\MealPlannerWeekVisibility;
 use App\Models\WeeklyMealPlan;
@@ -21,6 +22,10 @@ class MealPlannerController extends Controller
         ]);
 
         $parent = $request->user();
+
+        if (! $parent->students()->where('student_type', StudentType::Subscription)->exists()) {
+            abort(403, 'Meal plan access requires a subscription student.');
+        }
 
         $branchId = $validated['branch_id'] ?? null;
 
