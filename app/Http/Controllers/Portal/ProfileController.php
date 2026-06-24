@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Portal;
 
-use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Models\ParentUser;
 use Illuminate\Http\JsonResponse;
@@ -50,8 +49,7 @@ class ProfileController extends Controller
             );
         }
 
-        $parent->password = $validated['password'];
-        $parent->save();
+        $parent->update(['password' => $validated['password']]);
 
         // Revoke all sessions so any compromised token cannot remain valid.
         // Mirrors AuthController::resetPassword() — user re-authenticates on all devices.
@@ -93,9 +91,7 @@ class ProfileController extends Controller
             'phone' => $parent->phone,
             'address' => $parent->address,
             'profile_photo_url' => $parent->profile_photo_url,
-            'has_subscription_student' => $parent->students()
-                ->where('student_type', StudentType::Subscription)
-                ->exists(),
+            'has_subscription_student' => $parent->hasSubscriptionStudent(),
         ];
     }
 }

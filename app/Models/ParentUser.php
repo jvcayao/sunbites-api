@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\StudentType;
 use Database\Factories\ParentUserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -56,6 +57,11 @@ class ParentUser extends Authenticatable
     public function isAccessible(): bool
     {
         return ! $this->isDisabled() && $this->isActivated();
+    }
+
+    public function hasSubscriptionStudent(): bool
+    {
+        return $this->students()->where('student_type', StudentType::Subscription)->exists();
     }
 
     protected function fullName(): Attribute

@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Models\WeeklyMealPlan;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -57,13 +56,7 @@ class MealPlannerWeekVisibilityTest extends TestCase
 
         $this->student = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
 
-        $this->parent = ParentUser::create([
-            'first_name' => 'Maria',
-            'last_name' => 'Dela Cruz',
-            'email' => 'parent@example.com',
-            'password' => Hash::make('Password1!'),
-            'email_verified_at' => now(),
-        ]);
+        $this->parent = ParentUser::factory()->create();
 
         $this->parent->students()->attach($this->student->id, [
             'linked_at' => now(),

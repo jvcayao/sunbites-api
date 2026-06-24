@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Portal;
 
-use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Mail\ParentResetPasswordMail;
 use App\Models\ParentUser;
@@ -57,9 +56,7 @@ class AuthController extends Controller
                 'phone' => $parent->phone,
                 'address' => $parent->address,
                 'profile_photo_url' => $parent->profile_photo_url,
-                'has_subscription_student' => $parent->students()
-                    ->where('student_type', StudentType::Subscription)
-                    ->exists(),
+                'has_subscription_student' => $parent->hasSubscriptionStudent(),
             ],
         ]);
     }

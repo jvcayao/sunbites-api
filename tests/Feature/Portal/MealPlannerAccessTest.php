@@ -7,7 +7,6 @@ use App\Models\ParentUser;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class MealPlannerAccessTest extends TestCase
@@ -28,13 +27,7 @@ class MealPlannerAccessTest extends TestCase
 
     private function createParent(): ParentUser
     {
-        return ParentUser::create([
-            'first_name' => 'Maria',
-            'last_name' => 'Santos',
-            'email' => 'maria@example.com',
-            'password' => Hash::make('Password1!'),
-            'email_verified_at' => now(),
-        ]);
+        return ParentUser::factory()->create();
     }
 
     private function attachStudent(ParentUser $parent, Student $student): void
