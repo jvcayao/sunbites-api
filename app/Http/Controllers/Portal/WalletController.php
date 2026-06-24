@@ -31,21 +31,21 @@ class WalletController extends Controller
             ->where('payable_id', $student->id)
             ->latest();
 
-        if (! empty($validated['type'])) {
+        if (filled($validated['type'] ?? null)) {
             $query->where('type', $validated['type']);
         }
 
-        if (! empty($validated['from'])) {
+        if (filled($validated['from'] ?? null)) {
             $query->whereDate('created_at', '>=', $validated['from']);
         }
 
-        if (! empty($validated['to'])) {
+        if (filled($validated['to'] ?? null)) {
             $query->whereDate('created_at', '<=', $validated['to']);
         }
 
         $transactions = $query->paginate($perPage);
 
-        $pivot = $request->user()->students()->wherePivot('student_id', $student->id)->first()?->pivot;
+        $pivot = $request->user()->students()->find($student->id)?->pivot;
 
         return response()->json([
             'student' => [
@@ -53,8 +53,8 @@ class WalletController extends Controller
                 'full_name' => $student->full_name,
             ],
             'balance' => $student->wallet?->balanceFloatNum ?? 0.0,
-            'wallet_alert_threshold' => $pivot ? (float) $pivot->wallet_alert_threshold : 0.0,
-            'data' => collect($transactions->items())->map(fn ($tx) => [
+            'wallet_alert_threshold' => (float) ($pivot?->wallet_alert_threshold ?? 0),
+            'data' => $transactions->getCollection()->map(fn ($tx) => [
                 'id' => $tx->id,
                 'type' => $tx->type,
                 'amount' => $tx->amountFloat,

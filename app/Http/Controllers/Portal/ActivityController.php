@@ -28,15 +28,15 @@ class ActivityController extends Controller
             ->with('items:id,order_id,name,quantity,price,line_total')
             ->latest();
 
-        if (! empty($validated['from'])) {
+        if (filled($validated['from'] ?? null)) {
             $query->whereDate('created_at', '>=', $validated['from']);
         }
 
-        if (! empty($validated['to'])) {
+        if (filled($validated['to'] ?? null)) {
             $query->whereDate('created_at', '<=', $validated['to']);
         }
 
-        if (! empty($validated['payment_method'])) {
+        if (filled($validated['payment_method'] ?? null)) {
             $query->where('payment_method', $validated['payment_method']);
         }
 
@@ -50,7 +50,7 @@ class ActivityController extends Controller
                 'full_name' => $student->full_name,
             ],
             'spending_total' => (float) $totalSpent,
-            'data' => collect($orders->items())->map(fn ($order) => [
+            'data' => $orders->getCollection()->map(fn ($order) => [
                 'id' => $order->id,
                 'receipt_number' => $order->receipt_number,
                 'total' => (float) $order->total,
