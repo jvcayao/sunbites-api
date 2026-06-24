@@ -22,7 +22,7 @@ All visual states (emoji, confetti, border glow, message) are driven by a single
 | Tier | Condition | Emoji | Confetti | Card border | Message |
 |---|---|---|---|---|---|
 | **Green** | ≥ ₱150 | — | ✅ fires | none | — |
-| **Orange** | ₱80–₱149 | 😢 | ✗ no | `ring-2 ring-orange-400` + orange glow | "Your balance is running low. Please ask a cashier to top up soon!" |
+| **Orange** | ₱80–₱149 | 😢 | ✗ no | `ring-2 ring-orange-400` + orange glow | "Your balance is running low. Please top up soon!" |
 | **Red** | ≤ ₱79 | 😰 | ✗ no | `ring-2 ring-red-400` + red glow | "Insufficient balance. Please top up before ordering." |
 
 The tier replaces the previous three-tier color logic (`≥50 green`, `>0 orange`, `≤0 red`). The new balance text color follows the same tier: `text-green-600`, `text-orange-500`, `text-red-600`.
