@@ -20,6 +20,7 @@ class ActivityController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'payment_method' => ['nullable', 'string', 'in:cash,wallet'],
         ]);
 
         $query = $student->orders()
@@ -33,6 +34,10 @@ class ActivityController extends Controller
 
         if (! empty($validated['to'])) {
             $query->whereDate('created_at', '<=', $validated['to']);
+        }
+
+        if (! empty($validated['payment_method'])) {
+            $query->where('payment_method', $validated['payment_method']);
         }
 
         $perPage = $validated['per_page'] ?? 20;
