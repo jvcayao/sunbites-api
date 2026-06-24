@@ -32,9 +32,9 @@ The weekly meal plan in the parent portal is currently accessible to all authent
 
 ## Approach
 
-Add a `has_subscription_student: bool` flag to the parent auth response. Store it in the Zustand auth store (alongside the existing `parent` object). The portal layout reads it to show/hide the Meal Plan nav link. The meal plan page reads it to redirect unauthorized access. The backend enforces the same rule at the API layer.
+Add a `has_subscription_student: boolean` flag to the parent auth response. Store it in the Zustand auth store alongside the existing `parent: AuthParent` object. The portal layout reads it to show/hide the Meal Plan nav link. The meal plan page reads it to redirect unauthorized access. The backend enforces the same rule at the API layer.
 
-The flag is kept fresh via a **reactive sync**: whenever `GET /portal/students` resolves, the portal derives the flag from live student data and updates the Zustand store — covering the case where staff links a new subscription student while the parent is already logged in.
+The flag is kept fresh via a **reactive sync**: whenever `GET /portal/students` resolves in any page that calls it, the portal derives the flag from live student data and updates the Zustand store — covering the case where staff links a new subscription student while the parent is already logged in.
 
 ---
 
@@ -44,9 +44,12 @@ The flag is kept fresh via a **reactive sync**: whenever `GET /portal/students` 
 
 **File:** `app/Http/Controllers/Portal/AuthController.php`
 
-Add `has_subscription_student` to the parent object returned on login:
+Add `has_subscription_student` to the parent array in the `login` method. Import `App\Enums\StudentType` at the top of the file:
 
 ```php
+use App\Enums\StudentType;
+
+// Inside login(), update the return statement:
 'parent' => [
     'id'                       => $parent->id,
     'first_name'               => $parent->first_name,
@@ -65,21 +68,54 @@ Add `has_subscription_student` to the parent object returned on login:
 
 **File:** `app/Http/Controllers/Portal/ProfileController.php`
 
-Add the same `has_subscription_student` field to the `show` response so the flag remains accurate when the portal refreshes the profile.
+The controller uses a private `parentData(ParentUser $parent): array` helper that is shared by both `show` and `update`. Add the field there so both responses include it automatically. Import `App\Enums\StudentType`:
+
+```php
+use App\Enums\StudentType;
+
+// Inside parentData():
+private function parentData(ParentUser $parent): array
+{
+    return [
+        'id'                       => $parent->id,
+        'first_name'               => $parent->first_name,
+        'last_name'                => $parent->last_name,
+        'email'                    => $parent->email,
+        'phone'                    => $parent->phone,
+        'address'                  => $parent->address,
+        'profile_photo_url'        => $parent->profile_photo_url,
+        'has_subscription_student' => $parent->students()
+                                          ->where('student_type', StudentType::Subscription)
+                                          ->exists(),
+    ];
+}
+```
 
 ### 3. `MealPlannerController` — Subscription guard
 
 **File:** `app/Http/Controllers/Portal/MealPlannerController.php`
 
-Add a subscription check at the start of the `index` method, before any branch or visibility logic:
+The method is named `show` (not `index`). Add the subscription check at the very top of `show`, before the branch and visibility logic. Import `App\Enums\StudentType`:
 
 ```php
-$hasSubscription = $parent->students()
-    ->where('student_type', StudentType::Subscription)
-    ->exists();
+use App\Enums\StudentType;
 
-if (! $hasSubscription) {
-    abort(403, 'Meal plan access requires a subscription student.');
+public function show(Request $request): JsonResponse
+{
+    $validated = $request->validate([...]);
+
+    $parent = $request->user();
+
+    // Guard: meal plan is subscription-only
+    $hasSubscription = $parent->students()
+        ->where('student_type', StudentType::Subscription)
+        ->exists();
+
+    if (! $hasSubscription) {
+        abort(403, 'Meal plan access requires a subscription student.');
+    }
+
+    // ... rest of existing branch + visibility logic unchanged
 }
 ```
 
@@ -89,9 +125,9 @@ if (! $hasSubscription) {
 
 ### 1. `AuthParent` type
 
-**File:** `types/portal.ts`
+**File:** `types/auth.ts` _(not `types/portal.ts` — `AuthParent` lives here)_
 
-Add the new field to the `AuthParent` interface:
+Add the new field:
 
 ```typescript
 export interface AuthParent {
@@ -102,13 +138,44 @@ export interface AuthParent {
   phone: string | null;
   address: string | null;
   profile_photo_url: string | null;
+  created_at: string;
   has_subscription_student: boolean; // new
 }
 ```
 
-No Zustand store shape change is required — the flag rides along as part of the existing `parent: AuthParent | null` field.
+### 2. Zustand auth store — add `updateParent` action
 
-### 2. `portal-layout.tsx` — Conditional Meal Plan nav link
+**File:** `lib/store/auth.ts`
+
+The store currently has `login` and `logout` only. Add an `updateParent` action for the reactive sync:
+
+```typescript
+interface AuthState {
+  token: string | null;
+  parent: AuthParent | null;
+  login: (token: string, parent: AuthParent) => void;
+  logout: () => void;
+  updateParent: (parent: AuthParent) => void; // new
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: null,
+      parent: null,
+      login: (token, parent) => set({ token, parent }),
+      logout: () => set({ token: null, parent: null }),
+      updateParent: (parent) => set({ parent }),  // new
+    }),
+    {
+      name: "portal-auth",
+      storage: createJSONStorage(() => sessionStorage),
+    },
+  ),
+);
+```
+
+### 3. `portal-layout.tsx` — Conditional Meal Plan nav link
 
 **File:** `components/layouts/portal-layout.tsx`
 
@@ -117,28 +184,26 @@ Read the flag from the auth store and render the Meal Plan nav link only when `t
 ```typescript
 const hasSubscriptionStudent = useAuthStore(s => s.parent?.has_subscription_student ?? false);
 
-// Desktop nav
+// Desktop nav — replace the unconditional Meal Plan link
 {hasSubscriptionStudent && (
   <NavLink href="/meal-plan">Meal Plan</NavLink>
 )}
 
-// Mobile nav
+// Mobile nav — same
 {hasSubscriptionStudent && (
   <MobileNavLink href="/meal-plan">Meal Plan</MobileNavLink>
 )}
 ```
 
-No loading state is needed — the flag is available in Zustand from the moment the parent logs in.
+No loading state needed — the flag is in Zustand from the moment the parent logs in.
 
-### 3. `meal-plan/page.tsx` — Route guard
+### 4. `meal-plan/page.tsx` — Route guard
 
 **File:** `app/(portal)/meal-plan/page.tsx`
 
-The meal plan page must be a Client Component (`"use client"`). Use `useRouter` inside a `useEffect` for the redirect — `redirect()` from `next/navigation` cannot be called during Client Component render:
+The page is already `"use client"`. Add a guard using `useRouter` inside `useEffect` — `redirect()` cannot be called during Client Component render:
 
 ```typescript
-"use client";
-
 const router = useRouter();
 const hasSubscriptionStudent = useAuthStore(s => s.parent?.has_subscription_student ?? false);
 
@@ -151,50 +216,65 @@ useEffect(() => {
 if (!hasSubscriptionStudent) return null;
 ```
 
-The `return null` prevents the page content from flashing before the redirect fires. This handles direct URL access — a parent who bookmarked `/meal-plan` before their last subscription student was unenrolled will be silently redirected to the dashboard.
+The `return null` prevents the meal plan content from flashing before the redirect fires.
 
-### 4. `app-logo.tsx` — Replace circle "S" with `icon.png`
+### 5. `app-logo.tsx` — Replace circle "S" with `icon.png`
 
 **File:** `components/app-logo.tsx`
 
-Replace both the `icon` and `full` variant circle divs with a Next.js `Image` component pointing to `/icon.png` (served from `public/icon.png`):
+Replace both the `icon` and `full` variant circle divs with a Next.js `Image` component pointing to `/icon.png` (served from `public/icon.png`). The `rounded-full` class preserves the circular crop:
 
 ```typescript
 import Image from "next/image";
 
-// icon variant
-<Image src="/icon.png" alt="Sunbites" width={40} height={40} className={cn("rounded-full", className)} />
+export function AppLogo({ variant = "full", className }: AppLogoProps) {
+  if (variant === "icon") {
+    return (
+      <Image
+        src="/icon.png"
+        alt="Sunbites"
+        width={40}
+        height={40}
+        className={cn("rounded-full", className)}
+      />
+    );
+  }
 
-// full variant
-<div className={cn("flex items-center gap-3", className)}>
-  <Image src="/icon.png" alt="Sunbites" width={40} height={40} className="rounded-full" />
-  <div className="flex flex-col">
-    <span className="text-base font-bold leading-tight text-foreground">Sunbites</span>
-    <span className="text-xs font-medium leading-tight text-muted-foreground">Your Healthy Kitchen</span>
-  </div>
-</div>
+  return (
+    <div className={cn("flex items-center gap-3", className)}>
+      <Image src="/icon.png" alt="Sunbites" width={40} height={40} className="rounded-full" />
+      <div className="flex flex-col">
+        <span className="text-base font-bold leading-tight text-foreground">Sunbites</span>
+        <span className="text-xs font-medium leading-tight text-muted-foreground">Your Healthy Kitchen</span>
+      </div>
+    </div>
+  );
+}
 ```
 
-The `rounded-full` class preserves the circular crop if `icon.png` is square.
+### 6. Reactive flag sync — in pages that call `studentsApi.list`
 
-### 5. Reactive flag sync in students hook
+There is no shared `hooks/` directory. The `studentsApi.list` call (`GET /portal/students`) exists in three pages:
+- `app/(portal)/students/page.tsx`
+- `app/(portal)/students/[id]/page.tsx`
+- `app/(portal)/feedback/page.tsx`
 
-**File:** `hooks/use-students.ts` (or wherever `GET /portal/students` is called)
-
-After the students query resolves, derive the subscription flag and update the Zustand store:
+In each of these pages, after the students query resolves, add an effect to sync the flag:
 
 ```typescript
+const { updateParent } = useAuthStore();
+const parent = useAuthStore(s => s.parent);
+
 useEffect(() => {
-  if (!students) return;
+  if (!students || !parent) return;
   const hasSubscription = students.some(s => s.student_type === 'subscription');
-  const parent = useAuthStore.getState().parent;
-  if (parent && parent.has_subscription_student !== hasSubscription) {
-    useAuthStore.getState().setParent({ ...parent, has_subscription_student: hasSubscription });
+  if (parent.has_subscription_student !== hasSubscription) {
+    updateParent({ ...parent, has_subscription_student: hasSubscription });
   }
-}, [students]);
+}, [students, parent, updateParent]);
 ```
 
-This keeps the flag accurate when staff links a new subscription student while the parent is already logged in. The nav and route guard react immediately once the students query next runs (no logout required).
+This covers the case where staff links a new subscription student while the parent is logged in — the next visit to any of these pages silently corrects the flag, and the nav reacts immediately.
 
 ---
 
@@ -219,9 +299,9 @@ Login
                     └── meal-plan/page: redirect if false
 
 While logged in
-  └── GET /portal/students (TanStack Query)
-        └── derives hasSubscription from live data
-              └── updates Zustand store if flag changed
+  └── GET /portal/students (on Students, Student Detail, or Feedback page)
+        └── useEffect derives hasSubscription from live data
+              └── updateParent() updates Zustand store if flag changed
                     └── nav + route guard react immediately
 ```
 
@@ -229,27 +309,31 @@ While logged in
 
 ## Tests
 
-### Backend — `tests/Feature/Portal/MealPlannerTest.php`
+### Backend
+
+New test file: `tests/Feature/Portal/MealPlannerAccessTest.php`
+Existing login tests in: `tests/Feature/Portal/AuthTest.php` (or equivalent)
 
 | Test | Assertion |
 |---|---|
-| Parent with only non-subscription students gets `GET /portal/meal-planner` | `403` |
-| Parent with only subscription students gets `GET /portal/meal-planner` | `200` |
-| Parent with mixed students gets `GET /portal/meal-planner` | `200` |
-| Login returns `has_subscription_student: true` for subscription parent | Response JSON has flag `true` |
-| Login returns `has_subscription_student: false` for non-subscription parent | Response JSON has flag `false` |
-| `GET /portal/profile` returns correct `has_subscription_student` value | Response JSON has correct flag |
+| Parent with only non-subscription students calls `GET /portal/meal-planner` | `403` |
+| Parent with only subscription students calls `GET /portal/meal-planner` | `200` |
+| Parent with mixed students calls `GET /portal/meal-planner` | `200` |
+| Login returns `has_subscription_student: true` for subscription parent | Response JSON contains `parent.has_subscription_student = true` |
+| Login returns `has_subscription_student: false` for non-subscription parent | Response JSON contains `parent.has_subscription_student = false` |
+| `GET /portal/profile` returns correct `has_subscription_student` value | Response JSON contains correct flag |
+| `PATCH /portal/profile` also returns correct `has_subscription_student` value | Response JSON contains correct flag (via shared `parentData()`) |
 
-### Frontend — `components/layouts/portal-layout.test.tsx` + `app/(portal)/meal-plan/page.test.tsx`
+### Frontend
 
-| Test | Assertion |
-|---|---|
-| Layout hides Meal Plan nav when `has_subscription_student: false` | Nav link not in document |
-| Layout shows Meal Plan nav when `has_subscription_student: true` | Nav link in document |
-| Layout shows Meal Plan nav for parent with mixed students | Nav link in document |
-| `/meal-plan` with `has_subscription_student: false` | Redirects to `/dashboard` |
-| `/meal-plan` with `has_subscription_student: true` | Renders meal plan content |
-| Students query resolves with subscription student → store flag updates | `has_subscription_student` becomes `true` in store |
+| Test | File | Assertion |
+|---|---|---|
+| Layout hides Meal Plan nav when `has_subscription_student: false` | `portal-layout.test.tsx` | Nav link absent |
+| Layout shows Meal Plan nav when `has_subscription_student: true` | `portal-layout.test.tsx` | Nav link present |
+| Layout shows Meal Plan nav for mixed household | `portal-layout.test.tsx` | Nav link present |
+| `/meal-plan` with `has_subscription_student: false` redirects | `meal-plan/page.test.tsx` | `router.replace('/dashboard')` called |
+| `/meal-plan` with `has_subscription_student: true` renders content | `meal-plan/page.test.tsx` | Meal plan UI visible |
+| Students query resolves → store flag updates | `students/page.test.tsx` | `updateParent` called with corrected flag |
 
 ---
 
@@ -257,8 +341,9 @@ While logged in
 
 | Scenario | Handled by |
 |---|---|
-| Parent logs in, staff later adds a subscription student | Reactive sync on next `GET /portal/students` |
-| Parent bookmarks `/meal-plan` before losing subscription access | Route guard redirects to `/dashboard` |
-| Pre-registered student (pending approval) | Not applicable — parents have no account until approval; student type is set at approval time |
-| Mixed household (subscription + non-subscription kids) | Flag is `true`; parent sees Meal Plan; non-subscription kid's data is unaffected |
-| API called directly without portal (e.g., Postman) | Backend 403 gate enforces restriction |
+| Parent logs in, staff later adds a subscription student | Reactive sync via `updateParent` on next students page visit |
+| Parent bookmarks `/meal-plan` before losing subscription access | Route guard `useEffect` → `router.replace('/dashboard')` |
+| Pre-registered student (pending approval) | Not applicable — no portal account until approval; type set at that point |
+| Mixed household (subscription + non-subscription kids) | Flag is `true`; parent sees Meal Plan; non-subscription kid's data unaffected |
+| API called directly (Postman, curl) | Backend 403 gate enforces restriction regardless of frontend |
+| `PATCH /portal/profile` response | Flag included via shared `parentData()` helper — no extra work needed |
