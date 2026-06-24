@@ -31,15 +31,15 @@ class WalletController extends Controller
             ->where('payable_id', $student->id)
             ->latest();
 
-        if (filled($validated['type'] ?? null)) {
+        if (isset($validated['type'])) {
             $query->where('type', $validated['type']);
         }
 
-        if (filled($validated['from'] ?? null)) {
+        if (isset($validated['from'])) {
             $query->whereDate('created_at', '>=', $validated['from']);
         }
 
-        if (filled($validated['to'] ?? null)) {
+        if (isset($validated['to'])) {
             $query->whereDate('created_at', '<=', $validated['to']);
         }
 

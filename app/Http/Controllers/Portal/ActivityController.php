@@ -28,15 +28,15 @@ class ActivityController extends Controller
             ->with('items:id,order_id,name,quantity,price,line_total')
             ->latest();
 
-        if (filled($validated['from'] ?? null)) {
+        if (isset($validated['from'])) {
             $query->whereDate('created_at', '>=', $validated['from']);
         }
 
-        if (filled($validated['to'] ?? null)) {
+        if (isset($validated['to'])) {
             $query->whereDate('created_at', '<=', $validated['to']);
         }
 
-        if (filled($validated['payment_method'] ?? null)) {
+        if (isset($validated['payment_method'])) {
             $query->where('payment_method', $validated['payment_method']);
         }
 

@@ -38,9 +38,11 @@ class KioskLookupController extends Controller
                 'date' => $order->created_at->format('M j, Y'),
             ]);
 
+        $initials = mb_strtoupper(mb_substr($student->first_name, 0, 1).mb_substr($student->last_name, 0, 1));
+
         return response()->json([
-            'name' => $student->first_name.' '.$student->last_name,
-            'initials' => mb_strtoupper(mb_substr($student->first_name, 0, 1).mb_substr($student->last_name, 0, 1)),
+            'name' => $student->full_name,
+            'initials' => $initials,
             'grade_level' => $student->grade_level,
             'student_type' => $student->student_type->value,
             'balance' => number_format($student->wallet?->balanceFloatNum ?? 0.0, 2),
