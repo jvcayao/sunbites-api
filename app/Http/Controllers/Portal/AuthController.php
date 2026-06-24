@@ -56,6 +56,7 @@ class AuthController extends Controller
                 'phone' => $parent->phone,
                 'address' => $parent->address,
                 'profile_photo_url' => $parent->profile_photo_url,
+                'has_subscription_student' => $parent->hasSubscriptionStudent(),
             ],
         ]);
     }

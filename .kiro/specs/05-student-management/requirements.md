@@ -193,6 +193,16 @@ Print layout (browser print, `@media print` CSS):
 - QR ID text below the code
 - Branch name
 
+### ID Card Header Color Coding
+
+The printed QR ID card header must visually identify the student type at a glance. Colors are sourced from the official Sunbites brand palette (sunbites.com.ph).
+
+1. WHEN a QR ID card is printed AND `student_type = subscription` THEN the system SHALL display a red (`#e5322a`, sb-red-500) header with white text
+2. WHEN a QR ID card is printed AND `student_type = non_subscription` THEN the system SHALL display a yellow (`#f4b400`, sb-yellow-400) header with dark ink (`#1a1611`) text — white text on yellow fails WCAG contrast (~2:1), so dark ink is required
+3. WHEN a QR ID card is printed THEN the card header SHALL display "🍽 SUNBITES KITCHEN" and "Student Canteen ID" as subtitle
+4. The color coding SHALL apply to all three print locations: enrollment success screen, student detail page, and batch print modal
+5. Card borders, photo borders, grade level text, and footer tints SHALL use matching accent colors derived from the same student-type palette
+
 ### Batch QR Print (Multiple Students)
 Available from the student list page.
 

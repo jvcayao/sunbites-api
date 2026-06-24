@@ -20,20 +20,16 @@ class ActivityController extends Controller
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'payment_method' => ['nullable', 'string', 'in:cash,wallet'],
         ]);
 
         $query = $student->orders()
             ->whereNull('voided_at')
             ->with('items:id,order_id,name,quantity,price,line_total')
+            ->when(isset($validated['from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['from']))
+            ->when(isset($validated['to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['to']))
+            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
             ->latest();
-
-        if (! empty($validated['from'])) {
-            $query->whereDate('created_at', '>=', $validated['from']);
-        }
-
-        if (! empty($validated['to'])) {
-            $query->whereDate('created_at', '<=', $validated['to']);
-        }
 
         $perPage = $validated['per_page'] ?? 20;
         $totalSpent = (clone $query)->sum('total');
@@ -45,7 +41,7 @@ class ActivityController extends Controller
                 'full_name' => $student->full_name,
             ],
             'spending_total' => (float) $totalSpent,
-            'data' => collect($orders->items())->map(fn ($order) => [
+            'data' => $orders->getCollection()->map(fn ($order) => [
                 'id' => $order->id,
                 'receipt_number' => $order->receipt_number,
                 'total' => (float) $order->total,

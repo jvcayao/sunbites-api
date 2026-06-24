@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Portal;
 
+use App\Enums\StudentType;
 use App\Models\Branch;
 use App\Models\ParentUser;
 use App\Models\Student;
@@ -31,12 +32,9 @@ class PortalAuthTest extends TestCase
 
         $staffUser = User::factory()->create();
 
-        $this->parent = ParentUser::create([
-            'first_name' => 'Maria',
-            'last_name' => 'Dela Cruz',
+        $this->parent = ParentUser::factory()->create([
             'email' => 'maria@example.com',
-            'password' => Hash::make('Password1!'),
-            'email_verified_at' => now(),
+            'password' => 'Password1!',
         ]);
 
         $this->parent->students()->attach($this->student->id, [
@@ -54,7 +52,37 @@ class PortalAuthTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJsonStructure(['token', 'parent' => ['id', 'first_name', 'last_name', 'email']]);
+            ->assertJsonStructure([
+                'token',
+                'parent' => ['id', 'first_name', 'last_name', 'email', 'has_subscription_student'],
+            ]);
+    }
+
+    public function test_login_response_has_subscription_student_true_when_parent_has_subscription_student(): void
+    {
+        // Override the default student (created in setUp) with a subscription one.
+        $this->student->update(['student_type' => StudentType::Subscription->value]);
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => 'maria@example.com',
+            'password' => 'Password1!',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('parent.has_subscription_student', true);
+    }
+
+    public function test_login_response_has_subscription_student_false_when_all_students_are_non_subscription(): void
+    {
+        $this->student->update(['student_type' => StudentType::NonSubscription->value]);
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => 'maria@example.com',
+            'password' => 'Password1!',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('parent.has_subscription_student', false);
     }
 
     public function test_login_fails_with_wrong_password(): void
@@ -75,23 +103,14 @@ class PortalAuthTest extends TestCase
 
     public function test_unactivated_parent_cannot_login(): void
     {
-        $unactivated = ParentUser::create([
-            'first_name' => 'Jose',
-            'last_name' => 'Rizal',
-            'email' => 'jose@example.com',
+        $unactivated = ParentUser::factory()->unactivated()->create([
             'password' => null,
-            'email_verified_at' => null,
         ]);
 
-        $response = $this->postJson('/api/v1/portal/auth/login', [
-            'email' => 'jose@example.com',
+        $this->postJson('/api/v1/portal/auth/login', [
+            'email' => $unactivated->email,
             'password' => 'Password1!',
-        ]);
-
-        $response->assertStatus(401)
-            ->assertJson(['error' => 'account_not_activated']);
-
-        $unactivated->forceDelete();
+        ])->assertStatus(401)->assertJson(['error' => 'account_not_activated']);
     }
 
     public function test_logout_revokes_current_token(): void
@@ -118,19 +137,12 @@ class PortalAuthTest extends TestCase
 
     public function test_reset_password_activates_account_and_clears_tokens(): void
     {
-        $unactivated = ParentUser::create([
-            'first_name' => 'Jose',
-            'last_name' => 'Rizal',
-            'email' => 'activate@example.com',
-            'password' => null,
-            'email_verified_at' => null,
-        ]);
-
+        $unactivated = ParentUser::factory()->unactivated()->create(['password' => null]);
         $token = Password::broker('parents')->createToken($unactivated);
 
         $this->postJson('/api/v1/portal/auth/password/reset', [
             'token' => $token,
-            'email' => 'activate@example.com',
+            'email' => $unactivated->email,
             'password' => 'NewPassword1!',
             'password_confirmation' => 'NewPassword1!',
         ])->assertOk()->assertJson(['message' => 'Password set successfully.']);
