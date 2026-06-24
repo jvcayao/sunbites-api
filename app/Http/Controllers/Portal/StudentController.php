@@ -31,10 +31,7 @@ class StudentController extends Controller
                 'student_type' => $student->student_type->value,
                 'enrollment_status' => $student->enrollment_status->value,
                 'allergies' => $student->allergies,
-                'branch' => [
-                    'id' => $student->branch->id,
-                    'name' => $student->branch->name,
-                ],
+                'branch_name' => $student->branch->name,
                 'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
                 'wallet_alert_threshold' => (float) $student->pivot->wallet_alert_threshold,
                 'linked_at' => $student->pivot->linked_at,
