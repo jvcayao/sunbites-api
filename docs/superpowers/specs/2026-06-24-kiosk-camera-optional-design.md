@@ -85,12 +85,21 @@ useKioskScanner({
 - No camera button shown
 
 ### Scanning — camera blocked (new)
-- White/default background (no video)
-- Scan guide frame — static, **no scan line animation** (scan line requires camera)
-- "Scan your ID card" prompt (same text, same pulse)
+- White/default background (`bg-background`); video element hidden
+- Overlay text color: `text-foreground` (not `text-white` — light background)
+- Scan guide frame — **no vignette shadow**, `border-border`, corner brackets `border-border`
+- Scan guide is static — **no scan line** (condition: `state === "scanning" && !cameraBlocked`)
+- "Scan your ID card" prompt (same text, same `animate-pulse`)
 - Logo in brand colors (not inverted — light background)
-- Small ghost button below prompt: **"📷 Use your camera to scan QR"**
+- Small ghost button below prompt: **"📷 Use your camera to scan QR"** (visible only when `state === "scanning"`)
 - Hardware QR scanner is fully active in this state
+
+### Loading — camera blocked
+- Same as camera-blocked scanning, **but**:
+  - Spinner shown inside scan guide frame (unchanged from camera-active loading)
+  - Prompt shows "Checking..." (not "Scan your ID card")
+  - **"Use camera" button is hidden** — user is mid-scan, no action needed
+- Hardware scanner lock (`isLockedRef`) prevents double-fire during loading
 
 ### "Use your camera" button behavior
 - Clicking calls `handleCameraRetry()`: sets `cameraBlocked = false`
@@ -124,7 +133,13 @@ useKioskScanner({
 └──────────────────────────────────┘
 ```
 
-The scan guide frame border uses `border-border` (light mode color) instead of `border-white/80` (which was designed for the dark camera overlay). Inside the frame is plain white — no background image or gradient.
+Styling differences from camera-active mode:
+- **Border:** `border-border` (not `border-white/80`)
+- **Corner brackets:** `border-border` (not `border-white`)
+- **Shadow/vignette:** none (not `shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]` — that shadow dims the background, which would look broken on white)
+- **Text color:** `text-foreground` (not `text-white` — text is invisible on a white background)
+- **No scan line inside the frame**
+- Inside the frame: plain white/transparent — no camera stream
 
 ---
 
@@ -132,13 +147,34 @@ The scan guide frame border uses `border-border` (light mode color) instead of `
 
 | Element | Camera active | Camera blocked |
 |---|---|---|
-| Video `<video>` | Visible, full-screen | Hidden |
+| Video `<video>` | Visible, full-screen | `hidden` (condition: `!isScanningState \|\| cameraBlocked`) |
+| Overlay text color | `text-white` (dark vignette bg) | `text-foreground` (light bg) |
 | Page background | Dark (vignette from video) | Default (`bg-background`) |
-| Logo | `invert` (white) | Brand colors (no invert) |
+| Scan guide shadow | `shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]` | **Removed** — looks broken on white bg |
 | Scan guide border | `border-white/80` | `border-border` |
-| Scan line | Animated (`scanLine` keyframe) | Hidden |
+| Corner brackets | `border-white` | `border-border` |
+| Logo | `invert` (white) | Brand colors (no invert) |
+| Scan line condition | `state === "scanning"` | Hidden — condition: `state === "scanning" && !cameraBlocked` |
+| Loading spinner | Yes | Yes — still shows during API call |
+| "Checking..." text | Yes | Yes — still shows during API call |
+| "Use camera" button | Hidden | Visible only when `state === "scanning"` — hidden during loading |
 | Prompt pulse | Yes | Yes |
-| "Use camera" button | Hidden | Visible |
+
+---
+
+## Video Element Hidden Condition
+
+**Before:**
+```tsx
+className={cn("absolute inset-0 h-full w-full object-cover", !isScanningState && "hidden")}
+```
+
+**After:**
+```tsx
+className={cn("absolute inset-0 h-full w-full object-cover", (!isScanningState || cameraBlocked) && "hidden")}
+```
+
+When camera is blocked, the empty `<video>` element is hidden (it's transparent but still overlays the white background). When the user clicks "Use camera" and `cameraBlocked` resets to `false`, the video becomes visible again immediately as the camera stream attaches.
 
 ---
 
