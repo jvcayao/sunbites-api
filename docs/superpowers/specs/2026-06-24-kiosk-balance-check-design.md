@@ -50,7 +50,7 @@ POST /api/v1/public/kiosk/lookup
 ```json
 {
   "name": "Juan dela Cruz",
-  "photo_url": "https://example.com/storage/students/photo.jpg",
+  "initials": "JD",
   "grade_level": "Grade 3",
   "student_type": "subscription",
   "balance": "245.00",
@@ -61,14 +61,20 @@ POST /api/v1/public/kiosk/lookup
 }
 ```
 
-**Intentionally excluded from response:** student ID, internal UUID, qr_code value, student number, parent info, address, full transaction history.
+**No photo in response:** The existing photo endpoint (`/api/v1/students/{id}/photo`) requires `auth:sanctum` — the kiosk has no token and would receive a 401. Rather than creating a separate public photo endpoint, the avatar uses initials only (first letter of first name + first letter of last name), derived server-side and returned as `initials`. This also keeps the student ID out of the response entirely.
+
+**Intentionally excluded from response:** student ID, internal UUID, qr_code value, student number, photo URL, parent info, address, full transaction history.
 
 **Error responses:**
 - `404 { "message": "Student not found." }`
 - `422 { "message": "Student is not currently enrolled." }`
 - `429` (rate limit exceeded)
 
-**`last_orders` data source:** The 5 most recent `Order` records for the student, each with their `OrderItem` names joined and the order total. Formatted server-side — no client-side pagination needed.
+**`last_orders` data source:** The 5 most recent `Order` records for the student (ordered by `created_at` desc, `limit(5)`), each with their `OrderItem->name` values joined by comma and the order `total`. `OrderItem->name` is denormalized (stored directly on the row) — no join to `PosMenuItem` needed. Formatted server-side — no client-side pagination needed.
+
+**Wallet balance:** Accessed via `$student->wallet?->balanceFloatNum ?? 0.0` (bavix/laravel-wallet). The `wallet` relationship must be eager-loaded before returning the response.
+
+**`student_type`:** A `StudentType` enum — serialize using `->value` to return the string (e.g. `"subscription"` or `"non_subscription"`).
 
 ### 2. sunbites-pos — New Kiosk Page
 
@@ -119,7 +125,7 @@ The kiosk page has exactly **four states**:
 
 ### State 3 — Result
 - Student card appears (fades in):
-  - Large circular photo (fallback: colored circle with initials)
+  - Large circular avatar — colored circle with initials (e.g. "JD") — no photo
   - Full name (large) + grade level
   - Subscription type badge (Subscription / Non-Subscription)
   - Wallet balance: extra-large, bold
@@ -139,7 +145,7 @@ The kiosk page has exactly **four states**:
 
 ## Camera Implementation
 
-**Library:** `@zxing/browser` (BrowserMultiFormatReader)
+**Library:** `@zxing/browser` (BrowserMultiFormatReader) — not yet installed in sunbites-pos. Must be added: `npm install @zxing/browser`.
 
 ```typescript
 // hooks/use-kiosk-lookup.ts (pseudocode)
