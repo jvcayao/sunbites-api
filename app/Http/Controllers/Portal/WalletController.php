@@ -19,16 +19,22 @@ class WalletController extends Controller
 
         $validated = $request->validate([
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'type' => ['nullable', 'string', 'in:deposit,withdraw'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
         ]);
 
         $perPage = $validated['per_page'] ?? 20;
 
         $transactions = Transaction::where('payable_type', Student::class)
             ->where('payable_id', $student->id)
+            ->when(isset($validated['type']), fn ($q) => $q->where('type', $validated['type']))
+            ->when(isset($validated['from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['from']))
+            ->when(isset($validated['to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['to']))
             ->latest()
             ->paginate($perPage);
 
-        $pivot = $request->user()->students()->wherePivot('student_id', $student->id)->first()?->pivot;
+        $pivot = $request->user()->students()->find($student->id)?->pivot;
 
         return response()->json([
             'student' => [
@@ -36,8 +42,8 @@ class WalletController extends Controller
                 'full_name' => $student->full_name,
             ],
             'balance' => $student->wallet?->balanceFloatNum ?? 0.0,
-            'wallet_alert_threshold' => $pivot ? (float) $pivot->wallet_alert_threshold : 0.0,
-            'data' => collect($transactions->items())->map(fn ($tx) => [
+            'wallet_alert_threshold' => (float) ($pivot?->wallet_alert_threshold ?? 0),
+            'data' => $transactions->getCollection()->map(fn ($tx) => [
                 'id' => $tx->id,
                 'type' => $tx->type,
                 'amount' => $tx->amountFloat,

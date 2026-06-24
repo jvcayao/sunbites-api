@@ -284,3 +284,12 @@
 ### 13.3 Tests
 - [x] `EnrollmentTest` — 3 new tests: null succeeds, two nulls both succeed, duplicate still 422
 - [x] `StudentDetailTest` — 3 new tests: update succeeds, duplicate 422, clear to null succeeds — 34/34 pass; 412/412 full suite
+
+## 14. QR ID Card Color Differentiation by Student Type
+
+### 14.1 Frontend (sunbites-pos)
+- [ ] Create `lib/utils/card-accent-colors.ts` — `getCardAccentColors(studentType: StudentType): CardAccentColors` utility; subscription returns red palette (`#e5322a`), non-subscription returns yellow palette (`#f4b400`); write unit tests: subscription → `headerBg: "#e5322a"`, non-subscription → `headerBg: "#f4b400"`
+- [ ] Update `PrintCard` in `app/(kitchen)/students/page.tsx` — call `getCardAccentColors(student.student_type)` and replace all `oklch(0.577 0.245 27.325)` / hardcoded footer colors with returned values; write render tests asserting header `backgroundColor` per student type
+- [ ] Update inline print card in `app/(kitchen)/students/[id]/page.tsx` — same color replacement using the utility
+- [ ] Update QR print section in `app/(kitchen)/enrollment/page.tsx` — same color replacement using the utility
+- [ ] Verify existing tests in `students/student-list.test.tsx` still pass after changes

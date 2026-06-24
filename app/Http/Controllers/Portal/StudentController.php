@@ -22,14 +22,16 @@ class StudentController extends Controller
                 'last_name' => $student->last_name,
                 'grade_level' => $student->grade_level,
                 'section' => $student->section,
-                'photo_path' => $student->photo_path,
+                'birthday' => $student->birthday?->format('Y-m-d'),
+                'notes' => $student->notes,
+                'qr_code' => $student->qr_code,
+                'photo_url' => $student->photo_path
+                    ? url("/api/v1/portal/students/{$student->id}/photo")
+                    : null,
                 'student_type' => $student->student_type->value,
                 'enrollment_status' => $student->enrollment_status->value,
                 'allergies' => $student->allergies,
-                'branch' => [
-                    'id' => $student->branch->id,
-                    'name' => $student->branch->name,
-                ],
+                'branch_name' => $student->branch->name,
                 'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
                 'wallet_alert_threshold' => (float) $student->pivot->wallet_alert_threshold,
                 'linked_at' => $student->pivot->linked_at,

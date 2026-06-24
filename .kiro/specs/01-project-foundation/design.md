@@ -114,67 +114,69 @@ Shown after login when a staff member has access to multiple branches. Uses the 
 ## Screen: KitchenLayout Shell — POS App
 
 ```
-┌──────────┬──────────────────────────────────────────┐
-│ Sunbites │  Students        [🏫 Antipolo ⇄] [👤 Admin] │
-│ Kitchen  │──────────────────────────────────────────│
-│──────────│                                          │
-│ ANTIPOLO │                                          │
-│  BRANCH  │         [page content renders here]      │
-│──────────│                                          │
-│📋 Enrollment                                        │
-│👥 Students                                          │
-│🛒 POS                                               │
-│🔔 Reminders          (Spec 11 — payment reminders)  │
-│                                                     │
-│  ── Reports ──                                      │
-│  ⊞ Dashboard                                        │
-│  💳 Sales                                           │
-│  👥 Student Report                                  │
-│  👛 Wallet Report                                   │
-│  📦 Inventory Report                               │
-│  🧾 Daily Summary                                   │
-│  🏦 Billing Report                                  │
-│  💳 Credits          (Admin/Manager only)           │
-│  📋 Activity Log     (Admin/Manager only)           │
-│                                                     │
-│  ── References ──                                   │
-│  👨‍💼 Users                                           │
-│  👪 Parents                                         │
-│  🏫 Branches                                        │
-│  🍽️ Meal Planner                                    │
-│  📦 Inventory                                       │
-│  💬 Feedback                                        │
-│  📣 Announcements    (Spec 12)                      │
-│  📥 Notifications    (Spec 12 — staff inbox)        │
-│  📝 Pre-Registrations (Spec 13)                     │
-│  ⚙️ System Settings  (Admin only — Spec 09)         │
-│                                                     │
-│  ◀  [Logout]                                        │
-└──────────┴──────────────────────────────────────────┘
-  220px          flex-1
+┌──────────────────────────────────────────────────────────────────┐
+│ [☰] [icon] Sunbites       Dashboard      ── [Antipolo] 🔔 [J] Admin │
+│            Your healthy kitchen                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│                  [page content — full width]                     │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-**Sidebar (expanded — 220px):**
+**AppHeader (56px):**
+- Background: white, bottom border `--border`
+- Left: `☰` hamburger button · `icon.png` (32px) · stacked brand text ("Sunbites" `font-bold` / "Your healthy kitchen" `text-xs text-muted-foreground`)
+- Center: current page name `text-lg font-bold` — derived from `usePathname()` route map
+- Right: branch badge pill · notification bell icon · user avatar (initial) + name `text-sm` + role `text-xs text-muted-foreground`
+
+**AppNavSheet (floating panel, left side):**
+```
+┌──────────────────────────┐
+│ [icon] Sunbites          │
+│        Your healthy kit. │
+│ [Antipolo Branch]        │
+│──────────────────────────│
+│ MAIN                     │
+│   Dashboard              │
+│   POS                    │
+│   Enrollment             │
+│   Pre-Registrations      │
+│   Students               │
+│   Reminders   (Spec 11)  │
+│   Announcements (Spec 12)│
+│                          │
+│ REPORTS                  │
+│   Sales                  │
+│   Students               │
+│   Wallet                 │
+│   Inventory              │
+│   Daily Summary          │
+│   Billing                │
+│   Credits  (Admin/Mgr)   │
+│   Subscription           │
+│   Activity Log (Admin)   │
+│                          │
+│ REFERENCES               │
+│   Inventory              │
+│   Meal Planner           │
+│   Subscription Config    │
+│   Users                  │
+│   Branches               │
+│   Parents                │
+│   Feedback               │
+│   System Settings(Admin) │
+│                          │
+│ [Logout]                 │
+└──────────────────────────┘
+```
+
 - Background: `--sidebar` (near white)
-- Right border: `1px solid var(--border)`
-- Logo area: `<AppLogo variant="full" />`
-- Branch indicator: `text-xs font-bold text-primary bg-primary/5 rounded px-2 py-1`
 - Nav items default: `text-sm text-muted-foreground`
 - Nav item active: `bg-primary/10 text-primary font-bold border-l-[3px] border-primary`
 - Section headers: `text-xs font-extrabold text-muted-foreground uppercase tracking-wider`
-- Collapse toggle: bottom of sidebar, small arrow button
-- Logout: `text-destructive` bordered button
-
-**Sidebar (collapsed — 60px):**
-- Icons only, text hidden
-- Logo: `<AppLogo variant="icon" />` (40×40px)
-- Branch pill hidden
-- Logout shows icon only
-
-**Topbar (56px):**
-- Background: white, bottom border `--border`
-- Left: page title `text-lg font-bold text-primary`
-- Right: branch switcher pill (admin only) + `text-sm text-muted-foreground` user name + role badge
+- Logout: `text-destructive` at bottom
+- Closes on any nav link click
 
 ---
 
@@ -219,14 +221,15 @@ Used by both apps for login pages.
 
 ## Component: AppLogo
 
-**Full variant** (sidebar expanded, auth pages):
+**Full variant** (auth pages):
 - Circle icon 36×36px: primary fill, inner "S" in white
 - Wordmark "Sunbites": `font-extrabold text-primary`
 - Tagline "Your Healthy Kitchen": `text-[10px] text-muted-foreground`
 - Rendered inline (SVG-based React component)
 
-**Icon variant** (sidebar collapsed):
-- Circle only: 40×40px, primary fill, white "S"
+**Icon variant** (header bar and nav sheet header):
+- Uses `public/icon.png`, displayed at 32–40px
+- Appears next to stacked brand text in `AppHeader` and `AppNavSheet`
 
 ---
 

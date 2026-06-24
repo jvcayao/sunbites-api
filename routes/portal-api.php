@@ -7,8 +7,10 @@ use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\MealPlannerController;
 use App\Http\Controllers\Portal\NotificationController;
 use App\Http\Controllers\Portal\ProfileController;
+use App\Http\Controllers\Portal\SpendingSummaryController;
 use App\Http\Controllers\Portal\StudentController;
 use App\Http\Controllers\Portal\StudentPaymentHistoryController;
+use App\Http\Controllers\Portal\StudentPhotoController;
 use App\Http\Controllers\Portal\WalletController;
 use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
@@ -37,9 +39,16 @@ Route::middleware(['auth:parents', 'ability:parent'])->group(function () {
     // Activity (order history per student)
     Route::get('/students/{student}/activity', [ActivityController::class, 'index']);
 
+    // Spending summary (charts + aggregates)
+    Route::get('/students/{student}/spending-summary', [SpendingSummaryController::class, 'show']);
+
     // Wallet
     Route::get('/students/{student}/wallet', [WalletController::class, 'index']);
     Route::patch('/students/{student}/wallet/alert', [WalletController::class, 'setAlert']);
+
+    // Student photo
+    Route::get('/students/{student}/photo', [StudentPhotoController::class, 'show']);
+    Route::post('/students/{student}/photo', [StudentPhotoController::class, 'store']);
 
     // Feedback
     Route::get('/feedback', [FeedbackController::class, 'index']);

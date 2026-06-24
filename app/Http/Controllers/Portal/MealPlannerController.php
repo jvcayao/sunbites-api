@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Portal;
 
 use App\Enums\DayOfWeek;
 use App\Enums\SchoolMonth;
+use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Models\MealPlannerWeekVisibility;
 use App\Models\WeeklyMealPlan;
@@ -22,9 +23,19 @@ class MealPlannerController extends Controller
 
         $parent = $request->user();
 
-        $branchId = $validated['branch_id'] ?? null;
+        if (! $parent->students()->where('student_type', StudentType::Subscription)->exists()) {
+            abort(403, 'Meal plan access requires a subscription student.');
+        }
 
-        if ($branchId === null) {
+        if (isset($validated['branch_id'])) {
+            abort_unless(
+                $parent->students()->where('branch_id', $validated['branch_id'])->exists(),
+                403,
+                'You do not have a student in this branch.'
+            );
+
+            $branchId = $validated['branch_id'];
+        } else {
             $firstStudent = $parent->students()->first();
 
             if ($firstStudent === null) {
@@ -32,12 +43,6 @@ class MealPlannerController extends Controller
             }
 
             $branchId = $firstStudent->branch_id;
-        } else {
-            $hasStudentInBranch = $parent->students()->where('branch_id', $branchId)->exists();
-
-            if (! $hasStudentInBranch) {
-                return response()->json(['message' => 'You do not have a student in this branch.'], 403);
-            }
         }
 
         $month = $validated['month'] ?? SchoolMonth::June->value;
