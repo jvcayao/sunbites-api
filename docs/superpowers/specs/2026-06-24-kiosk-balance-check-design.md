@@ -42,9 +42,11 @@ POST /api/v1/public/kiosk/lookup
 
 **Lookup logic:**
 - `Student::withoutBranch()->where('qr_code', $qrCode)->first()`
-- Return 404 if not found
-- Return 422 if student status is not `enrolled`
-- Return 200 with safe response shape
+- Return `404` if no student matches the QR code
+- Return `403` if student is found but `enrollment_status` is anything other than `EnrollmentStatus::Enrolled` — this covers `Paused`, `Unenrolled`, `Banned`, and `Graduated`
+- Return `200` with safe response shape only for `Enrolled` students
+
+**Important:** The frontend renders the same "Please see a cashier." error card for both `404` and `403`. No difference is shown to the student — a banned or paused student cannot tell whether their QR was recognized or not.
 
 **Success response shape:**
 ```json
@@ -66,9 +68,11 @@ POST /api/v1/public/kiosk/lookup
 **Intentionally excluded from response:** student ID, internal UUID, qr_code value, student number, photo URL, parent info, address, full transaction history.
 
 **Error responses:**
-- `404 { "message": "Student not found." }`
-- `422 { "message": "Student is not currently enrolled." }`
-- `429` (rate limit exceeded)
+- `404 { "message": "Student not found." }` — QR code does not match any student
+- `403 { "message": "Student is not eligible." }` — student found but status is `Paused`, `Unenrolled`, `Banned`, or `Graduated`
+- `429` — rate limit exceeded
+
+The frontend treats `404`, `403`, and any other non-200 response identically: shows "QR not recognized. Please see a cashier." — students cannot distinguish between "not found" and "restricted."
 
 **`last_orders` data source:** The 5 most recent `Order` records for the student (ordered by `created_at` desc, `limit(5)`), each with their `OrderItem->name` values joined by comma and the order `total`. `OrderItem->name` is denormalized (stored directly on the row) — no join to `PosMenuItem` needed. Formatted server-side — no client-side pagination needed.
 
@@ -185,7 +189,10 @@ reader.decodeFromVideoDevice(null, videoRef.current, (result, error) => {
 
 - Returns correct name, balance, and last 5 orders for a valid enrolled student QR
 - Returns 404 for an unknown QR code
-- Returns 422 for a valid QR belonging to an inactive/unenrolled student
+- Returns 403 for a valid QR belonging to a `Paused` student
+- Returns 403 for a valid QR belonging to an `Unenrolled` student
+- Returns 403 for a valid QR belonging to a `Banned` student
+- Returns 403 for a valid QR belonging to a `Graduated` student
 - Returns 429 after exceeding rate limit (mock throttle)
 - Confirms sensitive fields are absent from the response (`id`, `qr_code`, `student_number`, parent data)
 - Rejects QR values that do not start with `SB-`
@@ -194,7 +201,8 @@ reader.decodeFromVideoDevice(null, videoRef.current, (result, error) => {
 
 - `@zxing/browser` is mocked; tests simulate the `onResult` callback firing with a valid QR string
 - Renders result card with correct name, balance (green/orange/red), and orders after successful lookup
-- Shows error card on 404 response
+- Shows identical "Please see a cashier." error card for 404 (not found) response
+- Shows identical "Please see a cashier." error card for 403 (restricted student) response — same UI, no differentiation
 - Auto-resets to scan state after 10 seconds (use `jest.useFakeTimers`)
 - Shows "Camera access required" message when camera permission is denied (mock `getUserMedia` rejection)
 
