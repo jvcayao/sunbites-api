@@ -133,17 +133,24 @@ No loading state is needed — the flag is available in Zustand from the moment 
 
 **File:** `app/(portal)/meal-plan/page.tsx`
 
-Add a guard at the top of the component. Since the layout is already a Client Component, this is a client-side redirect:
+The meal plan page must be a Client Component (`"use client"`). Use `useRouter` inside a `useEffect` for the redirect — `redirect()` from `next/navigation` cannot be called during Client Component render:
 
 ```typescript
+"use client";
+
+const router = useRouter();
 const hasSubscriptionStudent = useAuthStore(s => s.parent?.has_subscription_student ?? false);
 
-if (!hasSubscriptionStudent) {
-  redirect('/dashboard');
-}
+useEffect(() => {
+  if (!hasSubscriptionStudent) {
+    router.replace('/dashboard');
+  }
+}, [hasSubscriptionStudent, router]);
+
+if (!hasSubscriptionStudent) return null;
 ```
 
-This handles direct URL access — a parent who bookmarked `/meal-plan` before their last subscription student was unenrolled will be silently redirected to the dashboard.
+The `return null` prevents the page content from flashing before the redirect fires. This handles direct URL access — a parent who bookmarked `/meal-plan` before their last subscription student was unenrolled will be silently redirected to the dashboard.
 
 ### 4. Reactive flag sync in students hook
 
