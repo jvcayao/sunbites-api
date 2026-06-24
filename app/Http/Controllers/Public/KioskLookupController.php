@@ -8,6 +8,7 @@ use App\Http\Requests\Public\KioskLookupRequest;
 use App\Models\Order;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Str;
 
 class KioskLookupController extends Controller
 {
@@ -18,13 +19,8 @@ class KioskLookupController extends Controller
             ->where('qr_code', $request->validated('qr_code'))
             ->first();
 
-        if (! $student) {
-            return response()->json(['message' => 'Student not found.'], 404);
-        }
-
-        if ($student->enrollment_status !== EnrollmentStatus::Enrolled) {
-            return response()->json(['message' => 'Student is not eligible.'], 403);
-        }
+        abort_if(! $student, 404, 'Student not found.');
+        abort_if($student->enrollment_status !== EnrollmentStatus::Enrolled, 403, 'Student is not eligible.');
 
         $lastOrders = Order::withoutBranch()
             ->where('student_id', $student->id)
@@ -38,7 +34,7 @@ class KioskLookupController extends Controller
                 'date' => $order->created_at->format('M j, Y'),
             ]);
 
-        $initials = mb_strtoupper(mb_substr($student->first_name, 0, 1).mb_substr($student->last_name, 0, 1));
+        $initials = Str::upper(mb_substr($student->first_name, 0, 1).mb_substr($student->last_name, 0, 1));
 
         return response()->json([
             'name' => $student->full_name,

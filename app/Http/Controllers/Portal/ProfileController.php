@@ -27,8 +27,7 @@ class ProfileController extends Controller
         ]);
 
         $parent = $request->user();
-        $parent->fill($validated);
-        $parent->save();
+        $parent->update($validated);
 
         return response()->json($this->parentData($parent));
     }
@@ -51,8 +50,7 @@ class ProfileController extends Controller
 
         $parent->update(['password' => $validated['password']]);
 
-        // Revoke all sessions so any compromised token cannot remain valid.
-        // Mirrors AuthController::resetPassword() — user re-authenticates on all devices.
+        // Revoke all tokens so the user must re-authenticate on all devices.
         $parent->tokens()->delete();
 
         return response()->json(['message' => 'Password changed successfully.']);

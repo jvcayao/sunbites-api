@@ -26,19 +26,10 @@ class ActivityController extends Controller
         $query = $student->orders()
             ->whereNull('voided_at')
             ->with('items:id,order_id,name,quantity,price,line_total')
+            ->when(isset($validated['from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['from']))
+            ->when(isset($validated['to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['to']))
+            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
             ->latest();
-
-        if (isset($validated['from'])) {
-            $query->whereDate('created_at', '>=', $validated['from']);
-        }
-
-        if (isset($validated['to'])) {
-            $query->whereDate('created_at', '<=', $validated['to']);
-        }
-
-        if (isset($validated['payment_method'])) {
-            $query->where('payment_method', $validated['payment_method']);
-        }
 
         $perPage = $validated['per_page'] ?? 20;
         $totalSpent = (clone $query)->sum('total');

@@ -27,9 +27,15 @@ class MealPlannerController extends Controller
             abort(403, 'Meal plan access requires a subscription student.');
         }
 
-        $branchId = $validated['branch_id'] ?? null;
+        if (isset($validated['branch_id'])) {
+            abort_unless(
+                $parent->students()->where('branch_id', $validated['branch_id'])->exists(),
+                403,
+                'You do not have a student in this branch.'
+            );
 
-        if ($branchId === null) {
+            $branchId = $validated['branch_id'];
+        } else {
             $firstStudent = $parent->students()->first();
 
             if ($firstStudent === null) {
@@ -37,12 +43,6 @@ class MealPlannerController extends Controller
             }
 
             $branchId = $firstStudent->branch_id;
-        } else {
-            $hasStudentInBranch = $parent->students()->where('branch_id', $branchId)->exists();
-
-            if (! $hasStudentInBranch) {
-                return response()->json(['message' => 'You do not have a student in this branch.'], 403);
-            }
         }
 
         $month = $validated['month'] ?? SchoolMonth::June->value;
