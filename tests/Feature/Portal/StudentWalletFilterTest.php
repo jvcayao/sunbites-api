@@ -8,7 +8,6 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class StudentWalletFilterTest extends TestCase
@@ -35,13 +34,7 @@ class StudentWalletFilterTest extends TestCase
 
         $this->student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
-        $this->parent = ParentUser::create([
-            'first_name' => 'Maria',
-            'last_name' => 'Dela Cruz',
-            'email' => 'parent@example.com',
-            'password' => Hash::make('Password1!'),
-            'email_verified_at' => now(),
-        ]);
+        $this->parent = ParentUser::factory()->create();
 
         $this->parent->students()->attach($this->student->id, [
             'linked_at' => now(),
@@ -103,5 +96,27 @@ class StudentWalletFilterTest extends TestCase
 
         $response->assertOk()
             ->assertJsonCount(2, 'data');
+    }
+
+    public function test_date_range_filter_returns_only_transactions_in_range(): void
+    {
+        // Create a deposit
+        $this->student->deposit(5000);
+
+        // Filter to yesterday — should return nothing
+        $yesterday = now()->subDay()->format('Y-m-d');
+        $response = $this->asParent()
+            ->getJson("/api/v1/portal/students/{$this->student->id}/wallet?from={$yesterday}&to={$yesterday}");
+
+        $response->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        // Filter to today — should return the deposit
+        $today = now()->format('Y-m-d');
+        $response = $this->asParent()
+            ->getJson("/api/v1/portal/students/{$this->student->id}/wallet?from={$today}&to={$today}");
+
+        $response->assertOk()
+            ->assertJsonCount(1, 'data');
     }
 }
