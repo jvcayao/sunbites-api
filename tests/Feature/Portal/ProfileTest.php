@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Portal;
 
+use App\Models\Branch;
 use App\Models\ParentUser;
+use App\Models\Student;
+use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -143,6 +146,41 @@ class ProfileTest extends TestCase
 
         // All tokens must be gone — user must re-authenticate on all devices.
         $this->assertEquals(0, $this->parent->tokens()->count());
+    }
+
+    public function test_get_profile_includes_has_subscription_student_false_when_no_students(): void
+    {
+        $response = $this->asParent()->getJson('/api/v1/portal/profile');
+
+        $response->assertOk()
+            ->assertJsonPath('has_subscription_student', false);
+    }
+
+    public function test_get_profile_includes_has_subscription_student_true_when_subscription_student_linked(): void
+    {
+        $branch = Branch::factory()->create(['is_active' => true]);
+        $staff = User::factory()->create();
+        $student = Student::factory()->subscription()->create(['branch_id' => $branch->id]);
+        $this->parent->students()->attach($student->id, [
+            'linked_at' => now(),
+            'linked_by' => $staff->id,
+            'wallet_alert_threshold' => 0,
+        ]);
+
+        $response = $this->asParent()->getJson('/api/v1/portal/profile');
+
+        $response->assertOk()
+            ->assertJsonPath('has_subscription_student', true);
+    }
+
+    public function test_patch_profile_response_includes_has_subscription_student(): void
+    {
+        $response = $this->asParent()->patchJson('/api/v1/portal/profile', [
+            'first_name' => 'Updated',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonStructure(['has_subscription_student']);
     }
 
     public function test_login_response_includes_profile_photo_url_not_path(): void

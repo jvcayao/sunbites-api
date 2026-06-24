@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Portal;
 
+use App\Enums\StudentType;
 use App\Models\Branch;
 use App\Models\ParentUser;
 use App\Models\Student;
@@ -54,7 +55,37 @@ class PortalAuthTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJsonStructure(['token', 'parent' => ['id', 'first_name', 'last_name', 'email']]);
+            ->assertJsonStructure([
+                'token',
+                'parent' => ['id', 'first_name', 'last_name', 'email', 'has_subscription_student'],
+            ]);
+    }
+
+    public function test_login_response_has_subscription_student_true_when_parent_has_subscription_student(): void
+    {
+        // Override the default student (created in setUp) with a subscription one.
+        $this->student->update(['student_type' => StudentType::Subscription->value]);
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => 'maria@example.com',
+            'password' => 'Password1!',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('parent.has_subscription_student', true);
+    }
+
+    public function test_login_response_has_subscription_student_false_when_all_students_are_non_subscription(): void
+    {
+        $this->student->update(['student_type' => StudentType::NonSubscription->value]);
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => 'maria@example.com',
+            'password' => 'Password1!',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('parent.has_subscription_student', false);
     }
 
     public function test_login_fails_with_wrong_password(): void
