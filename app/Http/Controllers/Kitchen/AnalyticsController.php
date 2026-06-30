@@ -15,7 +15,7 @@ class AnalyticsController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $v = $request->validate([
+        $validated = $request->validate([
             'from_month' => ['required', 'string', Rule::enum(SchoolMonth::class)],
             'from_year' => ['required', 'integer', 'min:2020', 'max:2099'],
             'to_month' => ['required', 'string', Rule::enum(SchoolMonth::class)],
@@ -23,12 +23,12 @@ class AnalyticsController extends Controller
         ]);
 
         $branchId = app('active_branch')->id;
-        $start = Carbon::create($v['from_year'], SchoolMonth::from($v['from_month'])->toMonthNumber(), 1)->startOfMonth();
-        $end = Carbon::create($v['to_year'], SchoolMonth::from($v['to_month'])->toMonthNumber(), 1)->endOfMonth();
+        $start = Carbon::create($validated['from_year'], SchoolMonth::from($validated['from_month'])->toMonthNumber(), 1)->startOfMonth();
+        $end = Carbon::create($validated['to_year'], SchoolMonth::from($validated['to_month'])->toMonthNumber(), 1)->endOfMonth();
         $periods = $this->monthPeriods($start, $end);
 
         return response()->json([
-            'period' => $this->buildPeriodMeta($v, $periods),
+            'period' => $this->buildPeriodMeta($validated, $periods),
             'sales' => $this->buildSales($branchId, $start, $end, $periods),
             'students' => $this->buildStudents($branchId, $start, $end, $periods),
             'billing' => $this->buildBilling($branchId, $periods),
@@ -65,7 +65,7 @@ class AnalyticsController extends Controller
             : "JSON_UNQUOTE(JSON_EXTRACT({$column}, '{$path}'))";
     }
 
-    /** @return array<int, array{month: string, year: int, label: string}> */
+    /** @return array<int, array{month: string, year: int, key: string, label: string}> */
     private function monthPeriods(Carbon $start, Carbon $end): array
     {
         $periods = [];
@@ -76,6 +76,7 @@ class AnalyticsController extends Controller
                 $periods[] = [
                     'month' => $month->value,
                     'year' => (int) $cursor->year,
+                    'key' => \sprintf('%04d-%02d', $cursor->year, $cursor->month),
                     'label' => $month->label().' '.$cursor->year,
                 ];
             }
@@ -119,29 +120,16 @@ class AnalyticsController extends Controller
             ->where('branch_id', $branchId)
             ->where('status', 'completed')
             ->whereBetween('created_at', [$start, $end])
-            ->selectRaw("{$ym} AS month_key, SUM(total) AS revenue")
+            ->selectRaw("{$ym} AS month_key, SUM(total) AS revenue, COUNT(*) AS cnt")
             ->groupBy('month_key')
-            ->pluck('revenue', 'month_key')
-            ->toArray();
+            ->get()
+            ->keyBy('month_key');
 
-        $ordersRaw = DB::table('orders')
-            ->where('branch_id', $branchId)
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
-            ->selectRaw("{$ym} AS month_key, COUNT(*) AS cnt")
-            ->groupBy('month_key')
-            ->pluck('cnt', 'month_key')
-            ->toArray();
-
-        $revenueTrend = array_map(function ($p) use ($trendRaw, $ordersRaw) {
-            $key = sprintf('%04d-%02d', $p['year'], SchoolMonth::from($p['month'])->toMonthNumber());
-
-            return [
-                'label' => $p['label'],
-                'revenue' => round((float) ($trendRaw[$key] ?? 0), 2),
-                'orders' => (int) ($ordersRaw[$key] ?? 0),
-            ];
-        }, $periods);
+        $revenueTrend = array_map(fn ($p) => [
+            'label' => $p['label'],
+            'revenue' => round((float) ($trendRaw->get($p['key'])?->revenue ?? 0), 2),
+            'orders' => (int) ($trendRaw->get($p['key'])?->cnt ?? 0),
+        ], $periods);
 
         $methods = DB::table('orders')
             ->where('branch_id', $branchId)
@@ -210,15 +198,19 @@ class AnalyticsController extends Controller
 
     private function buildStudents(int $branchId, Carbon $start, Carbon $end, array $periods): array
     {
-        $base = Student::withoutBranch()->where('branch_id', $branchId);
+        $counts = Student::withoutBranch()
+            ->where('branch_id', $branchId)
+            ->selectRaw(
+                "COUNT(*) AS total,
+                SUM(CASE WHEN enrollment_status = 'enrolled' THEN 1 ELSE 0 END) AS enrolled,
+                SUM(CASE WHEN student_type = 'subscription' THEN 1 ELSE 0 END) AS subscription_count,
+                SUM(CASE WHEN student_type = 'non_subscription' THEN 1 ELSE 0 END) AS non_subscription_count,
+                SUM(CASE WHEN created_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS new_enrollments",
+                [$start, $end]
+            )
+            ->first();
 
-        $total = (clone $base)->count();
-        $enrolled = (clone $base)->where('enrollment_status', 'enrolled')->count();
-        $subscriptionCount = (clone $base)->where('student_type', 'subscription')->count();
-        $nonSubscriptionCount = (clone $base)->where('student_type', 'non_subscription')->count();
-        $newEnrollments = (clone $base)->whereBetween('created_at', [$start, $end])->count();
-
-        $studentIds = (clone $base)->pluck('id');
+        $studentIds = Student::withoutBranch()->where('branch_id', $branchId)->pluck('id');
 
         $oldType = $this->jsonExtract('attribute_changes', '$.old.student_type');
         $newType = $this->jsonExtract('attribute_changes', '$.attributes.student_type');
@@ -242,16 +234,11 @@ class AnalyticsController extends Controller
         $totalUpgrades = $switchRows->sum('upgrades');
         $totalDowngrades = $switchRows->sum('downgrades');
 
-        $switchTrend = array_map(function ($p) use ($switchRows) {
-            $key = sprintf('%04d-%02d', $p['year'], SchoolMonth::from($p['month'])->toMonthNumber());
-            $row = $switchRows->get($key);
-
-            return [
-                'label' => $p['label'],
-                'upgrades' => (int) ($row?->upgrades ?? 0),
-                'downgrades' => (int) ($row?->downgrades ?? 0),
-            ];
-        }, $periods);
+        $switchTrend = array_map(fn ($p) => [
+            'label' => $p['label'],
+            'upgrades' => (int) ($switchRows->get($p['key'])?->upgrades ?? 0),
+            'downgrades' => (int) ($switchRows->get($p['key'])?->downgrades ?? 0),
+        ], $periods);
 
         $byGrade = Student::withoutBranch()
             ->where('branch_id', $branchId)
@@ -265,11 +252,11 @@ class AnalyticsController extends Controller
 
         return [
             'kpis' => [
-                'total_students' => $total,
-                'enrolled' => $enrolled,
-                'subscription_count' => $subscriptionCount,
-                'non_subscription_count' => $nonSubscriptionCount,
-                'new_enrollments' => $newEnrollments,
+                'total_students' => (int) ($counts->total ?? 0),
+                'enrolled' => (int) ($counts->enrolled ?? 0),
+                'subscription_count' => (int) ($counts->subscription_count ?? 0),
+                'non_subscription_count' => (int) ($counts->non_subscription_count ?? 0),
+                'new_enrollments' => (int) ($counts->new_enrollments ?? 0),
                 'subscription_upgrades' => (int) $totalUpgrades,
                 'subscription_downgrades' => (int) $totalDowngrades,
             ],
@@ -283,18 +270,16 @@ class AnalyticsController extends Controller
         $studentIds = Student::withoutBranch()->where('branch_id', $branchId)->pluck('id')->toArray();
 
         $periodConditions = function ($q) use ($periods) {
-            $q->where(function ($inner) use ($periods) {
-                foreach ($periods as $p) {
-                    $inner->orWhere(fn ($sub) => $sub->where('school_month', $p['month'])->where('year', $p['year']));
-                }
-            });
+            foreach ($periods as $p) {
+                $q->orWhere(fn ($sub) => $sub->where('school_month', $p['month'])->where('year', $p['year']));
+            }
         };
 
-        $baseQuery = fn () => DB::table('student_monthly_payments')
+        $base = DB::table('student_monthly_payments')
             ->whereIn('student_id', $studentIds)
             ->where($periodConditions);
 
-        $kpiRaw = $baseQuery()
+        $kpiRaw = (clone $base)
             ->selectRaw("
                 SUM(CASE WHEN status = 'paid'   THEN amount ELSE 0 END) AS paid_amount,
                 SUM(CASE WHEN status = 'unpaid' THEN amount ELSE 0 END) AS unpaid_amount,
@@ -309,19 +294,19 @@ class AnalyticsController extends Controller
         $denominator = $paidAmount + $unpaidAmount;
         $collectionRate = $denominator > 0 ? round($paidAmount / $denominator * 100, 1) : 0.0;
 
-        $discrepancyCount = $baseQuery()
+        $discrepancyCount = (clone $base)
             ->where('status', 'unpaid')
             ->distinct()
             ->count('student_id');
 
-        $fullyPaidCount = $baseQuery()
+        $fullyPaidSubquery = (clone $base)
             ->select('student_id')
             ->groupBy('student_id')
-            ->havingRaw("SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END) = 0")
-            ->get()
-            ->count();
+            ->havingRaw("SUM(CASE WHEN status != 'paid' THEN 1 ELSE 0 END) = 0");
 
-        $trendRaw = $baseQuery()
+        $fullyPaidCount = DB::query()->fromSub($fullyPaidSubquery, 'fully_paid')->count();
+
+        $trendRaw = (clone $base)
             ->selectRaw("
                 school_month, year,
                 SUM(CASE WHEN status = 'paid'   THEN 1 ELSE 0 END) AS paid_count,
@@ -354,7 +339,7 @@ class AnalyticsController extends Controller
             ];
         }, $periods);
 
-        $byGradeRaw = $baseQuery()
+        $byGradeRaw = (clone $base)
             ->join('students', 'students.id', '=', 'student_monthly_payments.student_id')
             ->selectRaw("
                 students.grade_level,
@@ -435,8 +420,7 @@ class AnalyticsController extends Controller
             ->keyBy('month_key');
 
         $monthlyTrend = array_map(function ($p) use ($trendRaw) {
-            $key = sprintf('%04d-%02d', $p['year'], SchoolMonth::from($p['month'])->toMonthNumber());
-            $r = $trendRaw->get($key);
+            $r = $trendRaw->get($p['key']);
             $credits = round((float) ($r?->credits ?? 0), 2);
             $debits = round((float) ($r?->debits ?? 0), 2);
 
@@ -523,26 +507,20 @@ class AnalyticsController extends Controller
             ->pluck('low_events', 'month_key')
             ->toArray();
 
-        $ymOut = $this->yearMonthExpr('created_at');
-
         $outEventsRaw = DB::table('inventory_logs')
             ->where('branch_id', $branchId)
             ->whereBetween('created_at', [$start, $end])
             ->where('stock_after', '<=', 0)
-            ->selectRaw("{$ymOut} AS month_key, COUNT(DISTINCT inventory_item_id) AS out_events")
+            ->selectRaw("{$ym} AS month_key, COUNT(DISTINCT inventory_item_id) AS out_events")
             ->groupBy('month_key')
             ->pluck('out_events', 'month_key')
             ->toArray();
 
-        $stockEvents = array_map(function ($p) use ($lowEventsRaw, $outEventsRaw) {
-            $key = sprintf('%04d-%02d', $p['year'], SchoolMonth::from($p['month'])->toMonthNumber());
-
-            return [
-                'label' => $p['label'],
-                'low_events' => (int) ($lowEventsRaw[$key] ?? 0),
-                'out_events' => (int) ($outEventsRaw[$key] ?? 0),
-            ];
-        }, $periods);
+        $stockEvents = array_map(fn ($p) => [
+            'label' => $p['label'],
+            'low_events' => (int) ($lowEventsRaw[$p['key']] ?? 0),
+            'out_events' => (int) ($outEventsRaw[$p['key']] ?? 0),
+        ], $periods);
 
         return [
             'kpis' => [
