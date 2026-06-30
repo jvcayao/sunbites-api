@@ -547,4 +547,72 @@ class StudentReportTest extends TestCase
         $response->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
+
+    public function test_subscription_student_row_includes_payment_history(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        $student = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $student->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+        $student->monthlyPayments()->create([
+            'school_month' => 'july',
+            'year' => $yearStart,
+            'status' => 'unpaid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk();
+        $history = $response->json('data.0.payment_history');
+        $this->assertIsArray($history);
+        $this->assertCount(10, $history);
+
+        $june = collect($history)->firstWhere('month', 'june');
+        $july = collect($history)->firstWhere('month', 'july');
+        $this->assertSame('paid', $june['status']);
+        $this->assertSame('unpaid', $july['status']);
+        $this->assertSame('June', $june['month_label']);
+    }
+
+    public function test_non_subscription_student_row_has_null_payment_history(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_type' => 'non_subscription',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.payment_history', null);
+    }
+
+    public function test_payment_history_shows_no_record_for_months_without_payment(): void
+    {
+        $student = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        // No monthly payment records created at all
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk();
+        $history = $response->json('data.0.payment_history');
+        $this->assertIsArray($history);
+        $this->assertCount(10, $history);
+
+        foreach ($history as $entry) {
+            $this->assertSame('no_record', $entry['status']);
+        }
+    }
 }
