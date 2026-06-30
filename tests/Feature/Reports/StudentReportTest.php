@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Exports\StudentsExport;
 use App\Models\Branch;
 use App\Models\Student;
 use App\Models\User;
@@ -327,5 +328,50 @@ class StudentReportTest extends TestCase
 
         $response->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    public function test_export_headings_include_allergies_and_notes(): void
+    {
+        $export = new StudentsExport(collect([]));
+
+        $headings = $export->headings();
+
+        $this->assertCount(14, $headings);
+        $this->assertSame('Allergies', $headings[12]);
+        $this->assertSame('Notes', $headings[13]);
+    }
+
+    public function test_export_maps_allergies_and_notes_for_a_student(): void
+    {
+        $student = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'allergies' => 'Peanuts',
+            'notes' => 'Packed lunch on Fridays',
+        ]);
+        $student->load('wallet');
+        $student->setRelation('contacts', collect([]));
+
+        $export = new StudentsExport(collect([$student]));
+        $row = $export->map($student);
+
+        $this->assertSame('Peanuts', $row[12]);
+        $this->assertSame('Packed lunch on Fridays', $row[13]);
+    }
+
+    public function test_export_maps_null_allergies_and_notes_as_empty_string(): void
+    {
+        $student = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'allergies' => null,
+            'notes' => null,
+        ]);
+        $student->load('wallet');
+        $student->setRelation('contacts', collect([]));
+
+        $export = new StudentsExport(collect([$student]));
+        $row = $export->map($student);
+
+        $this->assertSame('', $row[12]);
+        $this->assertSame('', $row[13]);
     }
 }

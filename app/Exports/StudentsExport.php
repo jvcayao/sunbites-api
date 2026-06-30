@@ -39,6 +39,8 @@ class StudentsExport implements FromCollection, ShouldAutoSize, WithHeadings, Wi
             'Total Spent',
             'Primary Contact',
             'Contact Phone',
+            'Allergies',
+            'Notes',
         ];
     }
 
@@ -60,6 +62,8 @@ class StudentsExport implements FromCollection, ShouldAutoSize, WithHeadings, Wi
             number_format((float) $student->total_spent, 2),
             $primaryContact?->full_name ?? '—',
             $primaryContact?->phone ?? '—',
+            $student->allergies ?? '',
+            $student->notes ?? '',
         ];
     }
 
