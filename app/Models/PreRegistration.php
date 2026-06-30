@@ -38,6 +38,9 @@ class PreRegistration extends Model
         'recaptcha_score',
         'submitter_ip',
         'expires_at',
+        'duplicate_check_passed_at',
+        'parent_email_exists',
+        'parent_phone_exists',
     ];
 
     protected function casts(): array
@@ -49,6 +52,9 @@ class PreRegistration extends Model
             'processed_at' => 'datetime',
             'expires_at' => 'datetime',
             'recaptcha_score' => 'decimal:2',
+            'duplicate_check_passed_at' => 'datetime',
+            'parent_email_exists' => 'boolean',
+            'parent_phone_exists' => 'boolean',
         ];
     }
 
