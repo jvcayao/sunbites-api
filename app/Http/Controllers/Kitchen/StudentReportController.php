@@ -27,9 +27,9 @@ class StudentReportController extends Controller
 
         $query = Student::where('branch_id', $branchId)
             ->with(['wallet'])
-            ->when(isset($validated['status']), fn ($q) => $q->where('enrollment_status', $validated['status']))
-            ->when(isset($validated['grade']), fn ($q) => $q->where('grade_level', $validated['grade']))
-            ->when(isset($validated['type']), fn ($q) => $q->where('student_type', $validated['type']))
+            ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
+            ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
+            ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
             ->when(filled($validated['search'] ?? null), function ($q) use ($validated) {
                 $term = $validated['search'];
                 $q->where(function ($inner) use ($term) {
@@ -99,9 +99,9 @@ class StudentReportController extends Controller
                 'contacts' => fn ($q) => $q->where('is_primary', true),
                 'wallet',
             ])
-            ->when(isset($validated['status']), fn ($q) => $q->where('enrollment_status', $validated['status']))
-            ->when(isset($validated['grade']), fn ($q) => $q->where('grade_level', $validated['grade']))
-            ->when(isset($validated['type']), fn ($q) => $q->where('student_type', $validated['type']))
+            ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
+            ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
+            ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
             ->when(filled($validated['search'] ?? null), function ($q) use ($validated) {
                 $term = $validated['search'];
                 $q->where(function ($inner) use ($term) {
