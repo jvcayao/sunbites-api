@@ -1,6 +1,6 @@
 # POS Students Page Redesign Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Replace the single-query card-grid students page with a two-query, independently paginated row list and a Map-based selection system that fixes cross-tab QR batch print bugs.
 
@@ -29,7 +29,7 @@
 - Produces: `paginatedSubscriptionFixture` (exported) — MSW fixture for `type=subscription` calls
 - Produces: `paginatedNonSubFixture` (exported) — MSW fixture for `type=non_subscription` calls
 
-- [ ] **Step 1: Add per-type paginated fixtures after `paginatedStudentsFixture` (around line 403)**
+- [x] **Step 1: Add per-type paginated fixtures after `paginatedStudentsFixture` (around line 403)**
 
 ```typescript
 export const paginatedSubscriptionFixture: PaginatedStudents = {
@@ -59,7 +59,7 @@ export const paginatedNonSubFixture: PaginatedStudents = {
 };
 ```
 
-- [ ] **Step 2: Update the `GET /students` handler to dispatch by `type` query param**
+- [x] **Step 2: Update the `GET /students` handler to dispatch by `type` query param**
 
 Find the current handler (around line 591):
 ```typescript
@@ -83,7 +83,7 @@ http.get(`${API}/students`, ({ request }) => {
 }),
 ```
 
-- [ ] **Step 3: Run existing tests to confirm they still pass**
+- [x] **Step 3: Run existing tests to confirm they still pass**
 
 ```bash
 cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
@@ -91,7 +91,7 @@ cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
 
 Expected: all currently passing tests pass. The "wallet-only" test will fail — that is expected and will be fixed in Task 2.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add __tests__/mocks/handlers.ts && git commit -m "test: add per-type MSW fixtures and type-discriminating student handler"
@@ -108,7 +108,7 @@ cd ~/sunbites-pos && git add __tests__/mocks/handlers.ts && git commit -m "test:
 - Consumes: `paginatedSubscriptionFixture`, `paginatedNonSubFixture` from `__tests__/mocks/handlers.ts`
 - Consumes: `server` from `__tests__/mocks/server.ts`
 
-- [ ] **Step 1: Add imports at top of test file**
+- [x] **Step 1: Add imports at top of test file**
 
 After the existing imports, add:
 ```typescript
@@ -120,7 +120,7 @@ import {
 } from "@/__tests__/mocks/handlers";
 ```
 
-- [ ] **Step 2: Replace the wallet-only test**
+- [x] **Step 2: Replace the wallet-only test**
 
 Remove lines 89–92:
 ```typescript
@@ -140,7 +140,7 @@ it("non-subscription student row renders in the non-subscription section", async
 });
 ```
 
-- [ ] **Step 3: Add test — selectedStudents Map persists across tab switches**
+- [x] **Step 3: Add test — selectedStudents Map persists across tab switches**
 
 Add inside the `describe("StudentsPage")` block after `"shows section headings in All tab"`:
 
@@ -165,7 +165,7 @@ it("retains selected students from subscription section when switching tabs", as
 });
 ```
 
-- [ ] **Step 4: Add test — month and payment filters hidden on Non-subscription tab**
+- [x] **Step 4: Add test — month and payment filters hidden on Non-subscription tab**
 
 ```typescript
 it("hides month and payment status filters on non-subscription tab", async () => {
@@ -182,7 +182,7 @@ it("hides month and payment status filters on non-subscription tab", async () =>
 });
 ```
 
-- [ ] **Step 5: Add test — month and payment filters hidden on All tab**
+- [x] **Step 5: Add test — month and payment filters hidden on All tab**
 
 ```typescript
 it("hides month and payment status filters on all tab by default", async () => {
@@ -194,7 +194,7 @@ it("hides month and payment status filters on all tab by default", async () => {
 });
 ```
 
-- [ ] **Step 6: Add test — mixed print batch includes both student types**
+- [x] **Step 6: Add test — mixed print batch includes both student types**
 
 ```typescript
 it("mixed print batch includes students selected from both sections", async () => {
@@ -240,7 +240,7 @@ it("mixed print batch includes students selected from both sections", async () =
 });
 ```
 
-- [ ] **Step 7: Run tests — confirm new tests FAIL**
+- [x] **Step 7: Run tests — confirm new tests FAIL**
 
 ```bash
 cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
@@ -248,7 +248,7 @@ cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
 
 Expected: the 5 new tests FAIL (features not yet implemented). Existing tests pass. This confirms TDD setup.
 
-- [ ] **Step 8: Commit failing tests**
+- [x] **Step 8: Commit failing tests**
 
 ```bash
 cd ~/sunbites-pos && git add "app/(kitchen)/students/student-list.test.tsx" && git commit -m "test(students): add failing TDD tests for Map selection, filter visibility, and mixed print batch"
@@ -266,7 +266,7 @@ cd ~/sunbites-pos && git add "app/(kitchen)/students/student-list.test.tsx" && g
 - Produces: `toggleSelect(student: Student, checked: boolean): void` — new signature accepting full Student object
 - Produces: `clearSelection(): void` — unchanged externally
 
-- [ ] **Step 1: Replace `selectedIds` state declaration (line 1286)**
+- [x] **Step 1: Replace `selectedIds` state declaration (line 1286)**
 
 Find:
 ```typescript
@@ -278,7 +278,7 @@ Replace with:
 const [selectedStudents, setSelectedStudents] = useState<Map<number, Student>>(new Map());
 ```
 
-- [ ] **Step 2: Remove the derived `selectedStudents` line (line 1346)**
+- [x] **Step 2: Remove the derived `selectedStudents` line (line 1346)**
 
 Remove:
 ```typescript
@@ -287,7 +287,7 @@ const selectedStudents = allStudents.filter((s) => selectedIds.has(s.id));
 
 (This entire line is deleted — the Map is now the source of truth.)
 
-- [ ] **Step 3: Update `toggleSelect` to accept a full Student object (lines 1348–1358)**
+- [x] **Step 3: Update `toggleSelect` to accept a full Student object (lines 1348–1358)**
 
 Replace:
 ```typescript
@@ -319,7 +319,7 @@ function toggleSelect(student: Student, checked: boolean) {
 }
 ```
 
-- [ ] **Step 4: Update `clearSelection` (lines 1360–1362)**
+- [x] **Step 4: Update `clearSelection` (lines 1360–1362)**
 
 Replace:
 ```typescript
@@ -335,7 +335,7 @@ function clearSelection() {
 }
 ```
 
-- [ ] **Step 5: Update floating bar to use `selectedStudents.size` (lines 1665–1667)**
+- [x] **Step 5: Update floating bar to use `selectedStudents.size` (lines 1665–1667)**
 
 Replace:
 ```typescript
@@ -353,7 +353,7 @@ With:
   </span>
 ```
 
-- [ ] **Step 6: Update `BatchQrModal` students prop (line 1693)**
+- [x] **Step 6: Update `BatchQrModal` students prop (line 1693)**
 
 Replace:
 ```typescript
@@ -365,7 +365,7 @@ With:
 students={Array.from(selectedStudents.values())}
 ```
 
-- [ ] **Step 7: Update `StudentCard` interface and internal call site**
+- [x] **Step 7: Update `StudentCard` interface and internal call site**
 
 At line 1042, change the `onSelect` prop type in `StudentCardProps`:
 ```typescript
@@ -393,7 +393,7 @@ selected={selectedStudents.has(s.id)}
 
 The `onSelect={toggleSelect}` prop at each call site stays unchanged — the new `toggleSelect` signature matches.
 
-- [ ] **Step 8: Run tests**
+- [x] **Step 8: Run tests**
 
 ```bash
 cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
@@ -401,7 +401,7 @@ cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
 
 Expected: the "retains selected students" test now passes. The mixed-print-batch test still fails (pending `StudentRow`). Existing tests pass.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add "app/(kitchen)/students/page.tsx" && git commit -m "refactor(students): replace Set<number> selection with Map<number, Student> to fix cross-tab QR print bug"
@@ -421,18 +421,18 @@ cd ~/sunbites-pos && git add "app/(kitchen)/students/page.tsx" && git commit -m 
 - Produces: `subMeta`, `nonSubMeta` — pagination meta objects (or undefined)
 - Produces: `isLoading: boolean`, `isError: boolean` — combined from relevant queries
 
-- [ ] **Step 1: Add page state variables after existing filter state (after line 1285)**
+- [x] **Step 1: Add page state variables after existing filter state (after line 1285)**
 
 ```typescript
 const [subPage, setSubPage] = useState(1);
 const [nonSubPage, setNonSubPage] = useState(1);
 ```
 
-- [ ] **Step 2: Remove the existing single `useQuery` block (lines 1295–1336)**
+- [x] **Step 2: Remove the existing single `useQuery` block (lines 1295–1336)**
 
 Delete the entire block from `const { data, isLoading, isError } = useQuery({` through the closing `});`.
 
-- [ ] **Step 3: Add three replacement queries**
+- [x] **Step 3: Add three replacement queries**
 
 ```typescript
 const subQuery = useQuery({
@@ -497,7 +497,7 @@ const deletedQuery = useQuery({
 });
 ```
 
-- [ ] **Step 4: Remove old derived state, add new derived state (lines 1338–1369)**
+- [x] **Step 4: Remove old derived state, add new derived state (lines 1338–1369)**
 
 Remove all of:
 ```typescript
@@ -527,7 +527,7 @@ const isError = showDeleted
   : subQuery.isError || nonSubQuery.isError;
 ```
 
-- [ ] **Step 5: Update tab count labels**
+- [x] **Step 5: Update tab count labels**
 
 Find the tab render block (around line 1535). Replace:
 ```typescript
@@ -553,7 +553,7 @@ With:
 },
 ```
 
-- [ ] **Step 6: Update deleted-mode content to use `deletedStudents`**
+- [x] **Step 6: Update deleted-mode content to use `deletedStudents`**
 
 Find line 1575 and update:
 ```typescript
@@ -575,7 +575,7 @@ Find the `allStudents.map` inside deleted mode and update:
 ))}
 ```
 
-- [ ] **Step 7: Remove the outer `!displayedStudents.length` empty state condition**
+- [x] **Step 7: Remove the outer `!displayedStudents.length` empty state condition**
 
 Find and remove this branch from the content conditional:
 ```typescript
@@ -595,7 +595,7 @@ isError ? (error UI)
 : (non-sub tab — section box handles own empty state)
 ```
 
-- [ ] **Step 8: Run tests**
+- [x] **Step 8: Run tests**
 
 ```bash
 cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
@@ -603,7 +603,7 @@ cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
 
 Expected: filter visibility tests ("hides month and payment status filters…") now pass. Maria Santos and Carlo Mendoza tests pass. Investigate any unexpected failures.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add "app/(kitchen)/students/page.tsx" && git commit -m "refactor(students): split single useQuery into independent subQuery/nonSubQuery/deletedQuery with page state"
@@ -622,7 +622,7 @@ cd ~/sunbites-pos && git add "app/(kitchen)/students/page.tsx" && git commit -m 
 - Produces: `StudentRow` function component — horizontal row layout replacing `StudentCard`
 - Produces: `Pagination` function component — page controls with ellipsis and "Showing X–Y of Z"
 
-- [ ] **Step 1: Add the `Pagination` component before `StudentsPage` (around line 1269)**
+- [x] **Step 1: Add the `Pagination` component before `StudentsPage` (around line 1269)**
 
 ```typescript
 // ---------------------------------------------------------------------------
@@ -716,7 +716,7 @@ function Pagination({
 }
 ```
 
-- [ ] **Step 2: Add the `StudentRow` component before `Pagination` (replacing `StudentCard` for the active list)**
+- [x] **Step 2: Add the `StudentRow` component before `Pagination` (replacing `StudentCard` for the active list)**
 
 ```typescript
 // ---------------------------------------------------------------------------
@@ -859,7 +859,7 @@ function StudentRow({
 }
 ```
 
-- [ ] **Step 3: Replace the All tab render block**
+- [x] **Step 3: Replace the All tab render block**
 
 Find the `activeTab === "all"` branch (around line 1590). Replace the entire block with:
 
@@ -964,7 +964,7 @@ Find the `activeTab === "all"` branch (around line 1590). Replace the entire blo
   </div>
 ```
 
-- [ ] **Step 4: Replace the single-tab render block**
+- [x] **Step 4: Replace the single-tab render block**
 
 Find the trailing `else` branch (around line 1642 — `displayedStudents.map`). Replace it with:
 
@@ -1062,7 +1062,7 @@ Find the trailing `else` branch (around line 1642 — `displayedStudents.map`). 
 )}
 ```
 
-- [ ] **Step 5: Run all tests**
+- [x] **Step 5: Run all tests**
 
 ```bash
 cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
@@ -1070,7 +1070,7 @@ cd ~/sunbites-pos && npx jest --testPathPattern="student-list" --no-coverage
 
 Expected: all 19+ tests pass, including the 5 new TDD tests.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add "app/(kitchen)/students/page.tsx" && git commit -m "feat(students): add StudentRow + Pagination, replace StudentCard in active list, wire two-query sections"
@@ -1085,13 +1085,13 @@ cd ~/sunbites-pos && git add "app/(kitchen)/students/page.tsx" && git commit -m 
 - `__tests__/mocks/handlers.ts`
 - `app/(kitchen)/students/student-list.test.tsx`
 
-- [ ] **Step 1: Format changed files**
+- [x] **Step 1: Format changed files**
 
 ```bash
 cd ~/sunbites-pos && npm run format
 ```
 
-- [ ] **Step 2: TypeScript type check**
+- [x] **Step 2: TypeScript type check**
 
 ```bash
 cd ~/sunbites-pos && npx tsc --noEmit
@@ -1099,7 +1099,7 @@ cd ~/sunbites-pos && npx tsc --noEmit
 
 Expected: zero type errors. Fix any that appear before proceeding.
 
-- [ ] **Step 3: Run full Jest test suite**
+- [x] **Step 3: Run full Jest test suite**
 
 ```bash
 cd ~/sunbites-pos && npx jest --no-coverage
@@ -1107,7 +1107,7 @@ cd ~/sunbites-pos && npx jest --no-coverage
 
 Expected: all tests pass.
 
-- [ ] **Step 4: Final commit**
+- [x] **Step 4: Final commit**
 
 ```bash
 cd ~/sunbites-pos && git add -A && git commit -m "chore(students): format and type-check after page redesign"
