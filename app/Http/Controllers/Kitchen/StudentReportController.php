@@ -152,7 +152,9 @@ class StudentReportController extends Controller
 
     private function schoolYearStart(): int
     {
-        return now()->month >= 6 ? (int) now()->format('Y') : (int) now()->format('Y') - 1;
+        $now = now();
+
+        return $now->month >= 6 ? $now->year : $now->year - 1;
     }
 
     private function monthsInRange(string $from, string $to): array
