@@ -158,7 +158,7 @@ class StudentDetailTest extends TestCase
         $this->assertSoftDeleted('students', ['id' => $student->id]);
     }
 
-    public function test_manager_can_downgrade_subscription_student_to_wallet(): void
+    public function test_update_type_rejects_subscription_to_non_subscription_downgrade(): void
     {
         $student = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
 
@@ -166,10 +166,10 @@ class StudentDetailTest extends TestCase
             'student_type' => 'non_subscription',
         ]);
 
-        $response->assertOk();
+        $response->assertUnprocessable();
         $this->assertDatabaseHas('students', [
             'id' => $student->id,
-            'student_type' => 'non_subscription',
+            'student_type' => 'subscription',
         ]);
     }
 
