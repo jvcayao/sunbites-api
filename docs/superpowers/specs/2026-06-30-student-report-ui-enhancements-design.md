@@ -185,8 +185,8 @@ Two columns appended after the existing 12:
 
 ## 7. What Is Not Changing
 
-- Summary cards (Total, By Grade, By Status) — no change
-- Pagination controls — no change
+- **Summary cards (Total, By Grade, By Status)** — branch-wide totals, intentionally independent of all filters and search. The three summary queries in `StudentReportController::index()` run without any filter conditions — this is existing behaviour and must not change. Do not pass `search`, `status`, `grade`, or `type` into those queries.
+- Pagination controls — no change in structure, but the `colSpan` on the empty-state and error-state `<td>` must increase from `7` to `8` when the chevron column is added. The `TableRowSkeleton` component must also render 8 cells instead of 7.
 - Export authorization (admin/manager only) — no change
 - Column 1–12 in the Excel export — no change
 - Any other page in the POS or portal apps
