@@ -27,6 +27,7 @@ class StudentController extends Controller
         $query->with([
             'contacts' => fn ($q) => $q->where('is_primary', true),
             'monthlyPayments',
+            'wallet',
         ])
             ->when($request->search, function ($q, $search) {
                 $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search);

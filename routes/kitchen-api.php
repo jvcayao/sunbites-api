@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Kitchen\ActivityLogController;
+use App\Http\Controllers\Kitchen\AnalyticsController;
 use App\Http\Controllers\Kitchen\AnnouncementController;
 use App\Http\Controllers\Kitchen\AuthController;
 use App\Http\Controllers\Kitchen\BillingReportController;
@@ -266,6 +267,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
             Route::get('/activity', [ActivityLogController::class, 'index']);
             Route::get('/billing/export', [BillingReportController::class, 'export']);
             Route::get('/credits', [CreditReportController::class, 'index']);
+            Route::get('/analytics', [AnalyticsController::class, 'index']);
         });
     });
 });
