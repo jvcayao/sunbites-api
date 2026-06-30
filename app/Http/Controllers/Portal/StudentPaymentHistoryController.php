@@ -24,6 +24,7 @@ class StudentPaymentHistoryController extends Controller
 
         $payments = $student->monthlyPayments()
             ->where('status', '!=', 'voided')
+            ->orderBy('year')
             ->get()
             ->sortBy(fn ($payment) => [$payment->year, array_search($payment->school_month->value, $monthOrder)])
             ->values()
