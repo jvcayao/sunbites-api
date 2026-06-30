@@ -101,7 +101,7 @@ class BillingReportController extends Controller
         return [
             'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
             'school_month' => ['nullable', 'string', Rule::in($this->schoolMonthValues())],
-            'status' => ['nullable', 'string', 'in:paid,unpaid'],
+            'status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
             'grade_level' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],
             'recorded_by' => ['nullable', 'integer', 'exists:users,id'],
@@ -118,7 +118,12 @@ class BillingReportController extends Controller
         return StudentMonthlyPayment::whereIn('student_id', $studentIds)
             ->where('year', $validated['year'])
             ->when(isset($validated['school_month']), fn ($q) => $q->where('school_month', $validated['school_month']))
-            ->when(isset($validated['status']), fn ($q) => $q->where('status', $validated['status']))
+            ->when(
+                isset($validated['status']) && $validated['status'] === 'voided',
+                fn ($q) => $q->where('status', 'voided'),
+                fn ($q) => $q->where('status', '!=', 'voided')
+                    ->when(isset($validated['status']), fn ($inner) => $inner->where('status', $validated['status']))
+            )
             ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])))
             ->when(isset($validated['recorded_by']), fn ($q) => $q->where('recorded_by', $validated['recorded_by']))
             ->when(
