@@ -375,6 +375,24 @@ class StudentReportTest extends TestCase
         $this->assertSame('', $row[13]);
     }
 
+    public function test_summary_total_defaults_to_enrolled_only_when_no_status_filter(): void
+    {
+        Student::factory()->count(3)->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'paused',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk();
+        // total = enrolled only (3), NOT all students (4)
+        $this->assertSame(3, $response->json('summary.total'));
+    }
+
     public function test_payment_filter_paid_returns_students_with_all_months_paid_in_range(): void
     {
         $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
