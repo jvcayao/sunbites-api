@@ -303,12 +303,12 @@ class StudentReportTest extends TestCase
             'first_name' => 'Maria',
         ]);
 
-        // Search narrows rows to 3, but summary must still show 4 enrolled
+        // Search narrows rows to 3, and summary also reflects the search filter
         $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan');
 
         $response->assertOk();
         $this->assertCount(3, $response->json('data'));
-        $this->assertSame(4, $response->json('summary.total'));
+        $this->assertSame(3, $response->json('summary.total'));
     }
 
     public function test_export_respects_search_param(): void
@@ -373,5 +373,162 @@ class StudentReportTest extends TestCase
 
         $this->assertSame('', $row[12]);
         $this->assertSame('', $row[13]);
+    }
+
+    public function test_payment_filter_paid_returns_students_with_all_months_paid_in_range(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        // Student A: paid for June, July, August — should be included
+        $paidStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        foreach (['june', 'july', 'august'] as $month) {
+            $paidStudent->monthlyPayments()->create([
+                'school_month' => $month,
+                'year' => $yearStart,
+                'status' => 'paid',
+                'amount' => 2970,
+            ]);
+        }
+
+        // Student B: paid June and July only, missing August — should be excluded
+        $partialStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        foreach (['june', 'july'] as $month) {
+            $partialStudent->monthlyPayments()->create([
+                'school_month' => $month,
+                'year' => $yearStart,
+                'status' => 'paid',
+                'amount' => 2970,
+            ]);
+        }
+
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?type=subscription&payment_status=paid&payment_from=june&payment_to=august'
+        );
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($paidStudent->id, $response->json('data.0.id'));
+    }
+
+    public function test_payment_filter_unpaid_returns_students_with_any_unpaid_month_in_range(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        // Student with one unpaid month — should be included
+        $unpaidStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $unpaidStudent->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'unpaid',
+            'amount' => 2970,
+        ]);
+
+        // Student with all paid — should be excluded
+        $paidStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $paidStudent->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?type=subscription&payment_status=unpaid&payment_from=june&payment_to=june'
+        );
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($unpaidStudent->id, $response->json('data.0.id'));
+    }
+
+    public function test_payment_filter_voided_returns_students_with_any_voided_month(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        $voidedStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $voidedStudent->monthlyPayments()->create([
+            'school_month' => 'july',
+            'year' => $yearStart,
+            'status' => 'voided',
+            'amount' => 2970,
+        ]);
+
+        $normalStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $normalStudent->monthlyPayments()->create([
+            'school_month' => 'july',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?type=subscription&payment_status=voided&payment_from=july&payment_to=july'
+        );
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($voidedStudent->id, $response->json('data.0.id'));
+    }
+
+    public function test_payment_filter_is_ignored_when_type_is_not_subscription(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        // Non-subscription student with no payment records — should appear
+        $nonSubStudent = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_type' => 'non_subscription',
+            'enrollment_status' => 'enrolled',
+        ]);
+
+        // Passing payment_status without type=subscription — filter must be ignored
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?payment_status=paid&payment_from=june&payment_to=june'
+        );
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($nonSubStudent->id));
+    }
+
+    public function test_export_accepts_payment_filter_params(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        $student = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $student->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asManager()->getJson(
+            '/api/v1/reports/students/export?type=subscription&payment_status=paid&payment_from=june&payment_to=june'
+        );
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 }
