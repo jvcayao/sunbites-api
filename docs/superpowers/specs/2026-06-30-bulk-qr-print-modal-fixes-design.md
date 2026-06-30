@@ -60,22 +60,30 @@ const dialogWidthClass = {
 
 ### Fix
 
-Call `getCardAccentColors(student.student_type)` at the top of `QrCard` and replace every hardcoded red color reference with the resolved token:
+Call `getCardAccentColors(student.student_type)` at the top of `QrCard` and replace every hardcoded color with the correct token. Complete map of all 11 occurrences:
 
-| Hardcoded value | Replace with |
-|----------------|-------------|
-| `oklch(0.577 0.245 27.325)` | `colors.accentColor` |
-| `#fff3f0` (avatar/footer bg) | `colors.avatarBg` / `colors.footerBg` |
-| `#fdd8cc` (footer border) | `colors.footerBorder` |
-| Header `backgroundColor` | `colors.headerBg` |
-| Header text `color` | `colors.headerText` |
-| Avatar initial `color` | `colors.accentColor` |
-| Border `color` | `colors.borderColor` |
+| Line | Hardcoded value | Token | Note |
+|------|----------------|-------|------|
+| 651 | `"2px solid oklch(0.577 0.245 27.325)"` | `colors.borderColor` | outer card border |
+| 662 | `backgroundColor: "oklch(0.577 0.245 27.325)"` | `colors.headerBg` | header background |
+| 667 | `color: "white"` | `colors.headerText` | non-sub uses `#1a1611` (dark), not white |
+| 679 | `color: "rgba(255,255,255,0.85)"` | `colors.headerSubText` | non-sub uses `rgba(26,22,17,0.75)` |
+| 709 | `"2px solid oklch(0.577 0.245 27.325)"` | `colors.borderColor` | photo border |
+| 719 | `"2px solid oklch(0.577 0.245 27.325)"` | `colors.borderColor` | avatar border (no-photo) |
+| 720 | `backgroundColor: "#fff3f0"` | `colors.avatarBg` | avatar bg (no-photo) |
+| 726 | `color: "oklch(0.577 0.245 27.325)"` | `colors.accentColor` | avatar initial text — non-sub uses `#d69400` |
+| 745 | `color: "oklch(0.577 0.245 27.325)"` | `colors.accentColor` | grade level text |
+| 790 | `backgroundColor: "#fff3f0"` | `colors.footerBg` | footer background |
+| 791 | `borderTop: "1px solid #fdd8cc"` | `colors.footerBorder` | footer border |
+
+> `borderColor` and `accentColor` differ for non-subscription (`#f4b400` vs `#d69400`). Do not interchange them.
+
+Neutral values that must NOT change: QR box border `#e0e0e0`, QR text `#888`, body text `#555`/`#444`/`#666` — these are type-neutral styling.
 
 ```tsx
 function QrCard({ student }: { student: Student }) {
   const colors = getCardAccentColors(student.student_type);
-  // use colors.* instead of hardcoded oklch/hex values
+  // use colors.* per the table above
 ```
 
 ---
