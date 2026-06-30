@@ -45,9 +45,9 @@ A student is considered a duplicate when **all three** match within the same bra
 ### What to Check Against
 
 1. `students` table — active enrolled students (`deleted_at IS NULL`)
-2. `pre_registrations` table — records with status `pending` or `approved`
+2. `pre_registrations` table — records with status `pending` only
 
-Rejected and expired pre-registrations are excluded — they should not block new submissions.
+`approved` pre-registrations are excluded: approval calls `EnrollmentService::enroll()` in the same request, so an approved pre-registration always has a matching student in the `students` table already. Including `approved` would be redundant and risks a false-positive block if enrollment ever fails mid-approval. Rejected and expired pre-registrations are also excluded — they should not block new submissions.
 
 ---
 
@@ -62,6 +62,10 @@ Pre-registration is always anonymous. Parent duplicate checks are informational 
 | Neither | — | Skip | No action |
 
 When a parent with an existing account submits a pre-registration (e.g., adding a second child), the soft info message reads: *"This email is linked to an existing parent account. Your child will be linked to it upon approval."* Submission still proceeds.
+
+**Phone-only parent provisioning limitation:** `ParentProvisioningService::provision()` requires email — it cannot create or link a parent account from phone alone. If a primary contact provides phone but no email, no parent account is created or linked at approval time. Staff must manually create the parent account from the POS after approval. The `parent_phone_exists` flag on the pre-registration record signals this case to staff.
+
+**Note on what `email` and `phone` mean in the check request:** These are the **primary contact's** email and phone — the person who submitted the pre-registration and who will be provisioned as the parent portal account.
 
 ---
 
@@ -109,6 +113,8 @@ POST /api/v1/portal/pre-registrations/check
 `student.status` values: `"enrolled"` | `"pending"` | `null`
 
 **Privacy:** Response returns only boolean flags. No student name, ID, or personal details are exposed.
+
+**Branch scoping:** This endpoint has no auth context, so the global `BranchScope` (which reads from the service container) is not active. All queries against `students` and `pre_registrations` must use `withoutGlobalScopes()->where('branch_id', $request->branch_id)` to avoid silently returning no results.
 
 ---
 
@@ -230,6 +236,7 @@ ParentProvisioningService::provision()
 ```
 ✓ returns student.is_duplicate: true, status: 'enrolled' when name + birthday matches active student
 ✓ returns student.is_duplicate: true, status: 'pending' when name + birthday matches pending pre-registration
+✓ returns student.is_duplicate: false when name + birthday matches approved pre-registration (approved → student already exists)
 ✓ returns student.is_duplicate: false when no student or pre-registration matches
 ✓ returns parent.email_exists: true when email matches existing parent account
 ✓ returns parent.phone_exists: true when phone matches and no email provided
@@ -237,14 +244,14 @@ ParentProvisioningService::provision()
 ✓ does NOT return student name, ID, or any identifying details in response
 ✓ returns 422 when first_name, last_name, birthday, or branch_id is missing
 ✓ ignores soft-deleted students
-✓ ignores rejected and expired pre-registrations
+✓ ignores approved, rejected, and expired pre-registrations in the pre_registrations check
 ```
 
 ### Portal Pre-Registration Submit
 
 ```
 ✓ returns 422 when student name + birthday matches enrolled student
-✓ returns 422 when student name + birthday matches pending pre-registration
+✓ returns 422 when student name + birthday matches pending pre-registration (status: pending only)
 ✓ returns 201 with warnings.parent_email_exists: true when email matches existing parent
 ✓ returns 201 with warnings.parent_phone_exists: true when phone matches and no email provided
 ✓ returns 201 and creates record when no duplicate exists
