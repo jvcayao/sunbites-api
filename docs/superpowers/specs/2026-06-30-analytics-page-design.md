@@ -61,10 +61,10 @@ A sticky filter bar fixed at the top of the page, always visible while scrolling
 ### Query params sent to API
 
 ```
-from_month=June&from_year=2025&to_month=March&to_year=2026
+from_month=june&from_year=2025&to_month=march&to_year=2026
 ```
 
-Month values use the `SchoolMonth` enum string values already used throughout the API.
+Month values use the `SchoolMonth` enum **lowercase** string values (`june`, `july`, …, `march`) — matching the actual enum `.value` in the codebase. Example: `from_month=june&from_year=2025&to_month=march&to_year=2026`.
 
 ---
 
@@ -114,6 +114,15 @@ Month values use the `SchoolMonth` enum string values already used throughout th
     ],
     "top_items": [
       { "name": "Chicken Rice", "quantity": 1245 }
+    ],
+    "peak_hours": [
+      { "hour": "6am",  "avg_orders": 18 },
+      { "hour": "7am",  "avg_orders": 67 },
+      { "hour": "8am",  "avg_orders": 124 },
+      { "hour": "9am",  "avg_orders": 156 },
+      { "hour": "10am", "avg_orders": 189 },
+      { "hour": "11am", "avg_orders": 243 },
+      { "hour": "12pm", "avg_orders": 142 }
     ]
   },
   "students": {
@@ -186,15 +195,6 @@ Month values use the `SchoolMonth` enum string values already used throughout th
       { "range": "₱1–₱100",   "count": 8 },
       { "range": "₱101–₱200", "count": 6 },
       { "range": "₱201–₱300", "count": 4 }
-    ],
-    "peak_hours": [
-      { "hour": "6am",  "avg_orders": 18 },
-      { "hour": "7am",  "avg_orders": 67 },
-      { "hour": "8am",  "avg_orders": 124 },
-      { "hour": "9am",  "avg_orders": 156 },
-      { "hour": "10am", "avg_orders": 189 },
-      { "hour": "11am", "avg_orders": 243 },
-      { "hour": "12pm", "avg_orders": 142 }
     ]
   },
   "inventory": {
@@ -223,8 +223,48 @@ Month values use the `SchoolMonth` enum string values already used throughout th
 | Students | `students` — counts, grade grouping; `student_type` change events from `activity_log` |
 | Billing | `student_monthly_payments` — grouped by `school_month`+`year` and `status` (paid/unpaid/void) |
 | Wallet | `transactions` joined to `wallets` where `holder_type = Student` for the branch |
-| Credits | `students.credit_balance > 0`; `orders.created_at` hour extraction for peak hours |
-| Inventory | `inventory_logs` for consumed quantities; `inventory_items` for current stock levels |
+| Credits | `students.credit_balance > 0` — live snapshot, not period-filtered |
+| Inventory | `inventory_logs` — `type = 'sale'` for consumption; `type = 'restock'` for restock counts; `inventory_items` for current stock levels and `restock_threshold` |
+
+### Month-to-date range conversion
+
+`from_month=june&from_year=2025` → `2025-06-01 00:00:00`
+`to_month=march&to_year=2026` → `2026-03-31 23:59:59`
+
+Use `Carbon::create($year, $monthEnum->toMonthNumber(), 1)->startOfMonth()` for the start and `->endOfMonth()` for the end. Pass these as the `whereBetween` bounds on `created_at` / `recorded_at` across all sections.
+
+### Wallet — bavix cents convention
+
+The `transactions` table stores amounts in **integer cents** (bavix/laravel-wallet convention). Withdrawals are stored as negative values. Always apply `ABS(amount) / 100.0` when summing. Example from the existing `WalletReportController`:
+
+```php
+SUM(CASE WHEN type = 'deposit'  THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credits,
+SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debits
+```
+
+### `new_enrollments` definition
+
+Count of students whose `created_at` falls within the period date range AND `branch_id` matches the active branch. This represents students who were first registered during the period.
+
+### `billing.by_grade` — count definition
+
+Each grade's `paid`, `unpaid`, and `void` values are **payment record counts** (`student_monthly_payments` rows), not student counts. A single student with 10 months of paid records contributes 10 to the paid count. This matches what the stacked bar chart needs — total payment obligations per grade, broken down by status.
+
+### Inventory — `top_consumed` query
+
+Filter `inventory_logs` where `type = 'sale'` and `branch_id` matches. Sum `ABS(quantity_change)` grouped by `inventory_item_id`. Join `inventory_items` to get `name` and `unit`. Return top 10 by total consumption descending.
+
+### Inventory — `most_restocked_item`
+
+Filter `inventory_logs` where `type = 'restock'` and `branch_id` matches, within the period. Count rows grouped by `inventory_item_id`. The item with the highest count is `most_restocked_item`. Use `item_name_snapshot` for the display name.
+
+### Inventory — `stock_events` (low/out per month)
+
+For each month in the period: count distinct `inventory_item_id` values where any `inventory_logs` row within that month has:
+- `stock_after <= inventory_items.restock_threshold` → low event
+- `stock_after = 0` → out-of-stock event
+
+Requires a join to `inventory_items` on `inventory_item_id` to access `restock_threshold`.
 
 ### Collection rate formula
 
@@ -282,11 +322,11 @@ The filter bar holds `params` in local state (`useState`). Clicking **Apply** up
 
 ### Chart library
 
-All charts use **Recharts**. Chart component mapping:
+All charts use **Recharts** (https://recharts.org). Chart component mapping:
 
 | Chart | Recharts component |
 |---|---|
-| Revenue & Orders trend | `AreaChart` + `Bar` (composed) |
+| Revenue & Orders trend | `ComposedChart` with `Area` (revenue, left Y-axis) + `Bar` (orders, right Y-axis) — dual `YAxis` required |
 | Payment method donut | `PieChart` with `innerRadius` |
 | Top items | `BarChart` horizontal (`layout="vertical"`) |
 | Student type donut | `PieChart` with `innerRadius` |
@@ -322,9 +362,10 @@ All charts use **Recharts**. Chart component mapping:
 **KPI cards (5):** Total Revenue · Total Orders · Avg Order Value · Total Discounts · Net Revenue
 
 **Charts:**
-- Monthly Revenue & Orders — `ComposedChart` with `Area` (revenue) + `Bar` (orders) on dual Y-axes
+- Monthly Revenue & Orders — `ComposedChart` with `Area` (revenue, `yAxisId="left"`) + `Bar` (orders, `yAxisId="right"`) — two `YAxis` components required since revenue (₱) and orders (count) are different scales
 - Payment Method Breakdown — `PieChart` donut (wallet / cash / other) by count
 - Top 10 Selling Items — horizontal `BarChart` sorted descending by quantity
+- Peak Ordering Hours — vertical `BarChart` with `Cell` highlighting the peak hour; data is `avg_orders` per hour across the full period (6am–12pm)
 
 ---
 
@@ -368,7 +409,6 @@ All charts use **Recharts**. Chart component mapping:
 
 **Charts:**
 - Credit Balance Distribution — vertical `BarChart` (3 ranges: ₱1–100, ₱101–200, ₱201–300)
-- Peak Ordering Hours — vertical `BarChart` with `Cell` highlighting the peak hour bar in primary teal; all others in a muted teal tint
 
 ---
 
