@@ -25,11 +25,11 @@ Four enhancements to the student report page (`/reports/students`):
 When `Type = Subscription` is selected:
 - A new `FilterPillGroup` row appears below the Type row:
   ```
-  Payment  [All]  [Paid]  [Unpaid]
+  Payment  [All]  [Paid]  [Unpaid]  [Void]
   ```
-- When `Paid` or `Unpaid` is active, two `<Select>` dropdowns appear on the same row:
+- When `Paid`, `Unpaid`, or `Void` is active, two `<Select>` dropdowns appear on the same row:
   ```
-  Payment  [All]  [Paid]  [Unpaid]
+  Payment  [All]  [Paid]  [Unpaid]  [Void]
            From [June ▾]  To [March ▾]
   ```
 - Dropdowns default to `June` (from) and `March` (to) — the full school year.
@@ -37,11 +37,12 @@ When `Type = Subscription` is selected:
 - `To` must always be ≥ `From` in school-year order. If the user changes `From` to a month after `To`, reset `To` to match `From`.
 - Any change to Payment pills or From/To dropdowns resets `page` to 1.
 - When `Type` is changed away from Subscription, reset `paymentStatus` to `''`, `paymentFrom` to `'june'`, `paymentTo` to `'march'`.
+- Range dropdowns appear when `Paid`, `Unpaid`, or `Void` is active — NOT when `All` is active.
 
 ### Frontend state additions
 
 ```typescript
-const [paymentStatus, setPaymentStatus] = useState<string>("");   // '' | 'paid' | 'unpaid'
+const [paymentStatus, setPaymentStatus] = useState<string>("");   // '' | 'paid' | 'unpaid' | 'voided'
 const [paymentFrom, setPaymentFrom] = useState<string>("june");
 const [paymentTo, setPaymentTo] = useState<string>("march");
 ```
@@ -56,7 +57,7 @@ payment_to:     studentType === 'subscription' && paymentStatus ? paymentTo : un
 ### New `StudentReportParams` type additions
 
 ```typescript
-payment_status?: string;   // 'paid' | 'unpaid'
+payment_status?: string;   // 'paid' | 'unpaid' | 'voided'
 payment_from?: string;     // school month slug e.g. 'june'
 payment_to?: string;       // school month slug e.g. 'march'
 ```
@@ -66,7 +67,7 @@ payment_to?: string;       // school month slug e.g. 'march'
 Added to both `index()` and `export()`:
 
 ```php
-'payment_status' => ['nullable', 'string', 'in:paid,unpaid'],
+'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
 'payment_from'   => ['nullable', 'string', 'in:june,july,august,september,october,november,december,january,february,march'],
 'payment_to'     => ['nullable', 'string', 'in:june,july,august,september,october,november,december,january,february,march'],
 ```
@@ -136,9 +137,10 @@ private function applyPaymentFilter(Builder $query, string $status, string $from
             );
         }
     } else {
-        // Student has at least one unpaid record in the range
-        $query->whereHas('monthlyPayments', function ($q) use ($monthYearPairs) {
-            $q->where('status', 'unpaid')
+        // Student has at least one unpaid/voided record in the range
+        $targetStatus = $status; // 'unpaid' or 'voided'
+        $query->whereHas('monthlyPayments', function ($q) use ($monthYearPairs, $targetStatus) {
+            $q->where('status', $targetStatus)
               ->where(function ($inner) use ($monthYearPairs) {
                   foreach ($monthYearPairs as ['month' => $m, 'year' => $y]) {
                       $inner->orWhere(fn ($c) => $c->where('school_month', $m)->where('year', $y));
