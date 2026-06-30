@@ -30,6 +30,7 @@ use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\StudentReportController;
 use App\Http\Controllers\Kitchen\SubscriptionConfigController;
+use App\Http\Controllers\Kitchen\SubscriptionDowngradeController;
 use App\Http\Controllers\Kitchen\SubscriptionReportController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
@@ -151,6 +152,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/students/{student}/regenerate-qr', [StudentController::class, 'regenerateQr']);
         Route::patch('/students/{student}/status', [StudentController::class, 'updateStatus']);
         Route::patch('/students/{student}/type', [StudentController::class, 'updateType']);
+        Route::get('/students/{student}/subscription-downgrade-preview', [SubscriptionDowngradeController::class, 'preview']);
         Route::get('/students/{student}/orders', [StudentController::class, 'orders']);
         Route::post('/students/{student}/wallet/top-up', [WalletController::class, 'topUp']);
         Route::get('/students/{student}/payments', [PaymentController::class, 'index']);
