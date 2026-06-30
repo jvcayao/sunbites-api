@@ -2,24 +2,19 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Enums\SchoolMonth;
 use App\Exports\StudentsExport;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StudentReportController extends Controller
 {
-    private const SCHOOL_MONTH_ORDER = [
-        'june', 'july', 'august', 'september', 'october',
-        'november', 'december', 'january', 'february', 'march',
-    ];
-
-    private const NEXT_YEAR_MONTHS = ['january', 'february', 'march'];
-
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -28,8 +23,8 @@ class StudentReportController extends Controller
             'type' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],
             'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'payment_from' => ['nullable', 'string', 'in:june,july,august,september,october,november,december,january,february,march'],
-            'payment_to' => ['nullable', 'string', 'in:june,july,august,september,october,november,december,january,february,march'],
+            'payment_from' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
+            'payment_to' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -40,35 +35,17 @@ class StudentReportController extends Controller
         $applyPayment = filled($validated['payment_status'] ?? null)
             && ($validated['type'] ?? null) === 'subscription';
 
-        $query = Student::where('branch_id', $branchId)
+        $baseQuery = $this->buildStudentQuery($branchId, $validated, $applyPayment);
+
+        $query = (clone $baseQuery)
             ->with([
                 'wallet',
                 'monthlyPayments' => fn ($q) => $q->whereIn('year', [$yearStart, $yearStart + 1]),
             ])
-            ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
-            ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
-            ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
-            ->when(filled($validated['search'] ?? null), fn ($q) => $this->applySearch($q, $validated['search']))
-            ->when($applyPayment, fn ($q) => $this->applyPaymentFilter(
-                $q,
-                $validated['payment_status'],
-                $validated['payment_from'] ?? 'june',
-                $validated['payment_to'] ?? 'march',
-            ))
             ->orderBy('last_name')
             ->orderBy('first_name');
 
-        $summaryBase = Student::where('branch_id', $branchId)
-            ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
-            ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
-            ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
-            ->when(filled($validated['search'] ?? null), fn ($q) => $this->applySearch($q, $validated['search']))
-            ->when($applyPayment, fn ($q) => $this->applyPaymentFilter(
-                $q,
-                $validated['payment_status'],
-                $validated['payment_from'] ?? 'june',
-                $validated['payment_to'] ?? 'march',
-            ));
+        $summaryBase = clone $baseQuery;
 
         $total = (clone $summaryBase)
             ->when(
@@ -117,8 +94,8 @@ class StudentReportController extends Controller
             'type' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],
             'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'payment_from' => ['nullable', 'string', 'in:june,july,august,september,october,november,december,january,february,march'],
-            'payment_to' => ['nullable', 'string', 'in:june,july,august,september,october,november,december,january,february,march'],
+            'payment_from' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
+            'payment_to' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
         ]);
 
         $branch = app('active_branch');
@@ -126,11 +103,23 @@ class StudentReportController extends Controller
         $applyPayment = filled($validated['payment_status'] ?? null)
             && ($validated['type'] ?? null) === 'subscription';
 
-        $students = Student::where('branch_id', $branch->id)
+        $students = $this->buildStudentQuery($branch->id, $validated, $applyPayment)
             ->with([
                 'contacts' => fn ($q) => $q->where('is_primary', true),
                 'wallet',
             ])
+            ->orderBy('last_name')
+            ->orderBy('first_name')
+            ->get();
+
+        $filename = "students-{$branch->slug}-".now()->format('Y-m-d').'.xlsx';
+
+        return Excel::download(new StudentsExport($students), $filename);
+    }
+
+    private function buildStudentQuery(int $branchId, array $validated, bool $applyPayment): Builder
+    {
+        return Student::where('branch_id', $branchId)
             ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
             ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
             ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
@@ -140,14 +129,7 @@ class StudentReportController extends Controller
                 $validated['payment_status'],
                 $validated['payment_from'] ?? 'june',
                 $validated['payment_to'] ?? 'march',
-            ))
-            ->orderBy('last_name')
-            ->orderBy('first_name')
-            ->get();
-
-        $filename = "students-{$branch->slug}-".now()->format('Y-m-d').'.xlsx';
-
-        return Excel::download(new StudentsExport($students), $filename);
+            ));
     }
 
     private function schoolYearStart(): int
@@ -159,24 +141,24 @@ class StudentReportController extends Controller
 
     private function monthsInRange(string $from, string $to): array
     {
-        $fromIdx = array_search($from, self::SCHOOL_MONTH_ORDER, true);
-        $toIdx = array_search($to, self::SCHOOL_MONTH_ORDER, true);
+        $cases = array_column(SchoolMonth::cases(), 'value');
+        $fromIdx = array_search($from, $cases, true);
+        $toIdx = array_search($to, $cases, true);
 
         if ($fromIdx === false || $toIdx === false || $toIdx < $fromIdx) {
             return [$from];
         }
 
-        return array_slice(self::SCHOOL_MONTH_ORDER, $fromIdx, $toIdx - $fromIdx + 1);
+        return array_slice($cases, $fromIdx, $toIdx - $fromIdx + 1);
     }
 
     private function applyPaymentFilter(Builder $query, string $status, string $from, string $to): void
     {
         $yearStart = $this->schoolYearStart();
-        $months = $this->monthsInRange($from, $to);
         $monthYearPairs = array_map(fn (string $m) => [
             'month' => $m,
-            'year' => in_array($m, self::NEXT_YEAR_MONTHS, true) ? $yearStart + 1 : $yearStart,
-        ], $months);
+            'year' => SchoolMonth::from($m)->toMonthNumber() <= 3 ? $yearStart + 1 : $yearStart,
+        ], $this->monthsInRange($from, $to));
 
         if ($status === 'paid') {
             foreach ($monthYearPairs as ['month' => $m, 'year' => $y]) {
@@ -212,15 +194,16 @@ class StudentReportController extends Controller
             ->keyBy(fn ($p) => $p->school_month->value.'-'.$p->year);
 
         return array_map(function (string $month) use ($yearStart, $payments) {
-            $year = in_array($month, self::NEXT_YEAR_MONTHS, true) ? $yearStart + 1 : $yearStart;
+            $schoolMonth = SchoolMonth::from($month);
+            $year = $schoolMonth->toMonthNumber() <= 3 ? $yearStart + 1 : $yearStart;
             $payment = $payments->get($month.'-'.$year);
 
             return [
                 'month' => $month,
-                'month_label' => ucfirst($month),
+                'month_label' => $schoolMonth->label(),
                 'year' => $year,
                 'status' => $payment?->status ?? 'no_record',
             ];
-        }, self::SCHOOL_MONTH_ORDER);
+        }, array_column(SchoolMonth::cases(), 'value'));
     }
 }
