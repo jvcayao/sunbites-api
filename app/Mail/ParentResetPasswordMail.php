@@ -35,10 +35,12 @@ class ParentResetPasswordMail extends Mailable implements ShouldQueue
         ]);
 
         return new Content(
-            view: 'emails.parent-reset-password',
+            view: 'emails.reset-password',
             with: [
                 'firstName' => $this->parent->first_name,
                 'resetUrl' => $resetUrl,
+                'accountLabel' => 'Sunbites Parent Portal account',
+                'expiresInMinutes' => config('auth.passwords.parents.expire'),
             ],
         );
     }

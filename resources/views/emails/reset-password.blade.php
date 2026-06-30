@@ -6,7 +6,7 @@
     <p style="margin:0 0 16px;">Hi {{ $firstName }},</p>
 
     <p style="margin:0 0 20px;">
-        We received a request to reset the password for your Sunbites Parent Portal account.
+        We received a request to reset the password for your {{ $accountLabel }}.
         Click the button below to set a new password.
     </p>
 
@@ -18,7 +18,7 @@
     </div>
 
     <p style="margin:0 0 16px;color:#6b7280;font-size:13px;">
-        This reset link will expire in <strong>60 minutes</strong>.
+        This reset link will expire in <strong>{{ $expiresInMinutes }} minutes</strong>.
     </p>
 
     <p style="margin:0;color:#6b7280;font-size:13px;">

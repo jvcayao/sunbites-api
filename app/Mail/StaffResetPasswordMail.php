@@ -35,10 +35,12 @@ class StaffResetPasswordMail extends Mailable implements ShouldQueue
         ]);
 
         return new Content(
-            view: 'emails.staff-reset-password',
+            view: 'emails.reset-password',
             with: [
-                'name' => $this->user->first_name,
+                'firstName' => $this->user->first_name,
                 'resetUrl' => $resetUrl,
+                'accountLabel' => 'Sunbites staff account',
+                'expiresInMinutes' => config('auth.passwords.users.expire'),
             ],
         );
     }
