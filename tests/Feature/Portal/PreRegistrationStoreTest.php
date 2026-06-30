@@ -109,6 +109,19 @@ class PreRegistrationStoreTest extends TestCase
             ->assertCreated();
     }
 
+    public function test_does_not_block_when_approved_pre_registration_exists(): void
+    {
+        PreRegistration::factory()->approved()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'dela Cruz',
+            'birthday' => '2015-03-15',
+        ]);
+
+        $this->postJson('/api/v1/portal/pre-registrations', $this->payload())
+            ->assertCreated();
+    }
+
     public function test_name_matching_is_case_insensitive(): void
     {
         Student::factory()->create([
