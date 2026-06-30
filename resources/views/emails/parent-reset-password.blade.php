@@ -11,7 +11,7 @@
     </p>
 
     <div style="text-align:center;margin:28px 0;">
-        <a href="{{ $resetUrl }}"
+        <a href="{!! $resetUrl !!}"
            style="background-color:#dc2626;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;font-size:15px;">
             Reset Password
         </a>

@@ -26,6 +26,9 @@ class StaffResetPasswordMail extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
+        // http_build_query produces literal & separators. The view uses {!! !!}
+        // intentionally to avoid &amp; in the href, which breaks link parsing in
+        // Outlook on Windows and some email security scanners.
         $resetUrl = rtrim(config('app.pos_url'), '/').'/reset-password?'.http_build_query([
             'token' => $this->token,
             'email' => $this->user->email,
