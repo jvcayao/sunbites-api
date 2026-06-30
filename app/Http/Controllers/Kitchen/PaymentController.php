@@ -29,6 +29,8 @@ class PaymentController extends Controller
                 'status' => $p->status,
                 'amount' => $p->amount,
                 'recorded_at' => $p->recorded_at?->toDateTimeString(),
+                'voided_at' => $p->voided_at?->toDateTimeString(),
+                'void_reason' => $p->void_reason,
             ]);
 
         return response()->json($payments);
@@ -52,6 +54,7 @@ class PaymentController extends Controller
     public function toggle(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
     {
         abort_if($payment->student_id !== $student->id, 403);
+        abort_if($payment->status === 'voided', 422, 'Cannot modify a voided payment.');
 
         $newStatus = $payment->status === 'paid' ? 'unpaid' : 'paid';
 
@@ -93,6 +96,8 @@ class PaymentController extends Controller
             ->where('school_month', $validated['school_month'])
             ->where('year', $validated['year'])
             ->firstOrFail();
+
+        abort_if($payment->status === 'voided', 422, 'Cannot record payment on a voided record.');
 
         $payment->update([
             'status' => 'paid',
