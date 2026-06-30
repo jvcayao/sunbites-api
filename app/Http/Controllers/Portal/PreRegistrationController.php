@@ -44,28 +44,23 @@ class PreRegistrationController extends Controller
             'contacts.*.is_primary' => ['boolean'],
         ]);
 
-        $branchId = $validated['branch_id'];
-        $firstName = $validated['first_name'];
-        $lastName = $validated['last_name'];
-        $birthday = $validated['birthday'];
-
-        if ($this->duplicateService->isEnrolledStudent($branchId, $firstName, $lastName, $birthday)) {
+        if ($this->duplicateService->isEnrolledStudent($validated['branch_id'], $validated['first_name'], $validated['last_name'], $validated['birthday'])) {
             return response()->json([
                 'message' => 'A student with these details is already enrolled.',
                 'errors' => [
                     'student' => [
-                        "A student named {$firstName} {$lastName} (born {$birthday}) is already enrolled at this branch.",
+                        "A student named {$validated['first_name']} {$validated['last_name']} (born {$validated['birthday']}) is already enrolled at this branch.",
                     ],
                 ],
             ], 422);
         }
 
-        if ($this->duplicateService->hasPendingPreRegistration($branchId, $firstName, $lastName, $birthday)) {
+        if ($this->duplicateService->hasPendingPreRegistration($validated['branch_id'], $validated['first_name'], $validated['last_name'], $validated['birthday'])) {
             return response()->json([
                 'message' => 'A pre-registration for this student is already pending review.',
                 'errors' => [
                     'student' => [
-                        "A pre-registration for {$firstName} {$lastName} (born {$birthday}) is already pending review.",
+                        "A pre-registration for {$validated['first_name']} {$validated['last_name']} (born {$validated['birthday']}) is already pending review.",
                     ],
                 ],
             ], 422);
@@ -83,13 +78,13 @@ class PreRegistrationController extends Controller
         $expiryDays = SystemConfiguration::getValue('pre_registration_expiry_days', 30);
 
         $preRegistration = PreRegistration::create([
-            'branch_id' => $branchId,
-            'first_name' => $firstName,
-            'last_name' => $lastName,
+            'branch_id' => $validated['branch_id'],
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
             'student_number' => $validated['student_number'] ?? null,
             'grade_level' => $validated['grade_level'],
             'section' => $validated['section'] ?? null,
-            'birthday' => $birthday,
+            'birthday' => $validated['birthday'],
             'enrollment_type' => $validated['enrollment_type'],
             'allergies' => isset($validated['allergies']) ? strip_tags($validated['allergies']) : null,
             'notes' => isset($validated['notes']) ? strip_tags($validated['notes']) : null,
