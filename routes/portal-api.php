@@ -6,6 +6,7 @@ use App\Http\Controllers\Portal\DashboardController;
 use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\MealPlannerController;
 use App\Http\Controllers\Portal\NotificationController;
+use App\Http\Controllers\Portal\PreRegistrationCheckController;
 use App\Http\Controllers\Portal\ProfileController;
 use App\Http\Controllers\Portal\SpendingSummaryController;
 use App\Http\Controllers\Portal\StudentController;
@@ -14,6 +15,11 @@ use App\Http\Controllers\Portal\StudentPhotoController;
 use App\Http\Controllers\Portal\WalletController;
 use Illuminate\Broadcasting\BroadcastController;
 use Illuminate\Support\Facades\Route;
+
+// Pre-registration — public (rate limited)
+Route::middleware(['throttle:10,1'])->group(function () {
+    Route::post('/pre-registrations/check', [PreRegistrationCheckController::class, 'check']);
+});
 
 // Parent auth — public (rate limited)
 Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:portal-login');
