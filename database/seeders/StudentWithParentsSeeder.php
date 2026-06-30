@@ -52,22 +52,36 @@ class StudentWithParentsSeeder extends Seeder
         $parents = ParentUser::factory()->count($parentCount)->create()->values();
 
         $pivotRows = [];
+        $contactRows = [];
         $now = now()->toDateTimeString();
         $parentIndex = 0;
 
         foreach ($soloIds as $studentId) {
+            $parent = $parents[$parentIndex];
             $pivotRows[] = [
                 'student_id' => $studentId,
-                'parent_id' => $parents[$parentIndex]->id,
+                'parent_id' => $parent->id,
                 'linked_at' => $now,
                 'linked_by' => $staffUser->id,
                 'wallet_alert_threshold' => fake()->randomElement([0, 50, 100, 150, 200]),
+            ];
+            $contactRows[] = [
+                'student_id' => $studentId,
+                'full_name' => $parent->first_name.' '.$parent->last_name,
+                'relationship' => 'Parent',
+                'phone' => fake()->phoneNumber(),
+                'address' => fake()->address(),
+                'email' => $parent->email,
+                'is_primary' => true,
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
             $parentIndex++;
         }
 
         foreach ($siblingIds as $pair) {
-            $parentId = $parents[$parentIndex]->id;
+            $parent = $parents[$parentIndex];
+            $parentId = $parent->id;
             foreach ($pair as $studentId) {
                 $pivotRows[] = [
                     'student_id' => $studentId,
@@ -75,6 +89,17 @@ class StudentWithParentsSeeder extends Seeder
                     'linked_at' => $now,
                     'linked_by' => $staffUser->id,
                     'wallet_alert_threshold' => fake()->randomElement([0, 50, 100, 150, 200]),
+                ];
+                $contactRows[] = [
+                    'student_id' => $studentId,
+                    'full_name' => $parent->first_name.' '.$parent->last_name,
+                    'relationship' => 'Parent',
+                    'phone' => fake()->phoneNumber(),
+                    'address' => fake()->address(),
+                    'email' => $parent->email,
+                    'is_primary' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
             }
             $parentIndex++;
@@ -85,10 +110,41 @@ class StudentWithParentsSeeder extends Seeder
             DB::table('parent_student')->insert($chunk);
         }
 
+        // Bulk insert contact records so the POS Contacts tab shows linked parents
+        foreach (array_chunk($contactRows, 500) as $chunk) {
+            DB::table('student_contacts')->insert($chunk);
+        }
+
+        // Seed a known test parent for local login (email: parent@sunbites.test / Password1)
+        $testParent = ParentUser::factory()->create([
+            'first_name' => 'Test',
+            'last_name' => 'Parent',
+            'email' => 'parent@sunbites.test',
+        ]);
+        $testStudent = $students->first();
+        DB::table('parent_student')->insert([
+            'student_id' => $testStudent->id,
+            'parent_id' => $testParent->id,
+            'linked_at' => $now,
+            'linked_by' => $staffUser->id,
+            'wallet_alert_threshold' => 100,
+        ]);
+        DB::table('student_contacts')->insert([
+            'student_id' => $testStudent->id,
+            'full_name' => 'Test Parent',
+            'relationship' => 'Parent',
+            'phone' => '09170000000',
+            'address' => '1 Test Street',
+            'email' => 'parent@sunbites.test',
+            'is_primary' => false,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
         $this->seedSubscriptionPayments($students);
 
         $subscriptionCount = $students->filter(
-            fn (Student $s) => $s->student_type === StudentType::Subscription->value
+            fn (Student $s) => $s->student_type === StudentType::Subscription
         )->count();
 
         $this->command->info(sprintf(
@@ -98,6 +154,7 @@ class StudentWithParentsSeeder extends Seeder
             $parentCount,
             count($pivotRows),
         ));
+        $this->command->info('Test parent login → email: parent@sunbites.test / password: Password1');
     }
 
     private function seedSubscriptionPayments(Collection $students): void
@@ -108,7 +165,7 @@ class StudentWithParentsSeeder extends Seeder
         $rows = [];
 
         foreach ($students as $student) {
-            if ($student->student_type !== StudentType::Subscription->value) {
+            if ($student->student_type !== StudentType::Subscription) {
                 continue;
             }
 
