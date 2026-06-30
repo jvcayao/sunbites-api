@@ -7,6 +7,7 @@ use App\Http\Controllers\Portal\FeedbackController;
 use App\Http\Controllers\Portal\MealPlannerController;
 use App\Http\Controllers\Portal\NotificationController;
 use App\Http\Controllers\Portal\PreRegistrationCheckController;
+use App\Http\Controllers\Portal\PreRegistrationController;
 use App\Http\Controllers\Portal\ProfileController;
 use App\Http\Controllers\Portal\SpendingSummaryController;
 use App\Http\Controllers\Portal\StudentController;
@@ -19,6 +20,11 @@ use Illuminate\Support\Facades\Route;
 // Pre-registration — public (rate limited)
 Route::middleware(['throttle:10,1'])->group(function () {
     Route::post('/pre-registrations/check', [PreRegistrationCheckController::class, 'check']);
+});
+
+// Pre-registration submit — public (rate limited)
+Route::middleware(['throttle:5,10'])->group(function () {
+    Route::post('/pre-registrations', [PreRegistrationController::class, 'store']);
 });
 
 // Parent auth — public (rate limited)
