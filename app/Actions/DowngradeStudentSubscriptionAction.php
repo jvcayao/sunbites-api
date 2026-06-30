@@ -20,14 +20,14 @@ class DowngradeStudentSubscriptionAction
             $deletedMonthLabels = $unpaidPayments
                 ->map(fn ($p) => $p->school_month->label().' '.$p->year)
                 ->values()
-                ->all();
+                ->toArray();
 
             $paidMonthLabels = $student->monthlyPayments()
                 ->where('status', 'paid')
                 ->get()
                 ->map(fn ($p) => $p->school_month->label().' '.$p->year)
                 ->values()
-                ->all();
+                ->toArray();
 
             StudentMonthlyPayment::whereIn('id', $unpaidPayments->pluck('id'))->delete();
 

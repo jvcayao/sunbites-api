@@ -91,16 +91,11 @@ class BillingReportController extends Controller
         return Excel::download(new BillingReportExport($payments, $summary), $filename);
     }
 
-    private function schoolMonthValues(): array
-    {
-        return collect(SchoolMonth::cases())->map->value->toArray();
-    }
-
     private function filterRules(): array
     {
         return [
             'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
-            'school_month' => ['nullable', 'string', Rule::in($this->schoolMonthValues())],
+            'school_month' => ['nullable', 'string', Rule::in(array_column(SchoolMonth::cases(), 'value'))],
             'status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
             'grade_level' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],

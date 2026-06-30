@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Portal;
 
+use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
@@ -19,7 +20,7 @@ class StudentPaymentHistoryController extends Controller
             'You do not have access to this student.'
         );
 
-        $monthOrder = ['june', 'july', 'august', 'september', 'october', 'november', 'december', 'january', 'february', 'march'];
+        $monthOrder = array_column(SchoolMonth::cases(), 'value');
 
         $payments = $student->monthlyPayments()
             ->where('status', '!=', 'voided')

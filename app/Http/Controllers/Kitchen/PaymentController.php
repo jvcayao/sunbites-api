@@ -39,7 +39,7 @@ class PaymentController extends Controller
     public function updateAmount(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
     {
         abort_if($payment->student_id !== $student->id, 403);
-        abort_if($payment->status !== 'unpaid', 422, 'Can only edit amount on unpaid payments.');
+        abort_if($payment->isPaid() || $payment->isVoided(), 422, 'Can only edit amount on unpaid payments.');
 
         $validated = $request->validate(['amount' => ['required', 'numeric', 'min:0']]);
         $payment->update(['amount' => $validated['amount']]);
@@ -54,7 +54,7 @@ class PaymentController extends Controller
     public function toggle(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
     {
         abort_if($payment->student_id !== $student->id, 403);
-        abort_if($payment->status === 'voided', 422, 'Cannot modify a voided payment.');
+        abort_if($payment->isVoided(), 422, 'Cannot modify a voided payment.');
 
         $newStatus = $payment->status === 'paid' ? 'unpaid' : 'paid';
 
@@ -97,7 +97,7 @@ class PaymentController extends Controller
             ->where('year', $validated['year'])
             ->firstOrFail();
 
-        abort_if($payment->status === 'voided', 422, 'Cannot record payment on a voided record.');
+        abort_if($payment->isVoided(), 422, 'Cannot record payment on a voided record.');
 
         $payment->update([
             'status' => 'paid',
@@ -129,7 +129,7 @@ class PaymentController extends Controller
     public function void(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
     {
         abort_if($payment->student_id !== $student->id, 404);
-        abort_if($payment->status !== 'paid', 422, 'Only paid payments can be voided.');
+        abort_if(! $payment->isPaid(), 422, 'Only paid payments can be voided.');
 
         $validated = $request->validate([
             'reason' => ['required', 'string', 'max:500'],

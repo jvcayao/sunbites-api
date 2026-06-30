@@ -29,6 +29,14 @@ class SubscriptionDowngradeController extends Controller
         $paidVoidable = [];
         $unpaidToDelete = [];
 
+        $toPaymentShape = fn ($payment): array => [
+            'id' => $payment->id,
+            'school_month' => $payment->school_month->value,
+            'year' => $payment->year,
+            'amount' => (float) $payment->amount,
+            'label' => $payment->school_month->label().' '.$payment->year,
+        ];
+
         foreach ($payments as $payment) {
             $paymentDate = Carbon::createFromDate(
                 $payment->year,
@@ -38,28 +46,16 @@ class SubscriptionDowngradeController extends Controller
 
             if ($payment->status === 'paid') {
                 if ($paymentDate->lt($now)) {
-                    $paidRetained[] = [
-                        'id' => $payment->id,
-                        'school_month' => $payment->school_month->value,
-                        'year' => $payment->year,
-                        'amount' => (float) $payment->amount,
-                        'label' => $payment->school_month->label().' '.$payment->year,
-                    ];
+                    $paidRetained[] = $toPaymentShape($payment);
                 } else {
-                    $paidVoidable[] = [
-                        'id' => $payment->id,
-                        'school_month' => $payment->school_month->value,
-                        'year' => $payment->year,
-                        'amount' => (float) $payment->amount,
-                        'label' => $payment->school_month->label().' '.$payment->year,
-                    ];
+                    $paidVoidable[] = $toPaymentShape($payment);
                 }
             } else {
                 $unpaidToDelete[] = $payment->school_month->label().' '.$payment->year;
             }
         }
 
-        $walletBalance = $student->wallet ? (float) $student->wallet->balanceFloatNum : 0.0;
+        $walletBalance = (float) ($student->wallet?->balanceFloatNum ?? 0.0);
 
         return response()->json([
             'paid_months_retained' => $paidRetained,

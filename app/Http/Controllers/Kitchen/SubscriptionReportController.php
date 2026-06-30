@@ -32,7 +32,6 @@ class SubscriptionReportController extends Controller
         $gradeLevel = $validated['grade_level'] ?? null;
         $search = $validated['search'] ?? null;
 
-        // Paginate subscription students for this branch
         $students = Student::where('branch_id', $branch->id)
             ->where('student_type', 'subscription')
             ->whereNull('deleted_at')
@@ -46,7 +45,7 @@ class SubscriptionReportController extends Controller
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $year)
             ))
-            ->when($status === 'paid' || $status === 'unpaid', fn ($q) => $q->whereHas('monthlyPayments', fn ($pq) => $pq
+            ->when(in_array($status, ['paid', 'unpaid']), fn ($q) => $q->whereHas('monthlyPayments', fn ($pq) => $pq
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $year)
                 ->where('status', $status)
@@ -57,7 +56,6 @@ class SubscriptionReportController extends Controller
 
         $studentIds = $students->pluck('id')->all();
 
-        // Single bulk query: sum order item quantities per student per category for the requested month
         $usageRows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->join('pos_menu_items', 'pos_menu_items.id', '=', 'order_items.pos_menu_item_id')
@@ -73,7 +71,6 @@ class SubscriptionReportController extends Controller
             ->groupBy('student_id')
             ->map(fn ($rows) => $rows->pluck('total', 'category'));
 
-        // Single bulk query: payment status per student for the requested month
         $paymentRecords = StudentMonthlyPayment::whereIn('student_id', $studentIds)
             ->where('school_month', $monthEnum->value)
             ->where('year', $year)
