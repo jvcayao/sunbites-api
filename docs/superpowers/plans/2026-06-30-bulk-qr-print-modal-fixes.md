@@ -1,6 +1,6 @@
 # Bulk QR Print Modal Fixes Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Fix three bugs in the bulk QR print modal on the students page: dynamic dialog width, correct preview colors per student type, and add cols=4 as the new default.
 
@@ -41,7 +41,7 @@
 
 ---
 
-- [ ] **Step 1.1: Write the failing test**
+- [x] **Step 1.1: Write the failing test**
 
 Add a new `describe` block at the bottom of `student-list.test.tsx` (after line 293):
 
@@ -89,7 +89,7 @@ describe("QrCard preview colors in batch print modal", () => {
 });
 ```
 
-- [ ] **Step 1.2: Run tests to confirm they fail**
+- [x] **Step 1.2: Run tests to confirm they fail**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -97,7 +97,7 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 Expected: the two new tests fail with "previewCard is null" (no `data-qr-preview-card` attribute exists yet).
 
-- [ ] **Step 1.3: Add `data-qr-preview-card` to QrCard root div**
+- [x] **Step 1.3: Add `data-qr-preview-card` to QrCard root div**
 
 In `page.tsx`, locate the `QrCard` function return statement (line 643). Replace the root `<div` opening:
 
@@ -136,7 +136,7 @@ In `page.tsx`, locate the `QrCard` function return statement (line 643). Replace
     >
 ```
 
-- [ ] **Step 1.4: Add `getCardAccentColors` call and replace all 11 hardcoded color values**
+- [x] **Step 1.4: Add `getCardAccentColors` call and replace all 11 hardcoded color values**
 
 At the top of `QrCard`, add the colors call (after the `enrolledFormatted` lines, before the `return`):
 
@@ -166,7 +166,7 @@ Then apply all 11 token substitutions (replace exactly these values, leaving neu
 
 Do NOT change: `#e0e0e0` (QR box border), `#888` (QR text), `#555`/`#444`/`#666` (body text).
 
-- [ ] **Step 1.5: Run tests to confirm they pass**
+- [x] **Step 1.5: Run tests to confirm they pass**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -174,7 +174,7 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 Expected: all tests pass including the two new preview color tests.
 
-- [ ] **Step 1.6: Commit**
+- [x] **Step 1.6: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add app/\(kitchen\)/students/page.tsx app/\(kitchen\)/students/student-list.test.tsx
@@ -195,7 +195,7 @@ git commit -m "fix(students): apply student-type colors to QrCard preview in bat
 
 ---
 
-- [ ] **Step 2.1: Write the failing test**
+- [x] **Step 2.1: Write the failing test**
 
 Add inside the existing `describe("StudentsPage")` block in `student-list.test.tsx`:
 
@@ -219,7 +219,7 @@ it("BatchQrModal defaults to 4 cards per row with button 4 highlighted", async (
 });
 ```
 
-- [ ] **Step 2.2: Run test to confirm it fails**
+- [x] **Step 2.2: Run test to confirm it fails**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -227,7 +227,7 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 Expected: FAIL — button "4" does not exist yet (options are 1, 2, 3 with default 2).
 
-- [ ] **Step 2.3: Update `BatchQrModal` cols state, button array, and preview grid**
+- [x] **Step 2.3: Update `BatchQrModal` cols state, button array, and preview grid**
 
 In `page.tsx` inside `BatchQrModal` (line 814):
 
@@ -277,7 +277,7 @@ Update the preview grid className (lines 890–897):
 
 The print portal `gridTemplateColumns: \`repeat(${cols}, 53.98mm)\`` already handles any number — no change needed there.
 
-- [ ] **Step 2.4: Run tests to confirm they pass**
+- [x] **Step 2.4: Run tests to confirm they pass**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -285,7 +285,7 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 Expected: all tests pass.
 
-- [ ] **Step 2.5: Commit**
+- [x] **Step 2.5: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add app/\(kitchen\)/students/page.tsx app/\(kitchen\)/students/student-list.test.tsx
@@ -306,7 +306,7 @@ git commit -m "feat(students): add cols=4 option to batch QR print modal, defaul
 
 ---
 
-- [ ] **Step 3.1: Write the failing test**
+- [x] **Step 3.1: Write the failing test**
 
 Add inside `describe("StudentsPage")` in `student-list.test.tsx`:
 
@@ -342,7 +342,7 @@ it("BatchQrModal dialog width shrinks when cols is changed to 3", async () => {
 });
 ```
 
-- [ ] **Step 3.2: Run tests to confirm they fail**
+- [x] **Step 3.2: Run tests to confirm they fail**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -350,7 +350,7 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 Expected: FAIL — dialog currently has `sm:max-w-2xl` regardless of cols.
 
-- [ ] **Step 3.3: Add `dialogWidthClass` lookup and update `DialogContent`**
+- [x] **Step 3.3: Add `dialogWidthClass` lookup and update `DialogContent`**
 
 In `page.tsx` inside `BatchQrModal`, add the width lookup after the `cols` state (line 815):
 
@@ -373,7 +373,7 @@ Update the `DialogContent` opening tag (line 860):
         <DialogContent className={dialogWidthClass[cols]}>
 ```
 
-- [ ] **Step 3.4: Wrap the preview grid in a scroll container**
+- [x] **Step 3.4: Wrap the preview grid in a scroll container**
 
 In `page.tsx`, wrap the preview grid `<div className={cn("grid gap-3 ...` with a scroll container:
 
@@ -417,7 +417,7 @@ In `page.tsx`, wrap the preview grid `<div className={cn("grid gap-3 ...` with a
           </div>
 ```
 
-- [ ] **Step 3.5: Run all tests to confirm they pass**
+- [x] **Step 3.5: Run all tests to confirm they pass**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -425,7 +425,7 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 Expected: all tests pass (including all previously passing tests — regression check).
 
-- [ ] **Step 3.6: Commit**
+- [x] **Step 3.6: Commit**
 
 ```bash
 cd ~/sunbites-pos && git add app/\(kitchen\)/students/page.tsx app/\(kitchen\)/students/student-list.test.tsx
@@ -436,7 +436,7 @@ git commit -m "fix(students): adapt batch QR modal width to cards-per-row select
 
 ## Final Verification
 
-- [ ] **Run full student-list test suite one last time**
+- [x] **Run full student-list test suite one last time**
 
 ```bash
 cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=false
@@ -444,6 +444,6 @@ cd ~/sunbites-pos && npm test -- --testPathPattern="student-list" --watchAll=fal
 
 All tests pass. No regressions.
 
-- [ ] **Invoke `/superpowers:verification-before-completion`** before marking done.
-- [ ] **Invoke `laravel-simplifier`** (laravel-simplifier agent) to review code changes in `page.tsx`.
-- [ ] **Mark all tasks complete in this file.**
+- [x] **Invoke `/superpowers:verification-before-completion`** before marking done.
+- [x] **Invoke `laravel-simplifier`** (laravel-simplifier agent) to review code changes in `page.tsx`.
+- [x] **Mark all tasks complete in this file.**
