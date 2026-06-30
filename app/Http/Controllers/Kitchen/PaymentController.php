@@ -121,6 +121,53 @@ class PaymentController extends Controller
         ]);
     }
 
+    public function void(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
+    {
+        abort_if($payment->student_id !== $student->id, 404);
+        abort_if($payment->status !== 'paid', 422, 'Only paid payments can be voided.');
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        $paymentDate = Carbon::createFromDate(
+            $payment->year,
+            $payment->school_month->toMonthNumber(),
+            1
+        )->startOfMonth();
+
+        abort_if(
+            $paymentDate->lt(now()->startOfMonth()),
+            422,
+            'Cannot void a past month\'s payment — this subscription period has already been consumed.'
+        );
+
+        $payment->update([
+            'status' => 'voided',
+            'voided_at' => now(),
+            'voided_by' => $request->user()->id,
+            'void_reason' => $validated['reason'],
+        ]);
+
+        activity('payments')
+            ->causedBy($request->user())
+            ->performedOn($student)
+            ->withProperties([
+                'school_month' => $payment->school_month->value,
+                'year' => $payment->year,
+                'amount' => $payment->amount,
+                'reason' => $validated['reason'],
+            ])
+            ->log('student_payment.voided');
+
+        return response()->json([
+            'id' => $payment->id,
+            'status' => $payment->status,
+            'voided_at' => $payment->voided_at?->toDateTimeString(),
+            'void_reason' => $payment->void_reason,
+        ]);
+    }
+
     public function addRange(Request $request, Student $student): JsonResponse
     {
         $validated = $request->validate([

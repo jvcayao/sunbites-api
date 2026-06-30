@@ -185,6 +185,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
 
     // Payment toggle/record + credit settle — admin, manager only
     Route::middleware('role:admin|manager')->group(function () {
+        Route::patch('/students/{student}/payments/{payment}/void', [PaymentController::class, 'void']);
         Route::patch('/students/{student}/payments/{payment}', [PaymentController::class, 'toggle']);
         Route::patch('/students/{student}/payments/{payment}/amount', [PaymentController::class, 'updateAmount']);
         Route::post('/students/{student}/payments', [PaymentController::class, 'record']);
