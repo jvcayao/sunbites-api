@@ -21,6 +21,9 @@ class StudentMonthlyPayment extends Model
         'amount',
         'recorded_at',
         'recorded_by',
+        'voided_at',
+        'voided_by',
+        'void_reason',
     ];
 
     protected function casts(): array
@@ -30,6 +33,7 @@ class StudentMonthlyPayment extends Model
             'year' => 'integer',
             'amount' => 'decimal:2',
             'recorded_at' => 'datetime',
+            'voided_at' => 'datetime',
         ];
     }
 
@@ -43,8 +47,23 @@ class StudentMonthlyPayment extends Model
         return $this->belongsTo(User::class, 'recorded_by');
     }
 
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+
     public function isPaid(): bool
     {
         return $this->status === 'paid';
+    }
+
+    public function isUnpaid(): bool
+    {
+        return $this->status === 'unpaid';
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->status === 'voided';
     }
 }

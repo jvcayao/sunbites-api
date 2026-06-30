@@ -26,16 +26,21 @@ class ParentResetPasswordMail extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
+        // http_build_query produces literal & separators. The view uses {!! !!}
+        // intentionally to avoid &amp; in the href, which breaks link parsing in
+        // Outlook on Windows and some email security scanners.
         $resetUrl = rtrim(config('app.portal_url'), '/').'/reset-password?'.http_build_query([
             'token' => $this->token,
             'email' => $this->parent->email,
         ]);
 
         return new Content(
-            view: 'emails.parent-reset-password',
+            view: 'emails.reset-password',
             with: [
                 'firstName' => $this->parent->first_name,
                 'resetUrl' => $resetUrl,
+                'accountLabel' => 'Sunbites Parent Portal account',
+                'expiresInMinutes' => config('auth.passwords.parents.expire'),
             ],
         );
     }

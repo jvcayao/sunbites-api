@@ -86,7 +86,7 @@ class StudentPaymentHistoryTest extends TestCase
             ->assertJsonPath('data.1.school_month', 'july');
     }
 
-    public function test_non_subscription_student_returns_422(): void
+    public function test_non_subscription_student_returns_empty_payment_history(): void
     {
         $nonSubscriptionStudent = Student::factory()->create([
             'branch_id' => $this->branch->id,
@@ -102,7 +102,8 @@ class StudentPaymentHistoryTest extends TestCase
         $response = $this->asParent()
             ->getJson("/api/v1/portal/students/{$nonSubscriptionStudent->id}/payment-history");
 
-        $response->assertUnprocessable();
+        $response->assertOk()
+            ->assertJsonCount(0, 'data');
     }
 
     public function test_parent_cannot_view_another_parents_student(): void

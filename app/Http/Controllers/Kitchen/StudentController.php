@@ -262,6 +262,13 @@ class StudentController extends Controller
             'student_type' => ['required', Rule::enum(StudentType::class)],
         ]);
 
+        abort_if(
+            $student->student_type === StudentType::Subscription
+                && StudentType::from($validated['student_type']) === StudentType::NonSubscription,
+            422,
+            'Subscription students must be downgraded via the dedicated downgrade endpoint.'
+        );
+
         $oldType = $student->student_type->value;
 
         $student->update(['student_type' => StudentType::from($validated['student_type'])]);
