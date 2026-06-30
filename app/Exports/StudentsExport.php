@@ -39,10 +39,11 @@ class StudentsExport implements FromCollection, ShouldAutoSize, WithHeadings, Wi
             'Total Spent',
             'Primary Contact',
             'Contact Phone',
+            'Allergies',
+            'Notes',
         ];
     }
 
-    /** @param  mixed  $student */
     public function map($student): array
     {
         $primaryContact = $student->contacts->firstWhere('is_primary', true);
@@ -60,6 +61,8 @@ class StudentsExport implements FromCollection, ShouldAutoSize, WithHeadings, Wi
             number_format((float) $student->total_spent, 2),
             $primaryContact?->full_name ?? '—',
             $primaryContact?->phone ?? '—',
+            $student->allergies ?? '',
+            $student->notes ?? '',
         ];
     }
 

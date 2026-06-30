@@ -18,7 +18,7 @@ class SubscriptionReportController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'month' => ['required', Rule::in(array_column(SchoolMonth::cases(), 'value'))],
+            'month' => ['required', Rule::enum(SchoolMonth::class)],
             'year' => ['required', 'integer', 'min:2020', 'max:2099'],
             'status' => ['sometimes', Rule::in(['paid', 'unpaid', 'not_recorded'])],
             'grade_level' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -32,10 +32,8 @@ class SubscriptionReportController extends Controller
         $gradeLevel = $validated['grade_level'] ?? null;
         $search = $validated['search'] ?? null;
 
-        // Paginate subscription students for this branch
         $students = Student::where('branch_id', $branch->id)
             ->where('student_type', 'subscription')
-            ->whereNull('deleted_at')
             ->when($gradeLevel, fn ($q) => $q->where('grade_level', $gradeLevel))
             ->when($search, fn ($q) => $q->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
@@ -46,7 +44,7 @@ class SubscriptionReportController extends Controller
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $year)
             ))
-            ->when($status === 'paid' || $status === 'unpaid', fn ($q) => $q->whereHas('monthlyPayments', fn ($pq) => $pq
+            ->when(in_array($status, ['paid', 'unpaid']), fn ($q) => $q->whereHas('monthlyPayments', fn ($pq) => $pq
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $year)
                 ->where('status', $status)
@@ -57,7 +55,6 @@ class SubscriptionReportController extends Controller
 
         $studentIds = $students->pluck('id')->all();
 
-        // Single bulk query: sum order item quantities per student per category for the requested month
         $usageRows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->join('pos_menu_items', 'pos_menu_items.id', '=', 'order_items.pos_menu_item_id')
@@ -73,7 +70,6 @@ class SubscriptionReportController extends Controller
             ->groupBy('student_id')
             ->map(fn ($rows) => $rows->pluck('total', 'category'));
 
-        // Single bulk query: payment status per student for the requested month
         $paymentRecords = StudentMonthlyPayment::whereIn('student_id', $studentIds)
             ->where('school_month', $monthEnum->value)
             ->where('year', $year)
@@ -119,6 +115,32 @@ class SubscriptionReportController extends Controller
             ];
         });
 
-        return response()->json($data);
+        $historical = Student::where('branch_id', $branch->id)
+            ->where('student_type', 'non_subscription')
+            ->whereHas('monthlyPayments', fn ($q) => $q
+                ->where('school_month', $monthEnum->value)
+                ->where('year', $year)
+                ->where('status', 'paid')
+            )
+            ->with(['monthlyPayments' => fn ($q) => $q
+                ->where('school_month', $monthEnum->value)
+                ->where('year', $year)
+                ->where('status', 'paid'),
+            ])
+            ->get(['id', 'first_name', 'last_name', 'student_number', 'grade_level', 'section'])
+            ->map(fn ($s) => [
+                'id' => $s->id,
+                'full_name' => $s->full_name,
+                'student_number' => $s->student_number,
+                'grade_level' => $s->grade_level,
+                'section' => $s->section,
+                'payment_amount' => (float) ($s->monthlyPayments->first()?->amount ?? 0),
+            ]);
+
+        return response()->json([
+            'data' => $data->items(),
+            'meta' => $this->paginationMeta($students),
+            'historical_data' => $historical,
+        ]);
     }
 }

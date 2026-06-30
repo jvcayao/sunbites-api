@@ -64,4 +64,9 @@ class PreRegistrationFactory extends Factory
     {
         return $this->state(fn () => ['status' => PreRegistrationStatus::Pending]);
     }
+
+    public function approved(): static
+    {
+        return $this->state(fn () => ['status' => PreRegistrationStatus::Approved]);
+    }
 }

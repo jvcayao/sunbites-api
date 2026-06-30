@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Exports\StudentsExport;
 use App\Models\Branch;
 use App\Models\Student;
 use App\Models\User;
@@ -163,5 +164,455 @@ class StudentReportTest extends TestCase
         $this->assertStringNotContainsString('philhealth_number', $content);
         $this->assertStringNotContainsString('pagibig_number', $content);
         $this->assertStringNotContainsString('tin_number', $content);
+    }
+
+    public function test_search_by_first_name_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'Santos',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Maria',
+            'last_name' => 'Reyes',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Juan Santos', $response->json('data.0.full_name'));
+    }
+
+    public function test_search_by_last_name_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Ana',
+            'last_name' => 'Dela Cruz',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Pedro',
+            'last_name' => 'Santos',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Dela+Cruz');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_by_student_number_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => '2024-0042',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => '2024-0099',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=0042');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('2024-0042', $response->json('data.0.student_number'));
+    }
+
+    public function test_search_by_section_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'section' => 'Mabini',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'section' => 'Rizal',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Mabini');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_combined_with_status_filter(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'enrollment_status' => 'enrolled',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'enrollment_status' => 'paused',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan&status=enrolled');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('enrolled', $response->json('data.0.status'));
+    }
+
+    public function test_row_response_includes_notes_and_allergies(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'notes' => 'Bring packed lunch on Fridays.',
+            'allergies' => 'Peanuts, shellfish',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.notes', 'Bring packed lunch on Fridays.')
+            ->assertJsonPath('data.0.allergies', 'Peanuts, shellfish');
+    }
+
+    public function test_row_response_notes_and_allergies_are_null_when_empty(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'notes' => null,
+            'allergies' => null,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.notes', null)
+            ->assertJsonPath('data.0.allergies', null);
+    }
+
+    public function test_summary_total_reflects_active_search_filter(): void
+    {
+        Student::factory()->count(3)->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+            'first_name' => 'Juan',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+            'first_name' => 'Maria',
+        ]);
+
+        // Search narrows rows to 3, and summary also reflects the search filter
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan');
+
+        $response->assertOk();
+        $this->assertCount(3, $response->json('data'));
+        $this->assertSame(3, $response->json('summary.total'));
+    }
+
+    public function test_export_respects_search_param(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Exportable',
+            'last_name' => 'Student',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Other',
+            'last_name' => 'Person',
+        ]);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/students/export?search=Exportable');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    public function test_export_headings_include_allergies_and_notes(): void
+    {
+        $export = new StudentsExport(collect([]));
+
+        $headings = $export->headings();
+
+        $this->assertCount(14, $headings);
+        $this->assertSame('Allergies', $headings[12]);
+        $this->assertSame('Notes', $headings[13]);
+    }
+
+    public function test_export_maps_allergies_and_notes_for_a_student(): void
+    {
+        $student = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'allergies' => 'Peanuts',
+            'notes' => 'Packed lunch on Fridays',
+        ]);
+        $student->load('wallet');
+        $student->setRelation('contacts', collect([]));
+
+        $export = new StudentsExport(collect([$student]));
+        $row = $export->map($student);
+
+        $this->assertSame('Peanuts', $row[12]);
+        $this->assertSame('Packed lunch on Fridays', $row[13]);
+    }
+
+    public function test_export_maps_null_allergies_and_notes_as_empty_string(): void
+    {
+        $student = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'allergies' => null,
+            'notes' => null,
+        ]);
+        $student->load('wallet');
+        $student->setRelation('contacts', collect([]));
+
+        $export = new StudentsExport(collect([$student]));
+        $row = $export->map($student);
+
+        $this->assertSame('', $row[12]);
+        $this->assertSame('', $row[13]);
+    }
+
+    public function test_summary_total_defaults_to_enrolled_only_when_no_status_filter(): void
+    {
+        Student::factory()->count(3)->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'paused',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk();
+        // total = enrolled only (3), NOT all students (4)
+        $this->assertSame(3, $response->json('summary.total'));
+    }
+
+    public function test_payment_filter_paid_returns_students_with_all_months_paid_in_range(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        // Student A: paid for June, July, August — should be included
+        $paidStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        foreach (['june', 'july', 'august'] as $month) {
+            $paidStudent->monthlyPayments()->create([
+                'school_month' => $month,
+                'year' => $yearStart,
+                'status' => 'paid',
+                'amount' => 2970,
+            ]);
+        }
+
+        // Student B: paid June and July only, missing August — should be excluded
+        $partialStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        foreach (['june', 'july'] as $month) {
+            $partialStudent->monthlyPayments()->create([
+                'school_month' => $month,
+                'year' => $yearStart,
+                'status' => 'paid',
+                'amount' => 2970,
+            ]);
+        }
+
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?type=subscription&payment_status=paid&payment_from=june&payment_to=august'
+        );
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($paidStudent->id, $response->json('data.0.id'));
+    }
+
+    public function test_payment_filter_unpaid_returns_students_with_any_unpaid_month_in_range(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        // Student with one unpaid month — should be included
+        $unpaidStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $unpaidStudent->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'unpaid',
+            'amount' => 2970,
+        ]);
+
+        // Student with all paid — should be excluded
+        $paidStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $paidStudent->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?type=subscription&payment_status=unpaid&payment_from=june&payment_to=june'
+        );
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($unpaidStudent->id, $response->json('data.0.id'));
+    }
+
+    public function test_payment_filter_voided_returns_students_with_any_voided_month(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        $voidedStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $voidedStudent->monthlyPayments()->create([
+            'school_month' => 'july',
+            'year' => $yearStart,
+            'status' => 'voided',
+            'amount' => 2970,
+        ]);
+
+        $normalStudent = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $normalStudent->monthlyPayments()->create([
+            'school_month' => 'july',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?type=subscription&payment_status=voided&payment_from=july&payment_to=july'
+        );
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame($voidedStudent->id, $response->json('data.0.id'));
+    }
+
+    public function test_payment_filter_is_ignored_when_type_is_not_subscription(): void
+    {
+        // Non-subscription student with no payment records — should appear
+        $nonSubStudent = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_type' => 'non_subscription',
+            'enrollment_status' => 'enrolled',
+        ]);
+
+        // Passing payment_status without type=subscription — filter must be ignored
+        $response = $this->asAdmin()->getJson(
+            '/api/v1/reports/students?payment_status=paid&payment_from=june&payment_to=june'
+        );
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($nonSubStudent->id));
+    }
+
+    public function test_export_accepts_payment_filter_params(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        $student = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $student->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asManager()->getJson(
+            '/api/v1/reports/students/export?type=subscription&payment_status=paid&payment_from=june&payment_to=june'
+        );
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    public function test_subscription_student_row_includes_payment_history(): void
+    {
+        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
+
+        $student = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        $student->monthlyPayments()->create([
+            'school_month' => 'june',
+            'year' => $yearStart,
+            'status' => 'paid',
+            'amount' => 2970,
+        ]);
+        $student->monthlyPayments()->create([
+            'school_month' => 'july',
+            'year' => $yearStart,
+            'status' => 'unpaid',
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk();
+        $history = $response->json('data.0.payment_history');
+        $this->assertIsArray($history);
+        $this->assertCount(10, $history);
+
+        $june = collect($history)->firstWhere('month', 'june');
+        $july = collect($history)->firstWhere('month', 'july');
+        $this->assertSame('paid', $june['status']);
+        $this->assertSame('unpaid', $july['status']);
+        $this->assertSame('June', $june['month_label']);
+    }
+
+    public function test_non_subscription_student_row_has_null_payment_history(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_type' => 'non_subscription',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.payment_history', null);
+    }
+
+    public function test_payment_history_shows_no_record_for_months_without_payment(): void
+    {
+        $student = Student::factory()->subscription()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+        ]);
+        // No monthly payment records created at all
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk();
+        $history = $response->json('data.0.payment_history');
+        $this->assertIsArray($history);
+        $this->assertCount(10, $history);
+
+        foreach ($history as $entry) {
+            $this->assertSame('no_record', $entry['status']);
+        }
     }
 }

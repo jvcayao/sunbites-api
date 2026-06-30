@@ -30,6 +30,7 @@ use App\Http\Controllers\Kitchen\StudentController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\StudentReportController;
 use App\Http\Controllers\Kitchen\SubscriptionConfigController;
+use App\Http\Controllers\Kitchen\SubscriptionDowngradeController;
 use App\Http\Controllers\Kitchen\SubscriptionReportController;
 use App\Http\Controllers\Kitchen\SystemConfigurationController;
 use App\Http\Controllers\Kitchen\TransactionController;
@@ -151,6 +152,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::post('/students/{student}/regenerate-qr', [StudentController::class, 'regenerateQr']);
         Route::patch('/students/{student}/status', [StudentController::class, 'updateStatus']);
         Route::patch('/students/{student}/type', [StudentController::class, 'updateType']);
+        Route::get('/students/{student}/subscription-downgrade-preview', [SubscriptionDowngradeController::class, 'preview']);
         Route::get('/students/{student}/orders', [StudentController::class, 'orders']);
         Route::post('/students/{student}/wallet/top-up', [WalletController::class, 'topUp']);
         Route::get('/students/{student}/payments', [PaymentController::class, 'index']);
@@ -183,10 +185,12 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
 
     // Payment toggle/record + credit settle — admin, manager only
     Route::middleware('role:admin|manager')->group(function () {
+        Route::patch('/students/{student}/payments/{payment}/void', [PaymentController::class, 'void']);
         Route::patch('/students/{student}/payments/{payment}', [PaymentController::class, 'toggle']);
         Route::patch('/students/{student}/payments/{payment}/amount', [PaymentController::class, 'updateAmount']);
         Route::post('/students/{student}/payments', [PaymentController::class, 'record']);
         Route::post('/students/{student}/credit/settle', [CreditController::class, 'settle']);
+        Route::post('/students/{student}/downgrade-subscription', [SubscriptionDowngradeController::class, 'execute']);
     });
 
     // Branch monthly amounts — admin, manager, supervisor

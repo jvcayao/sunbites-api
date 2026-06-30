@@ -184,4 +184,60 @@ class PaymentControllerTest extends TestCase
 
         $response->assertNotFound();
     }
+
+    public function test_cannot_toggle_a_voided_payment(): void
+    {
+        $this->payment->update([
+            'status' => 'voided',
+            'voided_at' => now(),
+            'voided_by' => $this->admin->id,
+            'void_reason' => 'Was voided.',
+        ]);
+
+        $response = $this->asAdmin()->patchJson(
+            "/api/v1/students/{$this->student->id}/payments/{$this->payment->id}"
+        );
+
+        $response->assertUnprocessable();
+        $this->assertDatabaseHas('student_monthly_payments', [
+            'id' => $this->payment->id,
+            'status' => 'voided',
+        ]);
+    }
+
+    public function test_cannot_record_payment_on_voided_record(): void
+    {
+        $this->payment->update([
+            'status' => 'voided',
+            'voided_at' => now(),
+            'voided_by' => $this->admin->id,
+            'void_reason' => 'Was voided.',
+            'school_month' => 'june',
+            'year' => 2025,
+        ]);
+
+        $response = $this->asAdmin()->postJson(
+            "/api/v1/students/{$this->student->id}/payments",
+            ['school_month' => 'june', 'year' => 2025, 'amount' => 2970]
+        );
+
+        $response->assertUnprocessable();
+    }
+
+    public function test_payment_index_returns_voided_fields(): void
+    {
+        $this->payment->update([
+            'status' => 'voided',
+            'voided_at' => now(),
+            'voided_by' => $this->admin->id,
+            'void_reason' => 'Student downgraded.',
+        ]);
+
+        $response = $this->asAdmin()->getJson(
+            "/api/v1/students/{$this->student->id}/payments"
+        );
+
+        $response->assertOk();
+        $response->assertJsonFragment(['void_reason' => 'Student downgraded.']);
+    }
 }
