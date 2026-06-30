@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Portal;
 
-use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
@@ -20,15 +19,10 @@ class StudentPaymentHistoryController extends Controller
             'You do not have access to this student.'
         );
 
-        abort_unless(
-            $student->student_type === StudentType::Subscription,
-            422,
-            'Payment history is only available for subscription students.'
-        );
-
         $monthOrder = ['june', 'july', 'august', 'september', 'october', 'november', 'december', 'january', 'february', 'march'];
 
         $payments = $student->monthlyPayments()
+            ->where('status', '!=', 'voided')
             ->get()
             ->sortBy(fn ($payment) => [$payment->year, array_search($payment->school_month->value, $monthOrder)])
             ->values()
