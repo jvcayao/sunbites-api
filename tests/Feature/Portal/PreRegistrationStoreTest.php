@@ -122,6 +122,19 @@ class PreRegistrationStoreTest extends TestCase
             ->assertCreated();
     }
 
+    public function test_does_not_block_when_expired_pre_registration_exists(): void
+    {
+        PreRegistration::factory()->expired()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'dela Cruz',
+            'birthday' => '2015-03-15',
+        ]);
+
+        $this->postJson('/api/v1/portal/pre-registrations', $this->payload())
+            ->assertCreated();
+    }
+
     public function test_name_matching_is_case_insensitive(): void
     {
         Student::factory()->create([
@@ -135,6 +148,26 @@ class PreRegistrationStoreTest extends TestCase
             'first_name' => 'juan',
             'last_name' => 'dela cruz',
         ]))->assertUnprocessable();
+    }
+
+    public function test_name_matching_trims_whitespace(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'dela Cruz',
+            'birthday' => '2015-03-15',
+            'deleted_at' => null,
+        ]);
+
+        $payload = $this->payload([
+            'first_name' => '  Juan  ',
+            'last_name' => '  dela Cruz  ',
+        ]);
+
+        $this->postJson('/api/v1/portal/pre-registrations', $payload)
+            ->assertStatus(422)
+            ->assertJsonPath('errors.student.0', fn ($v) => str_contains($v, 'already enrolled'));
     }
 
     public function test_returns_warning_when_parent_email_exists(): void
