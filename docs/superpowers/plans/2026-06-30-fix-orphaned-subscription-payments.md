@@ -1,6 +1,6 @@
 # Fix Orphaned Subscription Payments Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Clean up orphaned `student_monthly_payments` rows left behind by the old naive `updateType` flow, and block that endpoint from creating the same dirty data again.
 
@@ -45,7 +45,7 @@
 **Interfaces:**
 - Produces: `PATCH /api/v1/students/{student}/type` returns 422 when switching subscription→non_subscription; upgrade path (non_subscription→subscription) unchanged
 
-- [ ] **Step 1: Update the existing test to expect 422 (write the failing test)**
+- [x] **Step 1: Update the existing test to expect 422 (write the failing test)**
 
 Open `tests/Feature/StudentDetailTest.php`. Find `test_manager_can_downgrade_subscription_student_to_wallet` (around line 161) and replace it entirely with:
 
@@ -66,7 +66,7 @@ public function test_updateType_rejects_subscription_to_non_subscription_downgra
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it FAILS (red)**
+- [x] **Step 2: Run the test to verify it FAILS (red)**
 
 ```bash
 vendor/bin/sail artisan test --compact --filter=test_updateType_rejects_subscription_to_non_subscription_downgrade
@@ -74,7 +74,7 @@ vendor/bin/sail artisan test --compact --filter=test_updateType_rejects_subscrip
 
 Expected: **FAIL** — the endpoint currently returns 200, not 422.
 
-- [ ] **Step 3: Add the guard to `updateType()`**
+- [x] **Step 3: Add the guard to `updateType()`**
 
 Open `app/Http/Controllers/Kitchen/StudentController.php`. In `updateType()`, add the `abort_if` check immediately after validation, before the update:
 
@@ -109,7 +109,7 @@ public function updateType(Request $request, Student $student): JsonResponse
 }
 ```
 
-- [ ] **Step 4: Run the updated test to verify it PASSES (green)**
+- [x] **Step 4: Run the updated test to verify it PASSES (green)**
 
 ```bash
 vendor/bin/sail artisan test --compact --filter=test_updateType_rejects_subscription_to_non_subscription_downgrade
@@ -117,7 +117,7 @@ vendor/bin/sail artisan test --compact --filter=test_updateType_rejects_subscrip
 
 Expected: **PASS**.
 
-- [ ] **Step 5: Run the full `StudentDetailTest` to confirm no regressions**
+- [x] **Step 5: Run the full `StudentDetailTest` to confirm no regressions**
 
 ```bash
 vendor/bin/sail artisan test --compact tests/Feature/StudentDetailTest.php
@@ -125,7 +125,7 @@ vendor/bin/sail artisan test --compact tests/Feature/StudentDetailTest.php
 
 Expected: All tests pass. In particular, `test_manager_can_upgrade_wallet_student_to_subscription` (non_subscription→subscription) must still pass — it is unaffected by the guard.
 
-- [ ] **Step 6: Format and commit**
+- [x] **Step 6: Format and commit**
 
 ```bash
 vendor/bin/sail bin pint --dirty --format agent
@@ -145,7 +145,7 @@ git commit -m "fix: block subscription→non-subscription switch via updateType;
 - Consumes: `Student::withoutBranch()`, `student->monthlyPayments` (HasMany), `StudentMonthlyPayment::whereIn()->delete()`, `activity('students')->performedOn()->withProperties()->log()`
 - Produces: `vendor/bin/sail artisan subscriptions:fix-orphaned-payments [--execute] [--branch=ID]` — exit 0 on success, exit 1 when branch ID not found
 
-- [ ] **Step 1: Create the test file (write all failing tests)**
+- [x] **Step 1: Create the test file (write all failing tests)**
 
 ```bash
 vendor/bin/sail artisan make:test --phpunit tests/Feature/Kitchen/FixOrphanedPaymentsCommandTest.php
@@ -331,7 +331,7 @@ class FixOrphanedPaymentsCommandTest extends TestCase
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they ALL FAIL (red)**
+- [x] **Step 2: Run the tests to verify they ALL FAIL (red)**
 
 ```bash
 vendor/bin/sail artisan test --compact tests/Feature/Kitchen/FixOrphanedPaymentsCommandTest.php
@@ -339,7 +339,7 @@ vendor/bin/sail artisan test --compact tests/Feature/Kitchen/FixOrphanedPayments
 
 Expected: **ALL FAIL** with "Command 'subscriptions:fix-orphaned-payments' is not defined."
 
-- [ ] **Step 3: Create the command**
+- [x] **Step 3: Create the command**
 
 ```bash
 vendor/bin/sail artisan make:command FixOrphanedSubscriptionPaymentsCommand --no-interaction
@@ -463,7 +463,7 @@ class FixOrphanedSubscriptionPaymentsCommand extends Command
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they ALL PASS (green)**
+- [x] **Step 4: Run the tests to verify they ALL PASS (green)**
 
 ```bash
 vendor/bin/sail artisan test --compact tests/Feature/Kitchen/FixOrphanedPaymentsCommandTest.php
@@ -471,7 +471,7 @@ vendor/bin/sail artisan test --compact tests/Feature/Kitchen/FixOrphanedPayments
 
 Expected: **ALL 9 PASS**.
 
-- [ ] **Step 5: Run the full suite to confirm no regressions**
+- [x] **Step 5: Run the full suite to confirm no regressions**
 
 ```bash
 vendor/bin/sail artisan test --compact
@@ -479,7 +479,7 @@ vendor/bin/sail artisan test --compact
 
 Expected: All tests pass (646 + 9 new = 655 tests).
 
-- [ ] **Step 6: Verify the command works with real data**
+- [x] **Step 6: Verify the command works with real data**
 
 ```bash
 # Dry-run first (safe)
@@ -491,7 +491,7 @@ vendor/bin/sail artisan subscriptions:fix-orphaned-payments --execute
 
 Expected: The 2 non-subscription students on local/staging with orphaned unpaid payments are cleaned up, or "Nothing to do." if already clean.
 
-- [ ] **Step 7: Format and commit**
+- [x] **Step 7: Format and commit**
 
 ```bash
 vendor/bin/sail bin pint --dirty --format agent
