@@ -51,7 +51,7 @@
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/Feature/Reports/StudentReportTest.php` (inside the class, before the closing brace):
 
@@ -221,7 +221,7 @@ public function test_export_respects_search_param(): void
 }
 ```
 
-- [ ] **Step 2: Run tests — expect new tests to fail**
+- [x] **Step 2: Run tests — expect new tests to fail**
 
 ```bash
 vendor/bin/sail artisan test --compact tests/Feature/Reports/StudentReportTest.php
@@ -229,7 +229,7 @@ vendor/bin/sail artisan test --compact tests/Feature/Reports/StudentReportTest.p
 
 Expected: new tests fail with JSON path not found or wrong count. Existing 7 tests still pass.
 
-- [ ] **Step 3: Update `StudentReportController::index()`**
+- [x] **Step 3: Update `StudentReportController::index()`**
 
 Replace the `index()` method body in `app/Http/Controllers/Kitchen/StudentReportController.php`:
 
@@ -306,7 +306,7 @@ public function index(Request $request): JsonResponse
 }
 ```
 
-- [ ] **Step 4: Update `StudentReportController::export()`**
+- [x] **Step 4: Update `StudentReportController::export()`**
 
 Replace the `export()` method body:
 
@@ -351,13 +351,13 @@ public function export(Request $request): BinaryFileResponse
 }
 ```
 
-- [ ] **Step 5: Run pint**
+- [x] **Step 5: Run pint**
 
 ```bash
 vendor/bin/sail bin pint --dirty --format agent
 ```
 
-- [ ] **Step 6: Run all report tests — expect all to pass**
+- [x] **Step 6: Run all report tests — expect all to pass**
 
 ```bash
 vendor/bin/sail artisan test --compact tests/Feature/Reports/StudentReportTest.php
@@ -365,7 +365,7 @@ vendor/bin/sail artisan test --compact tests/Feature/Reports/StudentReportTest.p
 
 Expected: all tests pass including the 9 new ones.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/Http/Controllers/Kitchen/StudentReportController.php tests/Feature/Reports/StudentReportTest.php
@@ -385,7 +385,7 @@ git commit -m "feat: add search filter and notes/allergies to student report end
 
 ---
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/Feature/Reports/StudentReportTest.php`:
 
@@ -436,7 +436,7 @@ public function test_export_maps_null_allergies_and_notes_as_empty_string(): voi
 }
 ```
 
-- [ ] **Step 2: Run failing tests to confirm**
+- [x] **Step 2: Run failing tests to confirm**
 
 ```bash
 vendor/bin/sail artisan test --compact --filter=test_export_headings_include_allergies_and_notes
@@ -444,7 +444,7 @@ vendor/bin/sail artisan test --compact --filter=test_export_headings_include_all
 
 Expected: FAIL — heading count is 12, not 14.
 
-- [ ] **Step 3: Update `StudentsExport::headings()`**
+- [x] **Step 3: Update `StudentsExport::headings()`**
 
 In `app/Exports/StudentsExport.php`, replace the `headings()` return array:
 
@@ -470,7 +470,7 @@ public function headings(): array
 }
 ```
 
-- [ ] **Step 4: Update `StudentsExport::map()`**
+- [x] **Step 4: Update `StudentsExport::map()`**
 
 In `app/Exports/StudentsExport.php`, replace the `map()` return array:
 
@@ -498,13 +498,13 @@ public function map($student): array
 }
 ```
 
-- [ ] **Step 5: Run pint**
+- [x] **Step 5: Run pint**
 
 ```bash
 vendor/bin/sail bin pint --dirty --format agent
 ```
 
-- [ ] **Step 6: Run all report tests — expect all to pass**
+- [x] **Step 6: Run all report tests — expect all to pass**
 
 ```bash
 vendor/bin/sail artisan test --compact tests/Feature/Reports/StudentReportTest.php
@@ -512,7 +512,7 @@ vendor/bin/sail artisan test --compact tests/Feature/Reports/StudentReportTest.p
 
 Expected: all tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add app/Exports/StudentsExport.php tests/Feature/Reports/StudentReportTest.php
@@ -531,7 +531,7 @@ git commit -m "feat: add allergies and notes columns to students excel export"
 
 ---
 
-- [ ] **Step 1: Update `StudentReportRow` interface**
+- [x] **Step 1: Update `StudentReportRow` interface**
 
 In `lib/api/reports.ts`, find the `StudentReportRow` interface (around line 96) and replace it:
 
@@ -552,7 +552,7 @@ export interface StudentReportRow {
 
 The `reportApi.students()` method already accepts `Record<string, string | number | undefined>` so `search` needs no signature change — just pass it in the params object from the page.
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd ~/sunbites-pos && npx tsc --noEmit 2>&1 | head -30
@@ -560,7 +560,7 @@ cd ~/sunbites-pos && npx tsc --noEmit 2>&1 | head -30
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/api/reports.ts
@@ -582,7 +582,7 @@ git commit -m "feat: add notes and allergies to StudentReportRow type"
 
 ---
 
-- [ ] **Step 1: Create `components/reports/filter-pill-group.tsx`**
+- [x] **Step 1: Create `components/reports/filter-pill-group.tsx`**
 
 ```typescript
 "use client";
@@ -646,7 +646,7 @@ export function FilterPillGroup({
 }
 ```
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd ~/sunbites-pos && npx tsc --noEmit 2>&1 | head -30
@@ -654,7 +654,7 @@ cd ~/sunbites-pos && npx tsc --noEmit 2>&1 | head -30
 
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/reports/filter-pill-group.tsx
@@ -680,7 +680,7 @@ git commit -m "feat: add FilterPillGroup component for student report filters"
 
 ---
 
-- [ ] **Step 1: Replace `app/(kitchen)/reports/students/page.tsx`**
+- [x] **Step 1: Replace `app/(kitchen)/reports/students/page.tsx`**
 
 ```typescript
 "use client";
@@ -1121,7 +1121,7 @@ export default function StudentsReportPage() {
 
 > **Note:** The `rows.flatMap()` pattern is used instead of JSX fragment siblings inside `<tbody>` to avoid React's key warning — `<tbody>` cannot have `<>` fragments as direct children.
 
-- [ ] **Step 2: Verify TypeScript compiles**
+- [x] **Step 2: Verify TypeScript compiles**
 
 ```bash
 cd ~/sunbites-pos && npx tsc --noEmit 2>&1 | head -40
@@ -1129,7 +1129,7 @@ cd ~/sunbites-pos && npx tsc --noEmit 2>&1 | head -40
 
 Expected: no errors.
 
-- [ ] **Step 3: Run the full backend test suite to confirm no regressions**
+- [x] **Step 3: Run the full backend test suite to confirm no regressions**
 
 ```bash
 cd ~/sunbites-api && vendor/bin/sail artisan test --compact
@@ -1137,7 +1137,7 @@ cd ~/sunbites-api && vendor/bin/sail artisan test --compact
 
 Expected: all tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add app/(kitchen)/reports/students/page.tsx

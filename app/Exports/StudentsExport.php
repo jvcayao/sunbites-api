@@ -44,7 +44,6 @@ class StudentsExport implements FromCollection, ShouldAutoSize, WithHeadings, Wi
         ];
     }
 
-    /** @param  mixed  $student */
     public function map($student): array
     {
         $primaryContact = $student->contacts->firstWhere('is_primary', true);

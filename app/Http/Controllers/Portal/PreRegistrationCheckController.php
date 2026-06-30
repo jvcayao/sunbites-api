@@ -25,19 +25,11 @@ class PreRegistrationCheckController extends Controller
             'phone' => ['nullable', 'string', 'max:30'],
         ]);
 
-        $branchId = $validated['branch_id'];
-        $firstName = $validated['first_name'];
-        $lastName = $validated['last_name'];
-        $birthday = $validated['birthday'];
-
         $studentStatus = null;
-        $isStudentDuplicate = false;
 
-        if ($this->duplicateService->isEnrolledStudent($branchId, $firstName, $lastName, $birthday)) {
-            $isStudentDuplicate = true;
+        if ($this->duplicateService->isEnrolledStudent($validated['branch_id'], $validated['first_name'], $validated['last_name'], $validated['birthday'])) {
             $studentStatus = 'enrolled';
-        } elseif ($this->duplicateService->hasPendingPreRegistration($branchId, $firstName, $lastName, $birthday)) {
-            $isStudentDuplicate = true;
+        } elseif ($this->duplicateService->hasPendingPreRegistration($validated['branch_id'], $validated['first_name'], $validated['last_name'], $validated['birthday'])) {
             $studentStatus = 'pending';
         }
 
@@ -50,7 +42,7 @@ class PreRegistrationCheckController extends Controller
 
         return response()->json([
             'student' => [
-                'is_duplicate' => $isStudentDuplicate,
+                'is_duplicate' => $studentStatus !== null,
                 'status' => $studentStatus,
             ],
             'parent' => [

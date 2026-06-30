@@ -172,7 +172,7 @@ class PreRegistrationController extends Controller
             return response()->json(['message' => 'Only pending pre-registrations can be approved.'], 422);
         }
 
-        $result = DB::transaction(function () use ($preRegistration) {
+        [$student, $locked] = DB::transaction(function () use ($preRegistration) {
             $locked = PreRegistration::lockForUpdate()->find($preRegistration->id);
 
             abort_if(
@@ -242,8 +242,6 @@ class PreRegistrationController extends Controller
 
             return [$student, $locked];
         });
-
-        [$student, $locked] = $result;
 
         $primaryEmail = $locked->contacts->firstWhere('is_primary', true)?->email
             ?? $locked->contacts->first()?->email;

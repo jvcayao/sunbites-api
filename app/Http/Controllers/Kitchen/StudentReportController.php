@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Kitchen;
 use App\Exports\StudentsExport;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -30,16 +31,7 @@ class StudentReportController extends Controller
             ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
             ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
             ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
-            ->when(filled($validated['search'] ?? null), function ($q) use ($validated) {
-                $term = $validated['search'];
-                $q->where(function ($inner) use ($term) {
-                    $inner->where('first_name', 'like', "%{$term}%")
-                        ->orWhere('last_name', 'like', "%{$term}%")
-                        ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
-                        ->orWhere('student_number', 'like', "%{$term}%")
-                        ->orWhere('section', 'like', "%{$term}%");
-                });
-            })
+            ->when(filled($validated['search'] ?? null), fn ($q) => $this->applySearch($q, $validated['search']))
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -63,9 +55,7 @@ class StudentReportController extends Controller
             'student_number' => $student->student_number,
             'grade_level' => $student->grade_level,
             'section' => $student->section,
-            'status' => $student->enrollment_status instanceof \BackedEnum
-                ? $student->enrollment_status->value
-                : (string) $student->enrollment_status,
+            'status' => $student->enrollment_status?->value,
             'wallet_balance' => (float) ($student->wallet?->balanceFloat ?? 0),
             'total_spent' => (float) $student->total_spent,
             'notes' => $student->notes,
@@ -92,9 +82,9 @@ class StudentReportController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $branchId = app('active_branch')->id;
+        $branch = app('active_branch');
 
-        $students = Student::where('branch_id', $branchId)
+        $students = Student::where('branch_id', $branch->id)
             ->with([
                 'contacts' => fn ($q) => $q->where('is_primary', true),
                 'wallet',
@@ -102,23 +92,24 @@ class StudentReportController extends Controller
             ->when(filled($validated['status'] ?? null), fn ($q) => $q->where('enrollment_status', $validated['status']))
             ->when(filled($validated['grade'] ?? null), fn ($q) => $q->where('grade_level', $validated['grade']))
             ->when(filled($validated['type'] ?? null), fn ($q) => $q->where('student_type', $validated['type']))
-            ->when(filled($validated['search'] ?? null), function ($q) use ($validated) {
-                $term = $validated['search'];
-                $q->where(function ($inner) use ($term) {
-                    $inner->where('first_name', 'like', "%{$term}%")
-                        ->orWhere('last_name', 'like', "%{$term}%")
-                        ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
-                        ->orWhere('student_number', 'like', "%{$term}%")
-                        ->orWhere('section', 'like', "%{$term}%");
-                });
-            })
+            ->when(filled($validated['search'] ?? null), fn ($q) => $this->applySearch($q, $validated['search']))
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
 
-        $branch = app('active_branch');
         $filename = "students-{$branch->slug}-".now()->format('Y-m-d').'.xlsx';
 
         return Excel::download(new StudentsExport($students), $filename);
+    }
+
+    private function applySearch(Builder $query, string $term): void
+    {
+        $query->where(function ($q) use ($term) {
+            $q->where('first_name', 'like', "%{$term}%")
+                ->orWhere('last_name', 'like', "%{$term}%")
+                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
+                ->orWhere('student_number', 'like', "%{$term}%")
+                ->orWhere('section', 'like', "%{$term}%");
+        });
     }
 }
