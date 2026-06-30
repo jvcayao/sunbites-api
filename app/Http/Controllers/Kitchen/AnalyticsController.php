@@ -13,6 +13,8 @@ use Illuminate\Validation\Rule;
 
 class AnalyticsController extends Controller
 {
+    private ?bool $isSqliteDriver = null;
+
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -26,13 +28,14 @@ class AnalyticsController extends Controller
         $start = Carbon::create($validated['from_year'], SchoolMonth::from($validated['from_month'])->toMonthNumber(), 1)->startOfMonth();
         $end = Carbon::create($validated['to_year'], SchoolMonth::from($validated['to_month'])->toMonthNumber(), 1)->endOfMonth();
         $periods = $this->monthPeriods($start, $end);
+        $studentIds = Student::withoutBranch()->where('branch_id', $branchId)->pluck('id');
 
         return response()->json([
             'period' => $this->buildPeriodMeta($validated, $periods),
             'sales' => $this->buildSales($branchId, $start, $end, $periods),
-            'students' => $this->buildStudents($branchId, $start, $end, $periods),
-            'billing' => $this->buildBilling($branchId, $periods),
-            'wallet' => $this->buildWallet($branchId, $start, $end, $periods),
+            'students' => $this->buildStudents($branchId, $start, $end, $periods, $studentIds),
+            'billing' => $this->buildBilling($periods, $studentIds),
+            'wallet' => $this->buildWallet($start, $end, $periods, $studentIds),
             'credits' => $this->buildCredits($branchId),
             'inventory' => $this->buildInventory($branchId, $start, $end, $periods),
         ], 200, [], JSON_PRESERVE_ZERO_FRACTION);
@@ -40,7 +43,7 @@ class AnalyticsController extends Controller
 
     private function isSqlite(): bool
     {
-        return DB::getDriverName() === 'sqlite';
+        return $this->isSqliteDriver ??= DB::getDriverName() === 'sqlite';
     }
 
     private function yearMonthExpr(string $column): string
@@ -63,6 +66,13 @@ class AnalyticsController extends Controller
         return $this->isSqlite()
             ? "json_extract({$column}, '{$path}')"
             : "JSON_UNQUOTE(JSON_EXTRACT({$column}, '{$path}'))";
+    }
+
+    private function collectionRate(float $paid, float $unpaid): float
+    {
+        $denominator = $paid + $unpaid;
+
+        return $denominator > 0 ? round($paid / $denominator * 100, 1) : 0.0;
     }
 
     /** @return array<int, array{month: string, year: int, key: string, label: string}> */
@@ -104,15 +114,17 @@ class AnalyticsController extends Controller
             ->where('status', 'completed')
             ->whereBetween('created_at', [$start, $end])
             ->selectRaw('
-                COALESCE(SUM(total), 0)           AS total_revenue,
-                COUNT(*)                           AS total_orders,
-                COALESCE(AVG(total), 0)            AS avg_order_value,
-                COALESCE(SUM(discount_amount), 0)  AS total_discounts
+                COALESCE(SUM(total), 0)                AS total_revenue,
+                COUNT(*)                               AS total_orders,
+                COALESCE(AVG(total), 0)                AS avg_order_value,
+                COALESCE(SUM(discount_amount), 0)      AS total_discounts,
+                COUNT(DISTINCT DATE(created_at))       AS active_days
             ')
             ->first();
 
         $totalRevenue = round((float) ($kpis->total_revenue ?? 0), 2);
         $totalDiscounts = round((float) ($kpis->total_discounts ?? 0), 2);
+        $dayCount = max(1, (int) ($kpis->active_days ?? 1));
 
         $ym = $this->yearMonthExpr('created_at');
 
@@ -155,13 +167,6 @@ class AnalyticsController extends Controller
             ->map(fn ($r) => ['name' => $r->name, 'quantity' => (int) $r->quantity])
             ->toArray();
 
-        $dayCount = DB::table('orders')
-            ->where('branch_id', $branchId)
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
-            ->selectRaw('COUNT(DISTINCT DATE(created_at)) AS days')
-            ->value('days') ?: 1;
-
         $hr = $this->hourExpr('created_at');
 
         $hourlyRaw = DB::table('orders')
@@ -196,7 +201,7 @@ class AnalyticsController extends Controller
         ];
     }
 
-    private function buildStudents(int $branchId, Carbon $start, Carbon $end, array $periods): array
+    private function buildStudents(int $branchId, Carbon $start, Carbon $end, array $periods, mixed $studentIds): array
     {
         $counts = Student::withoutBranch()
             ->where('branch_id', $branchId)
@@ -209,8 +214,6 @@ class AnalyticsController extends Controller
                 [$start, $end]
             )
             ->first();
-
-        $studentIds = Student::withoutBranch()->where('branch_id', $branchId)->pluck('id');
 
         $oldType = $this->jsonExtract('attribute_changes', '$.old.student_type');
         $newType = $this->jsonExtract('attribute_changes', '$.attributes.student_type');
@@ -265,19 +268,15 @@ class AnalyticsController extends Controller
         ];
     }
 
-    private function buildBilling(int $branchId, array $periods): array
+    private function buildBilling(array $periods, mixed $studentIds): array
     {
-        $studentIds = Student::withoutBranch()->where('branch_id', $branchId)->pluck('id')->toArray();
-
-        $periodConditions = function ($q) use ($periods) {
-            foreach ($periods as $p) {
-                $q->orWhere(fn ($sub) => $sub->where('school_month', $p['month'])->where('year', $p['year']));
-            }
-        };
-
         $base = DB::table('student_monthly_payments')
             ->whereIn('student_id', $studentIds)
-            ->where($periodConditions);
+            ->where(function ($q) use ($periods) {
+                foreach ($periods as $p) {
+                    $q->orWhere(fn ($sub) => $sub->where('school_month', $p['month'])->where('year', $p['year']));
+                }
+            });
 
         $kpiRaw = (clone $base)
             ->selectRaw("
@@ -291,8 +290,6 @@ class AnalyticsController extends Controller
         $paidAmount = (float) ($kpiRaw->paid_amount ?? 0);
         $unpaidAmount = (float) ($kpiRaw->unpaid_amount ?? 0);
         $voidAmount = (float) ($kpiRaw->void_amount ?? 0);
-        $denominator = $paidAmount + $unpaidAmount;
-        $collectionRate = $denominator > 0 ? round($paidAmount / $denominator * 100, 1) : 0.0;
 
         $discrepancyCount = (clone $base)
             ->where('status', 'unpaid')
@@ -321,11 +318,9 @@ class AnalyticsController extends Controller
             ->keyBy(fn ($r) => $r->school_month.'_'.$r->year);
 
         $monthlyTrend = array_map(function ($p) use ($trendRaw) {
-            $key = $p['month'].'_'.$p['year'];
-            $r = $trendRaw->get($key);
+            $r = $trendRaw->get($p['month'].'_'.$p['year']);
             $pa = (float) ($r?->paid_amount ?? 0);
             $ua = (float) ($r?->unpaid_amount ?? 0);
-            $den = $pa + $ua;
 
             return [
                 'label' => $p['label'],
@@ -335,7 +330,7 @@ class AnalyticsController extends Controller
                 'paid_amount' => round($pa, 2),
                 'unpaid_amount' => round($ua, 2),
                 'void_amount' => round((float) ($r?->void_amount ?? 0), 2),
-                'collection_rate' => $den > 0 ? round($pa / $den * 100, 1) : 0.0,
+                'collection_rate' => $this->collectionRate($pa, $ua),
             ];
         }, $periods);
 
@@ -364,7 +359,7 @@ class AnalyticsController extends Controller
                 'total_outstanding' => round($unpaidAmount, 2),
                 'total_void' => round($voidAmount, 2),
                 'total_subscribers' => (int) ($kpiRaw->total_subscribers ?? 0),
-                'collection_rate' => $collectionRate,
+                'collection_rate' => $this->collectionRate($paidAmount, $unpaidAmount),
                 'discrepancy_count' => $discrepancyCount,
                 'fully_paid_count' => $fullyPaidCount,
             ],
@@ -373,10 +368,8 @@ class AnalyticsController extends Controller
         ];
     }
 
-    private function buildWallet(int $branchId, Carbon $start, Carbon $end, array $periods): array
+    private function buildWallet(Carbon $start, Carbon $end, array $periods, mixed $studentIds): array
     {
-        $studentIds = Student::withoutBranch()->where('branch_id', $branchId)->pluck('id');
-
         $walletIds = DB::table('wallets')
             ->where('holder_type', Student::class)
             ->whereIn('holder_id', $studentIds)
@@ -442,8 +435,9 @@ class AnalyticsController extends Controller
     {
         $base = Student::withoutBranch()->where('branch_id', $branchId)->where('credit_balance', '>', 0);
 
-        $studentsOnCredit = (clone $base)->count();
-        $totalCreditBalance = round((float) (clone $base)->sum('credit_balance'), 2);
+        $aggregates = (clone $base)->selectRaw('COUNT(*) AS cnt, COALESCE(SUM(credit_balance), 0) AS total')->first();
+        $studentsOnCredit = (int) ($aggregates->cnt ?? 0);
+        $totalCreditBalance = round((float) ($aggregates->total ?? 0), 2);
         $avgCredit = $studentsOnCredit > 0 ? round($totalCreditBalance / $studentsOnCredit, 2) : 0.0;
         $creditLimit = (float) config('sunbites.credit_limit', 300);
         $nearLimitCount = (clone $base)->where('credit_balance', '>=', $creditLimit - 50)->count();
@@ -469,9 +463,13 @@ class AnalyticsController extends Controller
     {
         $items = DB::table('inventory_items')->where('branch_id', $branchId)->where('is_archived', 0);
 
-        $totalItems = (clone $items)->count();
-        $lowStockCount = (clone $items)->whereRaw('quantity > 0 AND quantity <= restock_threshold')->count();
-        $outOfStockCount = (clone $items)->where('quantity', '<=', 0)->count();
+        $stockCounts = (clone $items)
+            ->selectRaw('
+                COUNT(*) AS total,
+                SUM(CASE WHEN quantity > 0 AND quantity <= restock_threshold THEN 1 ELSE 0 END) AS low,
+                SUM(CASE WHEN quantity <= 0 THEN 1 ELSE 0 END) AS out_of_stock
+            ')
+            ->first();
 
         $mostRestocked = DB::table('inventory_logs')
             ->where('branch_id', $branchId)
@@ -524,9 +522,9 @@ class AnalyticsController extends Controller
 
         return [
             'kpis' => [
-                'total_items' => $totalItems,
-                'low_stock_count' => $lowStockCount,
-                'out_of_stock_count' => $outOfStockCount,
+                'total_items' => (int) ($stockCounts->total ?? 0),
+                'low_stock_count' => (int) ($stockCounts->low ?? 0),
+                'out_of_stock_count' => (int) ($stockCounts->out_of_stock ?? 0),
                 'most_restocked_item' => $mostRestocked?->item_name_snapshot,
                 'most_restocked_count' => (int) ($mostRestocked?->restock_count ?? 0),
             ],
