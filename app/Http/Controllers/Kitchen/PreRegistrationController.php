@@ -13,6 +13,7 @@ use App\Models\StudentContact;
 use App\Models\SystemConfiguration;
 use App\Services\EnrollmentService;
 use App\Services\ParentProvisioningService;
+use App\Services\StudentDuplicateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -25,6 +26,7 @@ class PreRegistrationController extends Controller
     public function __construct(
         private readonly EnrollmentService $enrollmentService,
         private readonly ParentProvisioningService $provisioningService,
+        private readonly StudentDuplicateService $duplicateService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -179,14 +181,27 @@ class PreRegistrationController extends Controller
                 'Only pending pre-registrations can be approved.'
             );
 
+            // PRIMARY: name + birthday — always runs, regardless of student_number
+            abort_if(
+                $this->duplicateService->isEnrolledStudent(
+                    $locked->branch_id,
+                    $locked->first_name,
+                    $locked->last_name,
+                    $locked->birthday->toDateString(),
+                ),
+                422,
+                'A student with this name and birthday is already enrolled. Please resolve the duplicate before approving.'
+            );
+
+            // SUPPLEMENTARY: student_number — only when provided
             if ($locked->student_number) {
-                $duplicate = Student::withoutGlobalScopes()
+                $numberDuplicate = Student::withoutGlobalScopes()
                     ->where('branch_id', $locked->branch_id)
                     ->where('student_number', $locked->student_number)
                     ->whereNull('deleted_at')
                     ->exists();
 
-                abort_if($duplicate, 422, 'A student with this student number already exists. Please resolve the duplicate before approving.');
+                abort_if($numberDuplicate, 422, 'A student with this student number already exists. Please resolve the duplicate before approving.');
             }
 
             $student = $this->enrollmentService->enroll($locked->toEnrollmentData());
