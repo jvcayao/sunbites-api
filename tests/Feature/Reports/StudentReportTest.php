@@ -164,4 +164,168 @@ class StudentReportTest extends TestCase
         $this->assertStringNotContainsString('pagibig_number', $content);
         $this->assertStringNotContainsString('tin_number', $content);
     }
+
+    public function test_search_by_first_name_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'last_name' => 'Santos',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Maria',
+            'last_name' => 'Reyes',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('Juan Santos', $response->json('data.0.full_name'));
+    }
+
+    public function test_search_by_last_name_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Ana',
+            'last_name' => 'Dela Cruz',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Pedro',
+            'last_name' => 'Santos',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Dela+Cruz');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_by_student_number_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => '2024-0042',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => '2024-0099',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=0042');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('2024-0042', $response->json('data.0.student_number'));
+    }
+
+    public function test_search_by_section_returns_matching_students(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'section' => 'Mabini',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'section' => 'Rizal',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Mabini');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_search_combined_with_status_filter(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'enrollment_status' => 'enrolled',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Juan',
+            'enrollment_status' => 'paused',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan&status=enrolled');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('enrolled', $response->json('data.0.status'));
+    }
+
+    public function test_row_response_includes_notes_and_allergies(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'notes' => 'Bring packed lunch on Fridays.',
+            'allergies' => 'Peanuts, shellfish',
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.notes', 'Bring packed lunch on Fridays.')
+            ->assertJsonPath('data.0.allergies', 'Peanuts, shellfish');
+    }
+
+    public function test_row_response_notes_and_allergies_are_null_when_empty(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'notes' => null,
+            'allergies' => null,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students');
+
+        $response->assertOk()
+            ->assertJsonPath('data.0.notes', null)
+            ->assertJsonPath('data.0.allergies', null);
+    }
+
+    public function test_summary_is_not_affected_by_search(): void
+    {
+        Student::factory()->count(3)->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+            'first_name' => 'Juan',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'enrollment_status' => 'enrolled',
+            'first_name' => 'Maria',
+        ]);
+
+        // Search narrows rows to 3, but summary must still show 4 enrolled
+        $response = $this->asAdmin()->getJson('/api/v1/reports/students?search=Juan');
+
+        $response->assertOk();
+        $this->assertCount(3, $response->json('data'));
+        $this->assertSame(4, $response->json('summary.total'));
+    }
+
+    public function test_export_respects_search_param(): void
+    {
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Exportable',
+            'last_name' => 'Student',
+        ]);
+        Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'first_name' => 'Other',
+            'last_name' => 'Person',
+        ]);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/students/export?search=Exportable');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
 }

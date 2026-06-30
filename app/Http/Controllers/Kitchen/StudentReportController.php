@@ -18,6 +18,7 @@ class StudentReportController extends Controller
             'status' => ['nullable', 'string'],
             'grade' => ['nullable', 'string'],
             'type' => ['nullable', 'string'],
+            'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -29,6 +30,16 @@ class StudentReportController extends Controller
             ->when(isset($validated['status']), fn ($q) => $q->where('enrollment_status', $validated['status']))
             ->when(isset($validated['grade']), fn ($q) => $q->where('grade_level', $validated['grade']))
             ->when(isset($validated['type']), fn ($q) => $q->where('student_type', $validated['type']))
+            ->when(filled($validated['search'] ?? null), function ($q) use ($validated) {
+                $term = $validated['search'];
+                $q->where(function ($inner) use ($term) {
+                    $inner->where('first_name', 'like', "%{$term}%")
+                        ->orWhere('last_name', 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
+                        ->orWhere('student_number', 'like', "%{$term}%")
+                        ->orWhere('section', 'like', "%{$term}%");
+                });
+            })
             ->orderBy('last_name')
             ->orderBy('first_name');
 
@@ -57,6 +68,8 @@ class StudentReportController extends Controller
                 : (string) $student->enrollment_status,
             'wallet_balance' => (float) ($student->wallet?->balanceFloat ?? 0),
             'total_spent' => (float) $student->total_spent,
+            'notes' => $student->notes,
+            'allergies' => $student->allergies,
         ]);
 
         return response()->json([
@@ -76,6 +89,7 @@ class StudentReportController extends Controller
             'status' => ['nullable', 'string'],
             'grade' => ['nullable', 'string'],
             'type' => ['nullable', 'string'],
+            'search' => ['nullable', 'string', 'max:100'],
         ]);
 
         $branchId = app('active_branch')->id;
@@ -88,6 +102,16 @@ class StudentReportController extends Controller
             ->when(isset($validated['status']), fn ($q) => $q->where('enrollment_status', $validated['status']))
             ->when(isset($validated['grade']), fn ($q) => $q->where('grade_level', $validated['grade']))
             ->when(isset($validated['type']), fn ($q) => $q->where('student_type', $validated['type']))
+            ->when(filled($validated['search'] ?? null), function ($q) use ($validated) {
+                $term = $validated['search'];
+                $q->where(function ($inner) use ($term) {
+                    $inner->where('first_name', 'like', "%{$term}%")
+                        ->orWhere('last_name', 'like', "%{$term}%")
+                        ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
+                        ->orWhere('student_number', 'like', "%{$term}%")
+                        ->orWhere('section', 'like', "%{$term}%");
+                });
+            })
             ->orderBy('last_name')
             ->orderBy('first_name')
             ->get();
