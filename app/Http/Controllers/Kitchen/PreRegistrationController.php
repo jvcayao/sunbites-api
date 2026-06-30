@@ -211,12 +211,7 @@ class PreRegistrationController extends Controller
             foreach ($locked->contacts as $contact) {
                 StudentContact::create([
                     'student_id' => $student->id,
-                    'full_name' => $contact->full_name,
-                    'relationship' => $contact->relationship,
-                    'phone' => $contact->phone,
-                    'address' => $contact->address,
-                    'email' => $contact->email,
-                    'is_primary' => $contact->is_primary,
+                    ...$contact->only(['full_name', 'relationship', 'phone', 'address', 'email', 'is_primary']),
                 ]);
 
                 if ($contact->is_primary && $contact->email) {
