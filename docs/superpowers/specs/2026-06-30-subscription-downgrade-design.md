@@ -36,6 +36,10 @@ $table->string('void_reason')->nullable()->after('voided_by');
 
 The unique constraint `(student_id, school_month, year)` is unchanged; voided records are still distinct per student per month per year.
 
+**`StudentMonthlyPayment` model updates** (in addition to migration):
+- Add `voided_at`, `voided_by`, `void_reason` to `$fillable`
+- Add `'voided_at' => 'datetime'` to `casts()`
+
 ---
 
 ## API Changes
@@ -115,11 +119,12 @@ Roles: `admin`, `manager`
 **Validation:**
 - The `payment` must belong to the `student` (or return `404`).
 - `status` must be `"paid"` (cannot void an already-voided or unpaid record).
-- The payment's `(school_month, year)` must be **>=** the current school month/year. If it's a past month, return:
-  ```json
-  { "message": "Cannot void a past month's payment — this subscription period has already been consumed." }
+- The payment's month must be >= the current calendar month using Carbon date comparison:
+  ```php
+  $paymentDate = Carbon::createFromDate($payment->year, $payment->school_month->toMonthNumber(), 1)->startOfMonth();
+  abort_if($paymentDate->lt(now()->startOfMonth()), 422, 'Cannot void a past month\'s payment — this subscription period has already been consumed.');
   ```
-  HTTP `422`.
+  This correctly handles April/May (non-school months): any payment whose calendar date is before the current month is a past month.
 
 **Logic:**
 1. Set `status = "voided"`, `voided_at = now()`, `voided_by = auth user id`, `void_reason = reason`.
@@ -137,7 +142,30 @@ Roles: `admin`, `manager`
 
 ---
 
-### 4. Billing Report (`BillingReportController`)
+### 4. Guard existing `PaymentController` methods against voided records
+
+Three existing methods need guards to prevent silently operating on voided payments:
+
+**`toggle()`** — add at the top of the method:
+```php
+abort_if($payment->status === 'voided', 422, 'Cannot modify a voided payment.');
+```
+Without this, toggling a voided payment would set it to `'paid'`, resurrecting it without any audit trail.
+
+**`record()`** — add after the `firstOrFail()` call:
+```php
+abort_if($payment->status === 'voided', 422, 'Cannot record payment on a voided record.');
+```
+
+**`updateAmount()`** — the existing guard `abort_if($payment->status !== 'unpaid', ...)` already rejects voided records correctly. No change needed.
+
+**`index()` response** — add voided fields to the mapping so the POS payments tab can display them:
+```php
+'voided_at' => $p->voided_at?->toDateTimeString(),
+'void_reason' => $p->void_reason,
+```
+
+### 6. Billing Report (`BillingReportController`)
 
 `buildQuery()` adds `.where('status', '!=', 'voided')` by default so voided records are excluded from all billing summaries and exports.
 
@@ -147,7 +175,7 @@ The summary card labels and collection rate calculation are unaffected since voi
 
 ---
 
-### 5. Subscription Report (`SubscriptionReportController`)
+### 7. Subscription Report (`SubscriptionReportController`)
 
 The response gains a second key `historical_data` alongside the existing paginated `data`.
 
@@ -165,19 +193,30 @@ The response gains a second key `historical_data` alongside the existing paginat
 }
 ```
 
-Query: `Student` where `student_type = non_subscription` with a `whereHas('monthlyPayments')` for `status = paid`, `school_month = $monthEnum`, `year = $year`.
+Query — **must include explicit branch scope** (the `HasBranch` global scope is active in this controller's context, but use explicit `where` to be safe):
+```php
+$historical = Student::where('branch_id', $branch->id)
+    ->where('student_type', 'non_subscription')
+    ->whereNull('deleted_at')
+    ->whereHas('monthlyPayments', fn ($q) => $q
+        ->where('school_month', $monthEnum->value)
+        ->where('year', $year)
+        ->where('status', 'paid')
+    )
+    ->get(['id', 'first_name', 'last_name', 'student_number', 'grade_level', 'section']);
+```
 
 No meal usage columns — these students are no longer on subscription so allocation tracking doesn't apply.
 
 ---
 
-### 6. Portal payment history (`StudentPaymentHistoryController`)
+### 8. Portal payment history (`StudentPaymentHistoryController`)
 
 Remove the `abort_unless(StudentType::Subscription)` guard. Parents of ex-subscription students should still be able to see their paid history.
 
-Add a filter to exclude voided records from the response: `.where('status', '!=', 'voided')`.
+Add a filter to exclude voided records from the response: `->where('status', '!=', 'voided')`. Voided records are a staff-side concern; parents should see only paid historical months.
 
-Add voided records as a separate optional fetch if needed in the future — out of scope for this spec.
+No voided records are ever returned to the portal, so no voided UI is needed on the portal frontend.
 
 ---
 
@@ -200,8 +239,31 @@ voidPayment: (studentId: number, paymentId: number, reason: string) =>
 
 ### `types/student.ts`
 
-Add types:
+**Update `PaymentStatus`** (line 19) — this is a named type used by `MonthlyPayment.status`. Change it directly; `MonthlyPayment` inherits the change:
+```typescript
+// Before
+export type PaymentStatus = "paid" | "unpaid";
 
+// After
+export type PaymentStatus = "paid" | "unpaid" | "voided";
+```
+
+**Update `MonthlyPayment`** — add voided audit fields to the interface:
+```typescript
+export interface MonthlyPayment {
+  id: number;
+  school_month: SchoolMonth;
+  school_month_label: string;
+  year: number;
+  status: PaymentStatus;
+  amount: string;
+  recorded_at: string | null;
+  voided_at: string | null;   // new
+  void_reason: string | null; // new
+}
+```
+
+**Add new types:**
 ```typescript
 export interface DowngradePreviewMonth {
   id: number;
@@ -219,8 +281,6 @@ export interface DowngradePreview {
   wallet_balance: number;
 }
 ```
-
-Update `MonthlyPayment.status` type from `"paid" | "unpaid"` to `"paid" | "unpaid" | "voided"`.
 
 ### `app/(kitchen)/students/[id]/page.tsx` — Downgrade flow
 
@@ -259,6 +319,30 @@ For voided rows, show `void_reason` as a muted sub-line below the badge. Hide th
 
 Add a "Void Payment" button on current/future paid rows (admin/manager only). Clicking opens a small confirmation dialog with a required reason textarea. Calls `voidPayment()`. On success invalidates `["student-payments", studentId]` and `["student", studentId]`.
 
+### `lib/api/reports.ts` — subscription report types
+
+Add `HistoricalSubscriberRow` interface and update `subscriptionUsage` return type:
+
+```typescript
+export interface HistoricalSubscriberRow {
+  id: number;
+  full_name: string;
+  student_number: string | null;
+  grade_level: string;
+  section: string | null;
+  payment_amount: number;
+}
+
+// Update subscriptionUsage return type from:
+// apiClient.get<{ data: SubscriptionReportRow[]; meta: PaginatedMeta }>
+// To:
+apiClient.get<{
+  data: SubscriptionReportRow[];
+  meta: PaginatedMeta;
+  historical_data: HistoricalSubscriberRow[];
+}>("/reports/subscription", { params })
+```
+
 ### `app/(kitchen)/reports/subscription/page.tsx`
 
 Below the existing paginated table, add a collapsible **"Former Subscribers"** section. Collapsed by default, shown as a button: *"Show X former subscribers with paid records for this month"* (hidden if `historical_data` is empty).
@@ -275,7 +359,19 @@ With a muted "Switched" pill badge in the student cell. No usage columns.
 
 Add `"Voided"` to the status filter dropdown (alongside Paid / Unpaid). The API already filters out voided by default; selecting `status=voided` shows the voided audit records.
 
-Billing payment rows add a voided rendering: muted text, strikethrough on amount, "Voided" badge.
+**`StatusBadge` component** — currently typed as `{ status: "paid" | "unpaid" }`. Update to handle three states:
+```typescript
+function StatusBadge({ status }: { status: "paid" | "unpaid" | "voided" }) {
+  const map = {
+    paid: "bg-green-100 text-green-700 border-green-300",
+    unpaid: "bg-red-100 text-destructive border-red-300",
+    voided: "bg-muted text-muted-foreground border-border line-through",
+  };
+  ...
+}
+```
+
+Billing payment rows in voided state: muted text, strikethrough on amount, "Voided" badge.
 
 ---
 
@@ -283,9 +379,9 @@ Billing payment rows add a voided rendering: muted text, strikethrough on amount
 
 ### `app/(portal)/students/[id]/_components/payment-history-tab.tsx`
 
-Update the `PaymentHistoryEntry` type status to include `"voided"`.
+No voided row UI needed — voided records are excluded by the portal API. The table only ever receives `"paid"` or `"unpaid"` records.
 
-Add a voided row style: light gray background, strikethrough amount, "Voided" badge. The paid date column shows the `voided_at` date for voided rows with a label *"Voided on"*.
+The `PaymentHistoryEntry` type (`types/notification.ts`) stays as `status: "paid" | "unpaid"` — no change needed since voided records never reach the portal frontend.
 
 ### `app/(portal)/dashboard/_components/payment-history-timeline.tsx`
 
@@ -295,9 +391,9 @@ const payments = data?.filter(p => p.status !== "voided") ?? [];
 ```
 Voided months simply appear as "Not Recorded" (missing entry) in the timeline, which is accurate since the obligation was cancelled.
 
-### `types/notification.ts` or `types/portal.ts`
+### `types/notification.ts`
 
-Update `PaymentHistoryEntry.status` from `"paid" | "unpaid"` to `"paid" | "unpaid" | "voided"`.
+No changes needed. `PaymentHistoryEntry.status` stays `"paid" | "unpaid"` since voided records are filtered at the API level before reaching the portal.
 
 ---
 
@@ -322,6 +418,8 @@ Update `PaymentHistoryEntry.status` from `"paid" | "unpaid"` to `"paid" | "unpai
 - `test_admin_can_void_future_month_paid_payment`
 - `test_cannot_void_past_month_paid_payment` — returns 422
 - `test_cannot_void_unpaid_payment` — returns 422
+- `test_cannot_toggle_a_voided_payment` — returns 422
+- `test_cannot_record_payment_on_voided_record` — returns 422
 - `test_billing_report_excludes_voided_by_default`
 - `test_billing_report_can_filter_by_voided_status`
 - `test_subscription_report_includes_historical_section_for_ex_subscribers`
