@@ -36,18 +36,30 @@ php artisan subscriptions:fix-orphaned-payments
 | `--execute` | Applies changes: hard-deletes orphaned unpaid payments, logs activity. |
 | `--branch=ID` | Restricts the command to a single branch. Optional; default processes all branches. |
 
+### Command Structure
+
+Use PHP 8 attribute-based signature (matches existing commands like `ExpirePreRegistrations`):
+
+```php
+#[Signature('subscriptions:fix-orphaned-payments {--execute} {--branch=}')]
+#[Description('Clean up orphaned monthly payments on non-subscription students.')]
+class FixOrphanedSubscriptionPaymentsCommand extends Command
+```
+
 ### Logic
 
-1. Query `Student::withoutBranch()` (bypasses global branch scope) where `student_type = 'non_subscription'` and has at least one monthly payment record. Use `chunk(100)` to avoid memory/timeout issues on large datasets.
-2. For each affected student, partition their monthly payments:
+1. If `--branch` is provided, validate the branch ID exists (`Branch::find($branchId)`) and abort with an error message if not found.
+2. Query `Student::withoutBranch()` where `student_type = 'non_subscription'` and `whereHas('monthlyPayments')`. Apply `->where('branch_id', $branchId)` when `--branch` is provided. Use `chunk(100)` to avoid memory/timeout issues on large datasets.
+3. For each affected student, partition their monthly payments:
    - `status = 'unpaid'` → **delete** (in `--execute` mode)
    - `status = 'paid'` → **retain**, flag in output as needing manual staff review
    - `status = 'voided'` → **skip entirely**
-3. In `--execute` mode, wrap each student's deletions in a `DB::transaction()` and log one activity entry:
+4. In `--execute` mode, wrap each student's deletions in a `DB::transaction()` and log one activity entry per student:
    - Log name: `students`
    - Description: `students.orphaned_payments_cleaned`
    - Properties: `deleted_count`, `deleted_months` (array of `school_month/year`), `retained_paid_count`, `retained_paid_months`
-4. In dry-run mode, output the same report but make zero database changes.
+   - **No `causedBy()`** — the command has no authenticated user; omitting it lets activitylog record this as system-initiated (causer = null), which is correct for maintenance commands.
+5. In dry-run mode, output the same report but make zero database changes.
 
 ### Output Format
 
@@ -130,17 +142,21 @@ abort_if(
 | `--execute` hard-deletes unpaid payments | `assertDatabaseMissing` for deleted payment rows |
 | `--execute` retains paid payments | `assertDatabaseHas` for paid payment rows |
 | `--execute` skips voided payments | Voided rows untouched |
-| `--execute` logs activity | `Activity` record with correct description and properties |
+| `--execute` logs activity with no causer | `Activity` record with correct description, properties, and `causer_id = null` |
 | Already-clean student not affected | Student with no monthly payments produces no output |
-| `--branch` flag restricts scope | Only students in the specified branch are processed |
+| `--branch=` with valid ID restricts scope | Only students in the specified branch are processed |
+| `--branch=` with invalid ID aborts with error | Command exits non-zero, no DB changes made |
 | Idempotent | Second `--execute` run finds zero students, exits cleanly |
 
-### Guard Tests (add to `tests/Feature/Kitchen/StudentControllerTest.php` or equivalent)
+### Guard Tests (`tests/Feature/StudentDetailTest.php`)
 
-| Test | Assertion |
-|---|---|
-| Subscription → non-subscription via `updateType` returns 422 | Response status 422 |
-| Non-subscription → subscription via `updateType` succeeds | Response status 200, student type updated |
+**Important:** The existing test `test_manager_can_downgrade_subscription_student_to_wallet` calls `PATCH /students/{student}/type` with `non_subscription` on a subscription student and currently asserts `assertOk()` (200). Adding the guard **will break this test**. It must be updated:
+
+- Rename to `test_updateType_rejects_subscription_to_non_subscription_downgrade`
+- Change assertion from `assertOk()` to `assertUnprocessable()` (422)
+- Remove the `assertDatabaseHas` for `non_subscription` (the type will not change)
+
+The existing test `test_manager_can_upgrade_wallet_student_to_subscription` (non-subscription → subscription) is unaffected and continues to assert `assertOk()`.
 
 ---
 
@@ -156,4 +172,4 @@ abort_if(
 | File | Change |
 |---|---|
 | `app/Http/Controllers/Kitchen/StudentController.php` | Add guard in `updateType()` |
-| `tests/Feature/Kitchen/StudentControllerTest.php` | Add guard tests (or nearest equivalent test file) |
+| `tests/Feature/StudentDetailTest.php` | Update `test_manager_can_downgrade_subscription_student_to_wallet` to expect 422 |
