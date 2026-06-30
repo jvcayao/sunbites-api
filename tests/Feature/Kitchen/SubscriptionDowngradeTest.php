@@ -119,4 +119,87 @@ class SubscriptionDowngradeTest extends TestCase
 
         $response->assertUnprocessable();
     }
+
+    // -----------------------------------------------------------------------
+    // execute
+    // -----------------------------------------------------------------------
+
+    public function test_admin_can_downgrade_subscription_student(): void
+    {
+        $now = now();
+        $currentMonth = SchoolMonth::fromMonthNumber($now->month)?->value ?? 'june';
+
+        StudentMonthlyPayment::factory()->paid()->create([
+            'student_id' => $this->student->id,
+            'school_month' => 'june',
+            'year' => $now->year - 1,
+            'amount' => 2970,
+        ]);
+        $unpaid = StudentMonthlyPayment::factory()->unpaid()->create([
+            'student_id' => $this->student->id,
+            'school_month' => $currentMonth,
+            'year' => $now->year,
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->postJson(
+            "/api/v1/students/{$this->student->id}/downgrade-subscription"
+        );
+
+        $response->assertOk();
+        $response->assertJsonPath('student_type', 'non_subscription');
+
+        // Unpaid must be hard-deleted
+        $this->assertDatabaseMissing('student_monthly_payments', ['id' => $unpaid->id]);
+
+        // Past paid must remain
+        $this->assertDatabaseCount('student_monthly_payments', 1);
+        $this->assertDatabaseHas('students', [
+            'id' => $this->student->id,
+            'student_type' => 'non_subscription',
+        ]);
+    }
+
+    public function test_downgrade_logs_activity_with_deleted_months(): void
+    {
+        $now = now();
+        $currentMonth = SchoolMonth::fromMonthNumber($now->month)?->value ?? 'june';
+
+        StudentMonthlyPayment::factory()->unpaid()->create([
+            'student_id' => $this->student->id,
+            'school_month' => $currentMonth,
+            'year' => $now->year,
+            'amount' => 2970,
+        ]);
+
+        $this->asAdmin()->postJson(
+            "/api/v1/students/{$this->student->id}/downgrade-subscription"
+        );
+
+        $this->assertDatabaseHas('activity_log', [
+            'subject_type' => Student::class,
+            'subject_id' => $this->student->id,
+            'description' => 'students.downgraded_to_non_subscription',
+        ]);
+    }
+
+    public function test_downgrade_fails_if_student_is_not_subscription(): void
+    {
+        $nonSub = Student::factory()->nonSubscription()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asAdmin()->postJson(
+            "/api/v1/students/{$nonSub->id}/downgrade-subscription"
+        );
+
+        $response->assertUnprocessable();
+    }
+
+    public function test_supervisor_cannot_execute_downgrade(): void
+    {
+        $response = $this->asUserWithRole('supervisor')->postJson(
+            "/api/v1/students/{$this->student->id}/downgrade-subscription"
+        );
+
+        $response->assertForbidden();
+    }
 }

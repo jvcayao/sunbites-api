@@ -189,6 +189,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::patch('/students/{student}/payments/{payment}/amount', [PaymentController::class, 'updateAmount']);
         Route::post('/students/{student}/payments', [PaymentController::class, 'record']);
         Route::post('/students/{student}/credit/settle', [CreditController::class, 'settle']);
+        Route::post('/students/{student}/downgrade-subscription', [SubscriptionDowngradeController::class, 'execute']);
     });
 
     // Branch monthly amounts — admin, manager, supervisor

@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Actions\DowngradeStudentSubscriptionAction;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\StudentResource;
 use App\Models\Student;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class SubscriptionDowngradeController extends Controller
 {
@@ -65,5 +68,18 @@ class SubscriptionDowngradeController extends Controller
             'unpaid_months_to_delete_count' => count($unpaidToDelete),
             'wallet_balance' => $walletBalance,
         ]);
+    }
+
+    public function execute(Request $request, Student $student, DowngradeStudentSubscriptionAction $action): JsonResponse
+    {
+        abort_unless(
+            $student->student_type === StudentType::Subscription,
+            422,
+            'Student is not a subscription student.'
+        );
+
+        $student = $action->execute($student, $request->user());
+
+        return response()->json(new StudentResource($student));
     }
 }
