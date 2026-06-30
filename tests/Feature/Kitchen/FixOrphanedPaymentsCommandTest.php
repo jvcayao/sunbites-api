@@ -68,6 +68,7 @@ class FixOrphanedPaymentsCommandTest extends TestCase
 
     public function test_execute_skips_voided_payments(): void
     {
+        // No voided() factory state exists; set status directly.
         $payment = StudentMonthlyPayment::factory()->create([
             'student_id' => $this->student->id,
             'school_month' => 'july',
@@ -108,7 +109,7 @@ class FixOrphanedPaymentsCommandTest extends TestCase
         $this->artisan('subscriptions:fix-orphaned-payments', ['--execute' => true])
             ->assertExitCode(0);
 
-        $this->assertEquals(
+        $this->assertSame(
             0,
             Activity::where('description', 'students.orphaned_payments_cleaned')->count()
         );
@@ -167,7 +168,7 @@ class FixOrphanedPaymentsCommandTest extends TestCase
         $this->artisan('subscriptions:fix-orphaned-payments', ['--execute' => true])->assertExitCode(0);
         $this->artisan('subscriptions:fix-orphaned-payments', ['--execute' => true])->assertExitCode(0);
 
-        $this->assertEquals(
+        $this->assertSame(
             1,
             Activity::where('description', 'students.orphaned_payments_cleaned')->count()
         );

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BranchMonthlyAmount;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
+use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,7 +57,7 @@ class PaymentController extends Controller
         abort_if($payment->student_id !== $student->id, 403);
         abort_if($payment->isVoided(), 422, 'Cannot modify a voided payment.');
 
-        $newStatus = $payment->status === 'paid' ? 'unpaid' : 'paid';
+        $newStatus = $payment->isPaid() ? 'unpaid' : 'paid';
 
         $payment->update([
             'status' => $newStatus,
@@ -64,17 +65,7 @@ class PaymentController extends Controller
             'recorded_by' => $newStatus === 'paid' ? $request->user()->id : null,
         ]);
 
-        activity('payments')
-            ->causedBy($request->user())
-            ->performedOn($student)
-            ->withProperties([
-                'school_month' => $payment->school_month->value,
-                'year' => $payment->year,
-                'status' => $newStatus,
-                'amount' => $payment->amount,
-                'recorded_by' => $request->user()->id,
-            ])
-            ->log('payments.recorded');
+        $this->logPaymentActivity($request->user(), $student, $payment, $newStatus);
 
         return response()->json([
             'id' => $payment->id,
@@ -106,17 +97,7 @@ class PaymentController extends Controller
             'recorded_by' => $request->user()->id,
         ]);
 
-        activity('payments')
-            ->causedBy($request->user())
-            ->performedOn($student)
-            ->withProperties([
-                'school_month' => $validated['school_month'],
-                'year' => $validated['year'],
-                'status' => 'paid',
-                'amount' => $validated['amount'],
-                'recorded_by' => $request->user()->id,
-            ])
-            ->log('payments.recorded');
+        $this->logPaymentActivity($request->user(), $student, $payment, 'paid');
 
         return response()->json([
             'id' => $payment->id,
@@ -135,14 +116,10 @@ class PaymentController extends Controller
             'reason' => ['required', 'string', 'max:500'],
         ]);
 
-        $paymentDate = Carbon::createFromDate(
-            $payment->year,
-            $payment->school_month->toMonthNumber(),
-            1
-        )->startOfMonth();
+        $paymentMonthStart = Carbon::createFromDate($payment->year, $payment->school_month->toMonthNumber(), 1)->startOfMonth();
 
         abort_if(
-            $paymentDate->lt(now()->startOfMonth()),
+            $paymentMonthStart->lt(now()->startOfMonth()),
             422,
             'Cannot void a past month\'s payment — this subscription period has already been consumed.'
         );
@@ -171,6 +148,21 @@ class PaymentController extends Controller
             'voided_at' => $payment->voided_at?->toDateTimeString(),
             'void_reason' => $payment->void_reason,
         ]);
+    }
+
+    private function logPaymentActivity(User $causer, Student $student, StudentMonthlyPayment $payment, string $status): void
+    {
+        activity('payments')
+            ->causedBy($causer)
+            ->performedOn($student)
+            ->withProperties([
+                'school_month' => $payment->school_month->value,
+                'year' => $payment->year,
+                'status' => $status,
+                'amount' => $payment->amount,
+                'recorded_by' => $causer->id,
+            ])
+            ->log('payments.recorded');
     }
 
     public function addRange(Request $request, Student $student): JsonResponse
@@ -216,7 +208,7 @@ class PaymentController extends Controller
                         $skipped[] = $schoolMonth->label().' '.$year;
                     } else {
                         $amount = BranchMonthlyAmount::resolveAmount($student->branch_id, $schoolMonth, $year);
-                        if ($amount == 0) {
+                        if ($amount <= 0) {
                             $current->addMonth();
 
                             continue;

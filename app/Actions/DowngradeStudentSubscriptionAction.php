@@ -13,21 +13,15 @@ class DowngradeStudentSubscriptionAction
     public function execute(Student $student, User $causer): Student
     {
         return DB::transaction(function () use ($student, $causer): Student {
-            $unpaidPayments = $student->monthlyPayments()
-                ->where('status', 'unpaid')
-                ->get();
+            $allPayments = $student->monthlyPayments()->get();
 
-            $deletedMonthLabels = $unpaidPayments
-                ->map(fn ($p) => $p->school_month->label().' '.$p->year)
-                ->values()
-                ->toArray();
+            $unpaidPayments = $allPayments->filter(fn ($p) => $p->status === 'unpaid');
+            $paidPayments = $allPayments->filter(fn ($p) => $p->status === 'paid');
 
-            $paidMonthLabels = $student->monthlyPayments()
-                ->where('status', 'paid')
-                ->get()
-                ->map(fn ($p) => $p->school_month->label().' '.$p->year)
-                ->values()
-                ->toArray();
+            $monthLabel = fn ($p) => $p->school_month->label().' '.$p->year;
+
+            $deletedMonthLabels = $unpaidPayments->map($monthLabel)->values()->all();
+            $paidMonthLabels = $paidPayments->map($monthLabel)->values()->all();
 
             StudentMonthlyPayment::whereIn('id', $unpaidPayments->pluck('id'))->delete();
 

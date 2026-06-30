@@ -16,7 +16,7 @@ class FixOrphanedSubscriptionPaymentsCommand extends Command
 {
     public function handle(): int
     {
-        $execute = (bool) $this->option('execute');
+        $execute = $this->option('execute');
         $branchId = $this->option('branch');
 
         if ($branchId !== null && ! Branch::find($branchId)) {
@@ -32,6 +32,7 @@ class FixOrphanedSubscriptionPaymentsCommand extends Command
 
         $totalStudents = 0;
         $totalPaidRetained = 0;
+        $action = $execute ? 'deleted' : 'would be deleted';
 
         $query = Student::withoutBranch()
             ->where('student_type', 'non_subscription')
@@ -41,11 +42,12 @@ class FixOrphanedSubscriptionPaymentsCommand extends Command
             $query->where('branch_id', $branchId);
         }
 
-        $query->with('monthlyPayments')->chunk(100, function ($students) use ($execute, &$totalStudents, &$totalPaidRetained) {
+        $query->with('monthlyPayments')->chunk(100, function ($students) use ($execute, $action, &$totalStudents, &$totalPaidRetained) {
             foreach ($students as $student) {
-                $unpaid = $student->monthlyPayments->filter->isUnpaid();
-                $paid = $student->monthlyPayments->filter->isPaid();
+                $unpaid = $student->monthlyPayments->filter(fn ($p) => $p->isUnpaid());
+                $paid = $student->monthlyPayments->filter(fn ($p) => $p->isPaid());
 
+                // Skip students whose payments are all voided — nothing to delete or retain.
                 if ($unpaid->isEmpty() && $paid->isEmpty()) {
                     continue;
                 }
@@ -54,8 +56,6 @@ class FixOrphanedSubscriptionPaymentsCommand extends Command
 
                 $deletedMonths = $unpaid->map(fn ($p) => "{$p->school_month->value} {$p->year}")->values()->all();
                 $retainedMonths = $paid->map(fn ($p) => "{$p->school_month->value} {$p->year}")->values()->all();
-
-                $action = $execute ? 'deleted' : 'would be deleted';
 
                 $this->info("  {$student->full_name}");
 

@@ -18,7 +18,7 @@ class SubscriptionReportController extends Controller
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'month' => ['required', Rule::in(array_column(SchoolMonth::cases(), 'value'))],
+            'month' => ['required', Rule::enum(SchoolMonth::class)],
             'year' => ['required', 'integer', 'min:2020', 'max:2099'],
             'status' => ['sometimes', Rule::in(['paid', 'unpaid', 'not_recorded'])],
             'grade_level' => ['sometimes', 'nullable', 'string', 'max:100'],
@@ -34,7 +34,6 @@ class SubscriptionReportController extends Controller
 
         $students = Student::where('branch_id', $branch->id)
             ->where('student_type', 'subscription')
-            ->whereNull('deleted_at')
             ->when($gradeLevel, fn ($q) => $q->where('grade_level', $gradeLevel))
             ->when($search, fn ($q) => $q->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
@@ -118,7 +117,6 @@ class SubscriptionReportController extends Controller
 
         $historical = Student::where('branch_id', $branch->id)
             ->where('student_type', 'non_subscription')
-            ->whereNull('deleted_at')
             ->whereHas('monthlyPayments', fn ($q) => $q
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $year)

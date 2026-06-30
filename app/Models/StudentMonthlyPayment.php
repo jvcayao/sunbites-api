@@ -57,6 +57,11 @@ class StudentMonthlyPayment extends Model
         return $this->status === 'paid';
     }
 
+    public function isUnpaid(): bool
+    {
+        return $this->status === 'unpaid';
+    }
+
     public function isVoided(): bool
     {
         return $this->status === 'voided';

@@ -43,7 +43,7 @@ class BillingReportController extends Controller
 
         $payments = $query->paginate($perPage);
 
-        collect($payments->items())->each(function ($payment): void {
+        $payments->getCollection()->each(function ($payment): void {
             $payment->student?->append('full_name');
             $payment->recorder?->append('full_name');
         });
@@ -95,7 +95,7 @@ class BillingReportController extends Controller
     {
         return [
             'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
-            'school_month' => ['nullable', 'string', Rule::in(array_column(SchoolMonth::cases(), 'value'))],
+            'school_month' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
             'status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
             'grade_level' => ['nullable', 'string'],
             'search' => ['nullable', 'string', 'max:100'],
@@ -109,36 +109,29 @@ class BillingReportController extends Controller
     {
         $branchId = app('active_branch')->id;
         $studentIds = Student::where('branch_id', $branchId)->pluck('id');
+        $status = $validated['status'] ?? null;
+        $filteringByDate = isset($validated['recorded_from']) || isset($validated['recorded_to']);
 
         return StudentMonthlyPayment::whereIn('student_id', $studentIds)
             ->where('year', $validated['year'])
             ->when(isset($validated['school_month']), fn ($q) => $q->where('school_month', $validated['school_month']))
             ->when(
-                isset($validated['status']) && $validated['status'] === 'voided',
+                $status === 'voided',
                 fn ($q) => $q->where('status', 'voided'),
                 fn ($q) => $q->where('status', '!=', 'voided')
-                    ->when(isset($validated['status']), fn ($inner) => $inner->where('status', $validated['status']))
+                    ->when($status !== null, fn ($inner) => $inner->where('status', $status))
             )
             ->when(isset($validated['grade_level']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where('grade_level', $validated['grade_level'])))
             ->when(isset($validated['recorded_by']), fn ($q) => $q->where('recorded_by', $validated['recorded_by']))
-            ->when(
-                isset($validated['recorded_from']) || isset($validated['recorded_to']),
-                fn ($q) => $q->where(function ($inner) use ($validated) {
-                    $inner->whereNotNull('recorded_at')
-                        ->when(
-                            isset($validated['recorded_from']),
-                            fn ($d) => $d->whereDate('recorded_at', '>=', $validated['recorded_from'])
-                        )
-                        ->when(
-                            isset($validated['recorded_to']),
-                            fn ($d) => $d->whereDate('recorded_at', '<=', $validated['recorded_to'])
-                        );
+            ->when($filteringByDate, fn ($q) => $q->where(function ($inner) use ($validated, $status) {
+                $inner->whereNotNull('recorded_at')
+                    ->when(isset($validated['recorded_from']), fn ($d) => $d->whereDate('recorded_at', '>=', $validated['recorded_from']))
+                    ->when(isset($validated['recorded_to']), fn ($d) => $d->whereDate('recorded_at', '<=', $validated['recorded_to']));
 
-                    if (! isset($validated['status']) || $validated['status'] !== 'paid') {
-                        $inner->orWhereNull('recorded_at');
-                    }
-                })
-            )
+                if ($status !== 'paid') {
+                    $inner->orWhereNull('recorded_at');
+                }
+            }))
             ->when(isset($validated['search']), function ($q) use ($validated) {
                 $like = '%'.mb_strtolower($validated['search']).'%';
                 $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($like) {
