@@ -290,7 +290,7 @@ class StudentReportTest extends TestCase
             ->assertJsonPath('data.0.allergies', null);
     }
 
-    public function test_summary_is_not_affected_by_search(): void
+    public function test_summary_total_reflects_active_search_filter(): void
     {
         Student::factory()->count(3)->create([
             'branch_id' => $this->branch->id,
@@ -490,8 +490,6 @@ class StudentReportTest extends TestCase
 
     public function test_payment_filter_is_ignored_when_type_is_not_subscription(): void
     {
-        $yearStart = now()->month >= 6 ? now()->year : now()->year - 1;
-
         // Non-subscription student with no payment records — should appear
         $nonSubStudent = Student::factory()->create([
             'branch_id' => $this->branch->id,
