@@ -119,6 +119,33 @@ class SubscriptionReportController extends Controller
             ];
         });
 
-        return response()->json($data);
+        $historical = Student::where('branch_id', $branch->id)
+            ->where('student_type', 'non_subscription')
+            ->whereNull('deleted_at')
+            ->whereHas('monthlyPayments', fn ($q) => $q
+                ->where('school_month', $monthEnum->value)
+                ->where('year', $year)
+                ->where('status', 'paid')
+            )
+            ->with(['monthlyPayments' => fn ($q) => $q
+                ->where('school_month', $monthEnum->value)
+                ->where('year', $year)
+                ->where('status', 'paid'),
+            ])
+            ->get(['id', 'first_name', 'last_name', 'student_number', 'grade_level', 'section'])
+            ->map(fn ($s) => [
+                'id' => $s->id,
+                'full_name' => $s->full_name,
+                'student_number' => $s->student_number,
+                'grade_level' => $s->grade_level,
+                'section' => $s->section,
+                'payment_amount' => (float) ($s->monthlyPayments->first()?->amount ?? 0),
+            ]);
+
+        return response()->json([
+            'data' => $data->items(),
+            'meta' => $this->paginationMeta($students),
+            'historical_data' => $historical,
+        ]);
     }
 }
