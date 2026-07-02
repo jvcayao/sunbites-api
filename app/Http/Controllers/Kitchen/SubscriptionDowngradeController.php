@@ -26,7 +26,7 @@ class SubscriptionDowngradeController extends Controller
         $unpaidToDelete = [];
 
         foreach ($payments as $payment) {
-            if ($payment->status === 'paid') {
+            if ($payment->isPaid()) {
                 $paymentMonthStart = Carbon::createFromDate($payment->year, $payment->school_month->toMonthNumber(), 1)->startOfMonth();
 
                 if ($paymentMonthStart->lt($currentMonthStart)) {
@@ -34,9 +34,11 @@ class SubscriptionDowngradeController extends Controller
                 } else {
                     $paidVoidable[] = $this->paymentShape($payment);
                 }
-            } else {
+            } elseif ($payment->isUnpaid()) {
                 $unpaidToDelete[] = $payment->school_month->label().' '.$payment->year;
             }
+            // Voided payments are retained by the downgrade (only unpaid records are
+            // deleted), so they must not be reported as deletable in the preview.
         }
 
         return response()->json([
