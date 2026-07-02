@@ -173,7 +173,9 @@ class PreRegistrationController extends Controller
         }
 
         [$student, $locked] = DB::transaction(function () use ($preRegistration) {
-            $locked = PreRegistration::lockForUpdate()->find($preRegistration->id);
+            $locked = PreRegistration::withoutBranch()->lockForUpdate()->find($preRegistration->id);
+
+            abort_if($locked === null, 404, 'Pre-registration not found.');
 
             abort_if(
                 $locked->status !== PreRegistrationStatus::Pending,
