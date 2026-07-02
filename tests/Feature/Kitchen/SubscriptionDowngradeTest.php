@@ -101,6 +101,47 @@ class SubscriptionDowngradeTest extends TestCase
         $this->assertEquals(1, $response->json('unpaid_months_to_delete_count'));
     }
 
+    public function test_preview_does_not_list_voided_payments_as_deletable(): void
+    {
+        $now = now();
+
+        // A month that was voided *before* the downgrade (e.g. July was voided first).
+        $voided = StudentMonthlyPayment::factory()->create([
+            'student_id' => $this->student->id,
+            'school_month' => 'july',
+            'year' => $now->year,
+            'status' => 'voided',
+            'amount' => 2970,
+            'voided_at' => now(),
+        ]);
+
+        // A genuinely unpaid month that SHOULD be listed for deletion.
+        StudentMonthlyPayment::factory()->unpaid()->create([
+            'student_id' => $this->student->id,
+            'school_month' => 'august',
+            'year' => $now->year,
+            'amount' => 2970,
+        ]);
+
+        $response = $this->asAdmin()->getJson(
+            "/api/v1/students/{$this->student->id}/subscription-downgrade-preview"
+        );
+
+        $response->assertOk();
+
+        // The voided month must NOT be reported as something that will be deleted...
+        $this->assertNotContains('July '.$now->year, $response->json('unpaid_months_to_delete'));
+        $this->assertEquals(['August '.$now->year], $response->json('unpaid_months_to_delete'));
+        $this->assertEquals(1, $response->json('unpaid_months_to_delete_count'));
+
+        // ...nor be reported as retained/voidable paid history.
+        $paidIds = array_merge(
+            array_column($response->json('paid_months_retained'), 'id'),
+            array_column($response->json('paid_voidable_months'), 'id'),
+        );
+        $this->assertNotContains($voided->id, $paidIds);
+    }
+
     public function test_supervisor_can_access_preview(): void
     {
         $response = $this->asUserWithRole('supervisor')->getJson(

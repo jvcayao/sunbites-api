@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Kitchen;
 
+use App\Enums\PreRegistrationStatus;
 use App\Models\Branch;
 use App\Models\ParentUser;
 use App\Models\PreRegistration;
@@ -165,5 +166,35 @@ class PreRegistrationApprovalDuplicateTest extends TestCase
             ->assertOk();
 
         $this->assertDatabaseHas('parents', ['email' => 'new@example.com']);
+    }
+
+    public function test_approve_succeeds_when_active_branch_differs_from_pre_registration_branch(): void
+    {
+        Mail::fake();
+
+        // Pre-registration belongs to branch A ($this->branch).
+        $preReg = $this->preRegWithContact(['student_number' => null]);
+
+        // Admin also has access to a second branch B, which is the ACTIVE branch on the request.
+        $branchB = Branch::factory()->create(['is_active' => true]);
+        $this->admin->branches()->attach($branchB->id, ['assigned_at' => now(), 'assigned_by' => null]);
+
+        Sanctum::actingAs($this->admin, ['staff']);
+
+        $response = $this->withHeaders(['X-Branch-Id' => $branchB->id])
+            ->postJson("/api/v1/pre-registrations/{$preReg->id}/approve");
+
+        $response->assertOk();
+
+        // Enrolled into the pre-registration's OWN branch (A), not the active branch (B).
+        $this->assertDatabaseHas('students', [
+            'first_name' => 'Juan',
+            'last_name' => 'dela Cruz',
+            'branch_id' => $this->branch->id,
+        ]);
+        $this->assertDatabaseHas('pre_registrations', [
+            'id' => $preReg->id,
+            'status' => PreRegistrationStatus::Approved->value,
+        ]);
     }
 }

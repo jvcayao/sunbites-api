@@ -379,6 +379,7 @@ class ReminderTest extends TestCase
     public function test_send_does_not_remind_future_months(): void
     {
         Notification::fake();
+        Carbon::setTestNow(Carbon::create(2026, 6, 15)); // freeze mid-June so "current" vs "future" is deterministic
         $this->seedPayment('june', 2026);   // current month — should notify
         $this->seedPayment('july', 2026);   // future month — must be skipped
         $this->seedPayment('march', 2027);  // future month — must be skipped
