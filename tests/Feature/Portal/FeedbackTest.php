@@ -69,6 +69,22 @@ class FeedbackTest extends TestCase
         return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function createFeedback(array $attributes = []): Feedback
+    {
+        return Feedback::create(array_merge([
+            'parent_id' => $this->parent->id,
+            'student_id' => $this->student->id,
+            'branch_id' => $this->branch->id,
+            'category' => FeedbackCategory::General->value,
+            'rating' => 4,
+            'message' => 'A generally positive experience at the canteen.',
+            'is_read' => false,
+        ], $attributes));
+    }
+
     // --- Portal: submit feedback ---
 
     public function test_parent_can_submit_feedback_for_linked_student(): void
@@ -123,6 +139,19 @@ class FeedbackTest extends TestCase
             'rating' => 3,
             'message' => 'Short',
         ])->assertUnprocessable();
+    }
+
+    public function test_submitted_message_rejects_markup_that_sanitizes_to_nothing(): void
+    {
+        $this->asParent()->postJson('/api/v1/portal/feedback', [
+            'student_id' => $this->student->id,
+            'category' => FeedbackCategory::General->value,
+            'rating' => 3,
+            'message' => '<br><br><br><br><br><br>',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('message');
+
+        $this->assertDatabaseCount('feedbacks', 0);
     }
 
     public function test_parent_can_list_their_own_feedbacks(): void
@@ -217,6 +246,171 @@ class FeedbackTest extends TestCase
             ])->assertOk();
 
         $this->assertDatabaseHas('feedbacks', ['admin_reply' => 'Thank you for your feedback!']);
+    }
+
+    public function test_reply_rejects_markup_that_sanitizes_to_nothing(): void
+    {
+        Mail::fake();
+
+        $feedback = $this->createFeedback();
+
+        $this->asManager()
+            ->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+                'reply' => '<br><br><br><br>',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('reply');
+
+        $this->assertNull($feedback->fresh()->admin_reply);
+        Mail::assertNothingQueued();
+    }
+
+    public function test_reply_requires_the_reply_field(): void
+    {
+        $feedback = $this->createFeedback();
+
+        $this->asManager()
+            ->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('reply');
+    }
+
+    public function test_reply_rejects_a_message_shorter_than_five_characters(): void
+    {
+        $feedback = $this->createFeedback();
+
+        $this->asManager()
+            ->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+                'reply' => 'Ok',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('reply');
+    }
+
+    public function test_reply_succeeds_when_the_parent_has_been_soft_deleted(): void
+    {
+        Mail::fake();
+
+        $feedback = $this->createFeedback();
+        $this->parent->delete();
+
+        $this->asManager()
+            ->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+                'reply' => 'Thank you for the feedback, we have acted on it.',
+            ])->assertOk();
+
+        $feedback->refresh();
+        $this->assertSame('Thank you for the feedback, we have acted on it.', $feedback->admin_reply);
+        $this->assertNotNull($feedback->replied_at);
+        Mail::assertNothingQueued();
+    }
+
+    public function test_listing_feedback_succeeds_when_the_parent_has_been_soft_deleted(): void
+    {
+        $this->createFeedback();
+        $this->parent->delete();
+
+        $this->asManager()->getJson('/api/v1/references/feedback')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.parent', null);
+    }
+
+    // --- Kitchen: feedback search ---
+
+    public function test_manager_can_search_feedbacks_by_message(): void
+    {
+        $this->createFeedback(['message' => 'The adobo was delicious today.']);
+        $this->createFeedback(['message' => 'The queue was very long.']);
+
+        $response = $this->asManager()
+            ->getJson('/api/v1/references/feedback?search=adobo')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+
+        $this->assertStringContainsString('adobo', $response->json('data.0.message'));
+    }
+
+    public function test_manager_can_search_feedbacks_by_student_number(): void
+    {
+        $other = Student::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_number' => 'STU-99001',
+        ]);
+
+        $this->createFeedback(['message' => 'Feedback from the linked student.']);
+        $this->createFeedback([
+            'student_id' => $other->id,
+            'message' => 'Feedback from the other student.',
+        ]);
+
+        $this->asManager()
+            ->getJson('/api/v1/references/feedback?search=STU-99001')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.student.student_number', 'STU-99001');
+    }
+
+    public function test_feedback_search_is_case_insensitive(): void
+    {
+        $this->createFeedback(['message' => 'The Adobo was delicious today.']);
+
+        $this->asManager()
+            ->getJson('/api/v1/references/feedback?search=ADOBO')
+            ->assertOk()
+            ->assertJsonCount(1, 'data');
+    }
+
+    public function test_feedback_search_combines_with_the_unread_filter(): void
+    {
+        $this->createFeedback(['message' => 'The adobo was delicious.', 'is_read' => true]);
+        $this->createFeedback(['message' => 'The adobo was cold.', 'is_read' => false]);
+
+        $this->asManager()
+            ->getJson('/api/v1/references/feedback?search=adobo&is_read=0')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.is_read', false);
+    }
+
+    public function test_feedback_search_does_not_leak_other_branches(): void
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $otherStudent = Student::factory()->create(['branch_id' => $otherBranch->id]);
+
+        $this->createFeedback([
+            'branch_id' => $otherBranch->id,
+            'student_id' => $otherStudent->id,
+            'message' => 'The adobo at the other branch was great.',
+        ]);
+
+        $this->asManager()
+            ->getJson('/api/v1/references/feedback?search=adobo')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+    }
+
+    // --- Pagination meta contract (consumed by both frontends) ---
+
+    public function test_pagination_meta_includes_the_from_and_to_row_indexes(): void
+    {
+        $this->createFeedback();
+        $this->createFeedback();
+
+        $this->asManager()->getJson('/api/v1/references/feedback')
+            ->assertOk()
+            ->assertJsonPath('meta.from', 1)
+            ->assertJsonPath('meta.to', 2)
+            ->assertJsonPath('meta.total', 2);
+    }
+
+    public function test_pagination_meta_reports_null_from_and_to_on_an_empty_page(): void
+    {
+        $this->asManager()->getJson('/api/v1/references/feedback')
+            ->assertOk()
+            ->assertJsonPath('meta.from', null)
+            ->assertJsonPath('meta.to', null)
+            ->assertJsonPath('meta.total', 0);
     }
 
     public function test_manager_can_mark_feedback_as_read(): void
