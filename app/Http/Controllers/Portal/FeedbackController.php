@@ -49,6 +49,10 @@ class FeedbackController extends Controller
             return response()->json(['message' => 'You have no linked students.'], 422);
         }
 
+        // Sanitize before validating so the length rules apply to what is
+        // actually stored — see Controller::sanitizeText().
+        $request->merge(['message' => $this->sanitizeText($request->input('message'))]);
+
         $validated = $request->validate([
             'student_id' => ['nullable', 'integer', Rule::in($linkedStudentIds)],
             'category' => ['required', Rule::enum(FeedbackCategory::class)],
@@ -67,7 +71,7 @@ class FeedbackController extends Controller
             'branch_id' => $branchId,
             'category' => $validated['category'],
             'rating' => $validated['rating'],
-            'message' => strip_tags($validated['message']),
+            'message' => $validated['message'],
             'is_read' => false,
         ]);
 
