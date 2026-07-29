@@ -69,6 +69,9 @@ class CreditReportTest extends TestCase
     {
         return CreditTransaction::create([
             'student_id' => $student->id,
+            // Ledger entries carry a branch snapshot; the credit report filters on it rather
+            // than resolving the branch's student ids. Spec 14.
+            'branch_id' => $student->branch_id,
             'order_id' => null,
             'type' => $type,
             'amount' => $amount,

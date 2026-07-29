@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Kitchen;
 
-use App\Enums\CreditTransactionType;
 use App\Enums\EnrollmentStatus;
 use App\Enums\InventoryLogType;
 use App\Enums\MenuCategory;
@@ -13,13 +12,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Jobs\WalletAlertJob;
 use App\Models\BranchSubscriptionConfig;
-use App\Models\CreditTransaction;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\PosMenuItem;
 use App\Models\Student;
 use App\Models\SystemConfiguration;
+use App\Services\CreditLedgerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +26,8 @@ use Illuminate\Validation\Rule;
 
 class CheckoutController extends Controller
 {
+    public function __construct(private CreditLedgerService $creditLedger) {}
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -169,16 +170,7 @@ class CheckoutController extends Controller
                     $isCredit = true;
                     $creditAmount = round($shortfall, 2);
 
-                    CreditTransaction::create([
-                        'student_id' => $student->id,
-                        'type' => CreditTransactionType::Charged,
-                        'amount' => $creditAmount,
-                        'notes' => "Credit used for order {$receiptNumber}.",
-                        'performed_by' => $request->user()->id,
-                        'created_at' => now(),
-                    ]);
-
-                    $student->increment('credit_balance', $creditAmount);
+                    $this->creditLedger->charge($student, $creditAmount, $receiptNumber, $request->user());
                     $student->refresh();
 
                     $availableBalance = $student->wallet?->balanceFloat ?? 0;

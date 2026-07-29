@@ -53,7 +53,8 @@ class StudentDetailTest extends TestCase
         $response = $this->asManager()->getJson("/api/v1/students/{$student->id}");
 
         $response->assertOk();
-        $response->assertJsonStructure(['student', 'subscription_monthly_status', 'wallet_transactions', 'activity_logs']);
+        $response->assertJsonStructure(['student', 'subscription_monthly_status', 'activity_logs']);
+        $response->assertJsonMissingPath('wallet_transactions');
 
         $log = collect($response->json('activity_logs'))->firstWhere('description', 'students.updated');
         $this->assertNotNull($log, 'Expected activity log entry not found in response.');

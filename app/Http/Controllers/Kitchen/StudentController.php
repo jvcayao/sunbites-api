@@ -72,17 +72,6 @@ class StudentController extends Controller
     {
         $student->load(['contacts', 'wallet', 'monthlyPayments']);
 
-        $walletTransactions = $student->wallet
-            ? $student->wallet->transactions()->latest()->take(20)->get()
-                ->map(fn ($tx) => [
-                    'id' => $tx->id,
-                    'type' => $tx->type?->value ?? $tx->type,
-                    'amount' => $tx->amountFloat,
-                    'note' => $tx->meta['note'] ?? null,
-                    'created_at' => $tx->created_at->toDateTimeString(),
-                ])
-            : collect();
-
         $activityLogs = Activity::with('causer')
             ->where('subject_type', Student::class)
             ->where('subject_id', $student->id)
@@ -100,7 +89,6 @@ class StudentController extends Controller
         return response()->json([
             'student' => new StudentResource($student),
             'subscription_monthly_status' => $student->currentMonthSubscriptionStatus(),
-            'wallet_transactions' => $walletTransactions,
             'activity_logs' => $activityLogs,
         ]);
     }
