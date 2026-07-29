@@ -14,8 +14,8 @@ Sunbites is a school canteen management system for Philippine private schools. I
 |---|---|---|
 | Admin | POS app | Full access to all settings, users, reports, configuration |
 | Manager | POS app | Day-to-day ops: enrollment, payments, reports — no user management or system config |
-| Supervisor | POS app | Read access to reports + reminders; no mutations |
-| Cashier | POS app | POS checkout only; no enrollment or reports |
+| Supervisor | POS app | Reports + reminders; student edits, wallet top-up, credit settlement; no enrollment, user management, or system config |
+| Cashier | POS app | POS checkout and credit settlement; no enrollment, wallet top-up, or reports |
 | Parent | Parent portal | Read-only view of linked students' spending; receives payment reminders |
 
 ## Value

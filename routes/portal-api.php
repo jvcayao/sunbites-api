@@ -11,6 +11,7 @@ use App\Http\Controllers\Portal\PreRegistrationController;
 use App\Http\Controllers\Portal\ProfileController;
 use App\Http\Controllers\Portal\SpendingSummaryController;
 use App\Http\Controllers\Portal\StudentController;
+use App\Http\Controllers\Portal\StudentLedgerController;
 use App\Http\Controllers\Portal\StudentPaymentHistoryController;
 use App\Http\Controllers\Portal\StudentPhotoController;
 use App\Http\Controllers\Portal\WalletController;
@@ -57,6 +58,9 @@ Route::middleware(['auth:parents', 'ability:parent'])->group(function () {
     // Wallet
     Route::get('/students/{student}/wallet', [WalletController::class, 'index']);
     Route::patch('/students/{student}/wallet/alert', [WalletController::class, 'setAlert']);
+
+    // Unified ledger — wallet movements and credit activity in one stream
+    Route::get('/students/{student}/ledger', [StudentLedgerController::class, 'index']);
 
     // Student photo
     Route::get('/students/{student}/photo', [StudentPhotoController::class, 'show']);

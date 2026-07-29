@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
+use App\Models\CreditTransaction;
 use App\Models\Order;
 use App\Models\Student;
 use App\Models\User;
@@ -19,7 +20,7 @@ class WalletHistoryController extends Controller
     public function index(Request $request, Student $student): JsonResponse
     {
         $validated = $request->validate([
-            'type' => ['required', 'in:purchases,topups'],
+            'type' => ['required', 'in:purchases,topups,credit'],
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -28,11 +29,38 @@ class WalletHistoryController extends Controller
         $perPage = $validated['per_page'] ?? 15;
         $search = $validated['search'] ?? null;
 
-        if ($validated['type'] === 'purchases') {
-            return $this->purchases($student, $search, $perPage);
-        }
+        return match ($validated['type']) {
+            'purchases' => $this->purchases($student, $search, $perPage),
+            'credit' => $this->credit($student, $perPage),
+            default => $this->topups($student, $search, $perPage),
+        };
+    }
 
-        return $this->topups($student, $search, $perPage);
+    /**
+     * Credit charges and settlements for the wallet report's expandable Credit panel.
+     */
+    private function credit(Student $student, int $perPage): JsonResponse
+    {
+        $entries = CreditTransaction::with('performer')
+            ->where('student_id', $student->id)
+            ->latest('created_at')
+            ->paginate($perPage);
+
+        $data = $entries->getCollection()->map(fn (CreditTransaction $entry) => [
+            'id' => $entry->id,
+            'date' => $entry->created_at?->toIso8601String(),
+            'type' => $entry->type?->value,
+            'type_label' => $entry->type?->label(),
+            'amount' => (float) $entry->amount,
+            'payment_method' => $entry->payment_method?->value,
+            'description' => $entry->notes,
+            'added_by' => $entry->performer?->full_name ?? '—',
+        ]);
+
+        return response()->json([
+            'data' => $data,
+            'meta' => $this->paginationMeta($entries),
+        ]);
     }
 
     private function purchases(Student $student, ?string $search, int $perPage): JsonResponse

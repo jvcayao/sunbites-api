@@ -133,7 +133,7 @@ export const domainApi = {
 ### PHP
 - PHP 8.5 features: constructor property promotion, readonly properties, enums
 - Explicit return type declarations on all methods
-- Form Request classes for validation — never inline `$request->validate()`
+- Form Request classes for validation in new code. 47 existing controllers still validate inline via `$request->validate()`; they are not being migrated wholesale. Do not add new inline validation, and do not refactor existing inline validation unless you are already changing that endpoint's validation rules.
 - `$request->validated()` only — never `$request->all()`
 
 ### TypeScript / React

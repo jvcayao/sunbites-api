@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Listeners\AuthEventSubscriber;
 use App\Models\Order;
+use App\Models\PreRegistration;
 use App\Models\Student;
 use App\Models\User;
 use App\Policies\OrderPolicy;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -33,6 +35,26 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Student::class, ParentStudentPolicy::class);
         Gate::policy(ReportPolicy::class, ReportPolicy::class);
+
+        $this->bindCrossBranchRouteModels();
+    }
+
+    /**
+     * Pre-registrations resolve across branches on purpose.
+     *
+     * `SetActiveBranch` now runs before `SubstituteBindings`, so every bound model is
+     * branch-scoped by default. Pre-registration approval is a documented exception: staff
+     * working with one active branch may approve a pre-registration belonging to another
+     * branch they have access to, and `PreRegistrationController::approve()` already
+     * resolves and locks the record with `withoutBranch()`. Branch selection is still gated
+     * by `SetActiveBranch`, which rejects any branch the user cannot access.
+     */
+    private function bindCrossBranchRouteModels(): void
+    {
+        Route::bind(
+            'preRegistration',
+            fn (string $value) => PreRegistration::withoutBranch()->findOrFail($value),
+        );
     }
 
     /**
