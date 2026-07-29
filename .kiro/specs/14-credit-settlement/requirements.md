@@ -137,7 +137,8 @@ The unified ledger endpoint returns six `entry_type` values:
 4. WHEN a sequence of charges, settlements, waives, and voids has been applied to a student THEN `students.credit_balance` SHALL equal `Σcharged − Σsettled − Σwaived − Σvoided` for that student.
 5. WHEN `CheckoutController` charges credit at checkout THEN it SHALL call `CreditLedgerService::charge()` instead of writing `CreditTransaction` and incrementing `credit_balance` inline.
 6. WHEN `TransactionController::void()` reverses a credit order THEN it SHALL call `CreditLedgerService::void()` instead of writing the reversal inline.
-7. IF a service method would drive `credit_balance` below zero THEN it SHALL abort the transaction with a 422 rather than clamping the value.
+7. IF `settleWithPayment()`, `settleFromWallet()`, or `waive()` would drive `credit_balance` below zero THEN it SHALL abort the transaction with a 422 rather than clamping the value.
+7a. WHERE `void()` is concerned it is **exempt** from criterion 7. WHEN a voided order's `credit_amount` exceeds the student's current `credit_balance` — which happens when the credit was already settled before the void — THEN `void()` SHALL reverse only `min(credit_amount, credit_balance)`, SHALL still complete the void, and SHALL record the unreversed remainder in the ledger entry's `notes` so the resulting overpayment is auditable rather than silently absorbed. Aborting here would block the entire void, including its inventory restock and wallet refund.
 8. WHERE `charge()` is called it SHALL accept the order's receipt number as a string, not an `Order` instance, and SHALL leave `order_id` null on the resulting row — the order does not yet exist at the point checkout charges credit. Existing `charged` rows already carry a null `order_id` and reference the receipt in `notes`; this behaviour is preserved unchanged.
 
 ---

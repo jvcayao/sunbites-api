@@ -239,7 +239,7 @@ $wallet = DB::table('transactions')
         CONCAT('wallet-', id) AS row_id,
         created_at,
         type AS entry_type,
-        ABS(amount) / 100 AS amount,
+        ABS(amount) / 100.0 AS amount,
         meta AS details,
         NULL AS payment_method,
         NULL AS reference_number,
@@ -271,7 +271,8 @@ return DB::query()
 
 Notes on correctness:
 
-- `ABS(amount) / 100` — `bavix` stores minor units and signs withdrawals negative. The same conversion already appears in [`WalletHistoryController`](../../../app/Http/Controllers/Kitchen/WalletHistoryController.php) and [`WalletReportController`](../../../app/Http/Controllers/Kitchen/WalletReportController.php). Sign is carried by `direction`, not by the amount.
+- `ABS(amount) / 100.0` — `bavix` stores minor units and signs withdrawals negative. Sign is carried by `direction`, not by the amount.
+- **The `.0` is mandatory, not cosmetic.** Tests run on **SQLite** while production runs **MySQL** (`phpunit.xml` sets `DB_DATABASE=testing`). SQLite performs *integer* division on two integers: `2550 / 100` yields `25`, silently destroying ₱0.50. `2550 / 100.0` yields `25.5`. MySQL returns a decimal either way, so writing `/ 100` produces code that is correct in production and silently wrong in every test. [`WalletReportController`](../../../app/Http/Controllers/Kitchen/WalletReportController.php) already uses `/ 100.0` for this reason.
 - `confirmed = true` and `deleted_at IS NULL` are applied here. The current [`StudentController::show`](../../../app/Http/Controllers/Kitchen/StudentController.php) applies neither, so unconfirmed and soft-deleted wallet rows can leak into the POS table today. The ledger fixes that.
 - **`deleted_at` does exist on `transactions`, despite not appearing in [`database/migrations/2018_11_06_222923_create_transactions_table.php`](../../../database/migrations/2018_11_06_222923_create_transactions_table.php).** It is added by the package migration `vendor/bavix/laravel-wallet/database/2023_12_30_204610_soft_delete.php`, and `Bavix\Wallet\Models\Transaction` uses the `SoftDeletes` trait. Verified by running `migrate` on an empty database and inspecting the resulting table. Do not "fix" the missing column by adding a migration for it — that would collide with the package migration.
 - A student with no wallet yet yields the credit leg only; the wallet leg is skipped rather than joining on a null id.
@@ -399,7 +400,7 @@ class CreditSettledNotification extends Notification implements ShouldBroadcast,
 {
     use Queueable;
 
-    public bool $afterCommit = true;
+    // Assigned in the constructor body — NOT declared as a property. See note below.
 
     public function __construct(
         public readonly Student $student,
@@ -414,6 +415,22 @@ class CreditSettledNotification extends Notification implements ShouldBroadcast,
 ```
 
 `$afterCommit = true` is how criterion 9.6 is satisfied — Laravel holds the queued notification until the outermost transaction commits, which handles the nested-transaction case when `charge()` runs inside `CheckoutController`'s transaction. No manual `DB::afterCommit` wrapping needed.
+
+**Assign it in the constructor body; never declare it as a property.** `Illuminate\Bus\Queueable` already declares `public $afterCommit;` with **no default value**, and PHP rejects any redeclaration whose definition differs — including one that merely adds a default, and regardless of type hint. The result is a hard fatal at class-composition time:
+
+```
+App\Notifications\CreditChargedNotification and Illuminate\Bus\Queueable define the same
+property ($afterCommit) in the composition of ... However, the definition differs and is
+considered incompatible.
+```
+
+Under PHPUnit this surfaces only as `Fatal error: Premature end of PHP process`, with no stack trace pointing at the cause. Correct form:
+
+```php
+public function __construct(/* promoted properties */) {
+    $this->afterCommit = true;
+}
+```
 
 **Debounce for `CreditChargedNotification`** (criterion 9.2), checked per parent before dispatch:
 
@@ -649,10 +666,27 @@ Opening settlement to all staff removes a control. The compensating controls are
 
 ### Data isolation
 
-Multi-tenancy is per-branch, not per-school (`product.md`: one deployment per school). Two enforcement mechanisms, matching existing practice:
+Multi-tenancy is per-branch, not per-school (`product.md`: one deployment per school). Two enforcement mechanisms:
 
-1. **Route model binding** resolves `{student}` through the `HasBranch` global scope, so a staff member cannot address a student outside their active branch at all.
+1. **Route model binding** resolves `{student}` through the `HasBranch` global scope, so a staff member cannot address a student outside their active branch.
 2. **Explicit `branch_id` filtering** in the credit report and daily summary, using the new snapshot column.
+
+#### Security fix delivered with this spec: middleware ordering
+
+Mechanism 1 **did not work before this spec**, and the gap was pre-existing and system-wide.
+
+`SetActiveBranch` was registered with `$middleware->api(append: [...])`, which places it **after** `SubstituteBindings` in the api group. Route model binding therefore resolved `{student}`, `{order}` and every other bound model *before* `active_branch` was bound — and [`BranchScope::apply()`](../../../app/Models/Scopes/BranchScope.php) returns early when the container has no `active_branch`. The scope silently no-opped, so any record resolved by id regardless of branch.
+
+Verified empirically: a cross-branch `POST /students/{student}/credit/settle` issued as the **first** request in a process returned **200**. Existing cross-branch tests passed only because `app()->instance('active_branch', …)` leaks between requests inside one test process, so the second and later requests appeared scoped. Those tests were providing false assurance.
+
+**Fix:** `$middleware->api(prepend: [SetActiveBranch::class])` in [`bootstrap/app.php`](../../../bootstrap/app.php), so the branch is bound before any binding is substituted. Full suite re-run: **810 passed**, with two legitimate breakages fixed:
+
+| Breakage | Resolution |
+|---|---|
+`PreRegistrationApprovalDuplicateTest::test_approve_succeeds_when_active_branch_differs_from_pre_registration_branch` | Pre-registration approval is a **deliberate** cross-branch flow — `PreRegistrationController::approve()` already resolves with `withoutBranch()`. Restored via an explicit `Route::bind('preRegistration', …)` in `AppServiceProvider`, documented there. Branch access is still gated by `SetActiveBranch`, which 403s any branch the user cannot reach. |
+`StudentDetailTest::test_manager_can_view_student_detail` | Asserted the `wallet_transactions` key this spec removes. Updated to `assertJsonMissingPath`, turning it into the regression guard for requirement 6.11. |
+
+**Remaining exception to be aware of:** pre-registration routes resolve across branches by design. Every other bound route is now branch-scoped.
 
 The portal path relies on `authorize('view', $student)` against the `parent_student` pivot, not on branch scope — parents are not branch-scoped.
 

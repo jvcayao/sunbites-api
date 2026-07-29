@@ -84,7 +84,7 @@ Backend test baseline | **742 tests, 742 passed, 1,952 assertions, exit 0.** Ful
 
 ---
 
-## 5. The eleven traps
+## 5. The thirteen traps
 
 Each of these is a place where the obvious move is wrong. They are listed because a previous review pass caught several of them as real errors.
 
@@ -99,6 +99,9 @@ Each of these is a place where the obvious move is wrong. They are listed becaus
 9. **Do not create `app/Rules/`.** It does not exist and `CLAUDE.md` forbids new base directories without approval. Use the `ValidatesOutstandingCredit` trait under `app/Http/Requests/Concerns/`.
 10. **Do not migrate the 47 legacy inline `$request->validate()` calls.** New code uses Form Requests; legacy stays. `tech.md` now states this explicitly.
 11. **Do not make top-up settle credit.** This is the single most likely "helpful fix". It is deliberately forbidden — see requirement 5 and its regression test in task 3.3.
+12. **Never write `/ 100` in raw SQL — always `/ 100.0`.** Tests run on **SQLite**; production runs **MySQL**. SQLite does integer division: `2550 / 100` = `25`, destroying ₱0.50. MySQL returns `25.50` either way, so `/ 100` is correct in production and silently wrong in every test. Same trap applies to any raw arithmetic on money columns.
+13. **All raw SQL must work on both SQLite and MySQL.** No `information_schema` queries, no MySQL-only functions, no `JSON_EXTRACT` reliance. If you need a database-specific check, it does not belong in a test.
+14. **Never declare `$afterCommit` as a property on a queued notification.** `Illuminate\Bus\Queueable` already declares it with no default; adding one — typed or not — is an incompatible redeclaration and a hard PHP fatal. PHPUnit reports it only as `Fatal error: Premature end of PHP process` with no useful trace. Assign `$this->afterCommit = true;` in the constructor body instead.
 
 ---
 
