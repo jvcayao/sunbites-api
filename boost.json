@@ -7,14 +7,16 @@
     "mcp": true,
     "nightwatch": false,
     "packages": [
-        "spatie/laravel-activitylog",
-        "spatie/laravel-permission"
+        "spatie/laravel-permission",
+        "maatwebsite/excel",
+        "spatie/laravel-activitylog"
     ],
     "sail": true,
     "skills": [
         "fortify-development",
         "laravel-best-practices",
         "tailwindcss-development",
+        "laravel-excel",
         "laravel-permission-development",
         "deploying-laravel-cloud"
     ]
