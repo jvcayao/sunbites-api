@@ -17,6 +17,7 @@
 | 11 | [Payment Reminders](./11-payment-reminders/requirements.md) | Payment reminder bell, eligible parents list, send reminders, parent notification, portal payment history |
 | 12 | [Announcements](./12-announcements/requirements.md) | Staff-authored messages to parents or co-workers; staff notification inbox; POS announcements pages |
 | 13 | [Pre-Registration](./13-pre-registration/requirements.md) | Public pre-reg form on portal domain; reCAPTCHA v3; POS approval queue; converts to enrollment on approval |
+| 14 | [Credit Settlement](./14-credit-settlement/requirements.md) | Multi-channel credit repayment (counter cash/GCash/bank, from wallet balance, admin waive); unified wallet+credit ledger; credit visibility in POS and portal; drawer reconciliation |
 
 ---
 

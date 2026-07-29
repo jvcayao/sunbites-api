@@ -33,6 +33,7 @@ class StudentController extends Controller
                 'allergies' => $student->allergies,
                 'branch_name' => $student->branch->name,
                 'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
+                'credit_balance' => (float) $student->credit_balance,
                 'wallet_alert_threshold' => (float) $student->pivot->wallet_alert_threshold,
                 'linked_at' => $student->pivot->linked_at,
                 'subscription_monthly_status' => $student->currentMonthSubscriptionStatus(),

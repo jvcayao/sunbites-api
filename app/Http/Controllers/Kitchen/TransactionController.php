@@ -2,18 +2,17 @@
 
 namespace App\Http\Controllers\Kitchen;
 
-use App\Enums\CreditTransactionType;
 use App\Enums\InventoryLogType;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
-use App\Models\CreditTransaction;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
 use App\Models\Order;
 use App\Models\Student;
 use App\Models\SystemConfiguration;
+use App\Services\CreditLedgerService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +21,8 @@ use Illuminate\Support\Facades\DB;
 class TransactionController extends Controller
 {
     use AuthorizesRequests;
+
+    public function __construct(private CreditLedgerService $creditLedger) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -110,19 +111,7 @@ class TransactionController extends Controller
             }
 
             if ($order->is_credit && $student) {
-                CreditTransaction::create([
-                    'student_id' => $student->id,
-                    'order_id' => $order->id,
-                    'type' => CreditTransactionType::Voided,
-                    'amount' => $order->credit_amount,
-                    'notes' => "Credit reversed for voided order {$order->receipt_number}.",
-                    'performed_by' => $request->user()->id,
-                    'created_at' => now(),
-                ]);
-
-                $student->update([
-                    'credit_balance' => max(0, (float) $student->credit_balance - (float) $order->credit_amount),
-                ]);
+                $this->creditLedger->void($student, $order, $request->user());
             }
 
             // Inventory restoration — re-stock items deducted during checkout

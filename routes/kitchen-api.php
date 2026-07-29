@@ -28,6 +28,7 @@ use App\Http\Controllers\Kitchen\SalesReportController;
 use App\Http\Controllers\Kitchen\StaffNotificationController;
 use App\Http\Controllers\Kitchen\StudentContactController;
 use App\Http\Controllers\Kitchen\StudentController;
+use App\Http\Controllers\Kitchen\StudentLedgerController;
 use App\Http\Controllers\Kitchen\StudentLookupController;
 use App\Http\Controllers\Kitchen\StudentReportController;
 use App\Http\Controllers\Kitchen\SubscriptionConfigController;
@@ -74,6 +75,11 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     Route::post('/pos/checkout', [CheckoutController::class, 'store']);
     Route::post('/pos/inline-reload', [InlineReloadController::class, 'store']);
     Route::get('/pos/transactions', [TransactionController::class, 'index']);
+
+    // Credit — all staff may view the ledger and collect a settlement at the counter.
+    // Waiving writes off money owed and stays admin-only, further down this file.
+    Route::get('/students/{student}/ledger', [StudentLedgerController::class, 'index']);
+    Route::post('/students/{student}/credit/settle', [CreditController::class, 'settle']);
 
     // POS — void — admin, manager, supervisor only
     Route::middleware('role:admin|manager|supervisor')->group(function () {
@@ -190,8 +196,12 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::patch('/students/{student}/payments/{payment}', [PaymentController::class, 'toggle']);
         Route::patch('/students/{student}/payments/{payment}/amount', [PaymentController::class, 'updateAmount']);
         Route::post('/students/{student}/payments', [PaymentController::class, 'record']);
-        Route::post('/students/{student}/credit/settle', [CreditController::class, 'settle']);
         Route::post('/students/{student}/downgrade-subscription', [SubscriptionDowngradeController::class, 'execute']);
+    });
+
+    // Credit write-off — admin only; it destroys a receivable rather than collecting it
+    Route::middleware('role:admin')->group(function () {
+        Route::post('/students/{student}/credit/waive', [CreditController::class, 'waive']);
     });
 
     // Branch monthly amounts — admin, manager, supervisor

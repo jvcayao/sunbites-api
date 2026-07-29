@@ -20,6 +20,8 @@ class WalletReportController extends Controller
         $validated = $request->validate([
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
+            'has_credit' => ['nullable', 'boolean'],
+            'sort' => ['nullable', 'in:name,credit'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
@@ -46,11 +48,24 @@ class WalletReportController extends Controller
         $studentsBelowHundred = Student::whereHas('wallet', fn ($q) => $q->whereRaw('(balance / 100.0) < 100'))
             ->count();
 
+        // Computed branch-wide, deliberately OUTSIDE walletActivityStudents(). That helper
+        // narrows the list to students with wallet activity; deriving the credit totals from
+        // the same set could make this page disagree with the credit report's
+        // net_outstanding — two screens answering "how much is owed" differently.
+        $creditTotals = Student::where('branch_id', $branchId)
+            ->where('credit_balance', '>', 0)
+            ->selectRaw('SUM(credit_balance) AS total, COUNT(*) AS students')
+            ->first();
+
         // Only include students who have real wallet activity (wallet exists with balance > 0 OR has transactions)
         $students = $this->walletActivityStudents()
             ->with('wallet')
-            ->orderBy('last_name')
-            ->orderBy('first_name')
+            ->when(! empty($validated['has_credit']), fn ($q) => $q->where('credit_balance', '>', 0))
+            ->when(
+                ($validated['sort'] ?? 'name') === 'credit',
+                fn ($q) => $q->orderByDesc('credit_balance'),
+                fn ($q) => $q->orderBy('last_name')->orderBy('first_name'),
+            )
             ->paginate($perPage);
 
         // Single aggregation query replacing the old N+1 loop
@@ -81,6 +96,8 @@ class WalletReportController extends Controller
                 'total_debits' => $totalDebits,
                 'net_movement' => round($totalCredits - $totalDebits, 2),
                 'students_below_100' => $studentsBelowHundred,
+                'total_outstanding_credit' => round((float) ($creditTotals?->total ?? 0), 2),
+                'students_with_credit' => (int) ($creditTotals?->students ?? 0),
             ],
         ]);
     }

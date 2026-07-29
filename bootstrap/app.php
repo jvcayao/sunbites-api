@@ -27,7 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->redirectGuestsTo(fn () => null);
 
-        $middleware->api(append: [
+        // Must run BEFORE SubstituteBindings. Route model binding resolves {student},
+        // {order} and friends through the HasBranch global scope, and that scope no-ops
+        // unless `active_branch` is already bound — so binding first would resolve records
+        // from any branch. Prepending is what makes branch isolation real on bound routes.
+        $middleware->api(prepend: [
             SetActiveBranch::class,
         ]);
 
