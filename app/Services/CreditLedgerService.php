@@ -27,22 +27,23 @@ use Illuminate\Support\Facades\DB;
 class CreditLedgerService
 {
     /**
-     * Charge credit for an order whose wallet balance fell short.
+     * Charge credit for an amount that could not be covered another way.
      *
-     * Takes the receipt number rather than an Order because CheckoutController charges
-     * credit before it creates the order, so no Order exists yet. `order_id` is left
-     * null, matching every charge row written before this service existed.
+     * Takes a free-text description rather than an Order because the caller does not
+     * always have one — CheckoutController charges credit before it creates the order,
+     * and a wallet top-up void may charge credit with no order involved at all. `order_id`
+     * is left null, matching every charge row written before this service existed.
      */
-    public function charge(Student $student, float $amount, string $receiptNumber, User $performer): CreditTransaction
+    public function charge(Student $student, float $amount, string $description, User $performer): CreditTransaction
     {
-        return DB::transaction(function () use ($student, $amount, $receiptNumber, $performer): CreditTransaction {
+        return DB::transaction(function () use ($student, $amount, $description, $performer): CreditTransaction {
             $locked = $this->lockStudent($student);
             $charged = round($amount, 2);
 
             $entry = $this->writeEntry($locked, [
                 'type' => CreditTransactionType::Charged,
                 'amount' => $charged,
-                'notes' => "Credit used for order {$receiptNumber}.",
+                'notes' => "Credit used for {$description}.",
             ], $performer);
 
             $this->setBalance($locked, (float) $locked->credit_balance + $charged);

@@ -10,6 +10,7 @@ enum LedgerEntryType: string
 {
     case Deposit = 'deposit';
     case Withdraw = 'withdraw';
+    case TopupVoided = 'topup_voided';
     case CreditCharged = 'credit_charged';
     case CreditSettled = 'credit_settled';
     case CreditWaived = 'credit_waived';
@@ -20,6 +21,7 @@ enum LedgerEntryType: string
         return match ($this) {
             self::Deposit => 'Top-up',
             self::Withdraw => 'Purchase',
+            self::TopupVoided => 'Top-up Voided',
             self::CreditCharged => 'Credit Charged',
             self::CreditSettled => 'Credit Paid',
             self::CreditWaived => 'Credit Waived',
@@ -35,7 +37,7 @@ enum LedgerEntryType: string
     public function direction(): string
     {
         return match ($this) {
-            self::Withdraw, self::CreditCharged => 'debit',
+            self::Withdraw, self::CreditCharged, self::TopupVoided => 'debit',
             self::Deposit, self::CreditSettled, self::CreditWaived, self::CreditVoided => 'credit',
         };
     }
@@ -44,7 +46,7 @@ enum LedgerEntryType: string
     {
         return match ($this) {
             self::CreditCharged, self::CreditSettled, self::CreditWaived, self::CreditVoided => true,
-            self::Deposit, self::Withdraw => false,
+            self::Deposit, self::Withdraw, self::TopupVoided => false,
         };
     }
 
@@ -56,7 +58,7 @@ enum LedgerEntryType: string
     public static function forFilter(string $filter): array
     {
         return match ($filter) {
-            'topup' => [self::Deposit],
+            'topup' => [self::Deposit, self::TopupVoided],
             'purchase' => [self::Withdraw],
             'credit' => [self::CreditCharged, self::CreditSettled, self::CreditWaived, self::CreditVoided],
             default => self::cases(),

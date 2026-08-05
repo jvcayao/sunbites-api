@@ -153,6 +153,31 @@ class BranchBindingIsolationTest extends TestCase
         );
     }
 
+    public function test_a_foreign_students_wallet_top_up_cannot_be_voided(): void
+    {
+        $student = $this->foreignStudent();
+        $deposit = $student->deposit(50000, ['payment_method' => 'cash', 'performed_by' => $this->manager->id]);
+        $this->forgetActiveBranch();
+
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $admin->branches()->attach($this->homeBranch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+        Sanctum::actingAs($admin, ['staff']);
+
+        $this->withHeaders(['X-Branch-Id' => $this->homeBranch->id])
+            ->postJson("/api/v1/students/{$student->id}/wallet/top-ups/{$deposit->id}/void", [
+                'reason' => 'Attempted cross-branch void.',
+            ])
+            ->assertStatus(404);
+
+        $this->assertEquals(
+            500.0,
+            (float) $student->fresh()->load('wallet')->wallet->balanceFloat,
+            'A cross-branch void must not touch the wallet.'
+        );
+        $this->assertDatabaseCount('wallet_topup_voids', 0);
+    }
+
     public function test_a_foreign_student_cannot_be_updated(): void
     {
         $student = $this->foreignStudent();

@@ -51,6 +51,10 @@ class LedgerEntryFormatter
                 'reference_number' => $row->reference_number,
                 'note' => $note,
                 'performed_by' => $performerId === null ? null : ($names[$performerId] ?? null),
+                'voided' => (bool) ($row->voided ?? false),
+                'wallet_transaction_id' => $row->wallet_transaction_id !== null
+                    ? (int) $row->wallet_transaction_id
+                    : null,
             ];
         })->values();
     }

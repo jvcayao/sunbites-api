@@ -30,15 +30,27 @@ class WalletReportController extends Controller
         $dateTo = $validated['date_to'] ?? now()->toDateString();
         $perPage = $validated['per_page'] ?? 25;
 
-        // Branch-level summary (ABS fixes negative withdrawal amounts stored by bavix)
+        // Branch-level summary (ABS fixes negative withdrawal amounts stored by bavix).
+        // Voided deposits subtract exactly their recovered voided_amount from total_credits
+        // (the unrecovered remainder stays counted — it was genuinely spent); the void's own
+        // reversal withdrawal is excluded from total_debits entirely, since a correction is
+        // not a purchase.
         $walletSummary = DB::table('transactions')
             ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
+            ->leftJoin('wallet_topup_voids as original_void', 'original_void.wallet_transaction_id', '=', 'transactions.id')
+            ->leftJoin('wallet_topup_voids as refund_void', 'refund_void.refund_wallet_transaction_id', '=', 'transactions.id')
             ->where('wallets.holder_type', Student::class)
             ->whereIn('wallets.holder_id', Student::where('branch_id', $branchId)->select('id'))
             ->whereBetween('transactions.created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
             ->selectRaw("
-                SUM(CASE WHEN type = 'deposit' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credits,
-                SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debits
+                SUM(CASE
+                    WHEN transactions.type = 'deposit' THEN ABS(transactions.amount) - COALESCE(original_void.voided_amount * 100, 0)
+                    ELSE 0
+                END) / 100.0 AS total_credits,
+                SUM(CASE
+                    WHEN transactions.type = 'withdraw' AND refund_void.id IS NULL THEN ABS(transactions.amount)
+                    ELSE 0
+                END) / 100.0 AS total_debits
             ")
             ->first();
 
@@ -150,12 +162,20 @@ class WalletReportController extends Controller
 
         $query = DB::table('transactions')
             ->join('wallets', 'wallets.id', '=', 'transactions.wallet_id')
+            ->leftJoin('wallet_topup_voids as original_void', 'original_void.wallet_transaction_id', '=', 'transactions.id')
+            ->leftJoin('wallet_topup_voids as refund_void', 'refund_void.refund_wallet_transaction_id', '=', 'transactions.id')
             ->where('wallets.holder_type', Student::class)
             ->whereIn('wallets.holder_id', $studentIds)
             ->selectRaw("
                 wallets.holder_id AS student_id,
-                SUM(CASE WHEN type = 'deposit' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credited,
-                SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debited,
+                SUM(CASE
+                    WHEN transactions.type = 'deposit' THEN ABS(transactions.amount) - COALESCE(original_void.voided_amount * 100, 0)
+                    ELSE 0
+                END) / 100.0 AS total_credited,
+                SUM(CASE
+                    WHEN transactions.type = 'withdraw' AND refund_void.id IS NULL THEN ABS(transactions.amount)
+                    ELSE 0
+                END) / 100.0 AS total_debited,
                 MAX(transactions.created_at) AS last_transaction
             ")
             ->groupBy('wallets.holder_id');

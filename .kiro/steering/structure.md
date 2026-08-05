@@ -148,7 +148,7 @@ __tests__/
 | 11 | Payment Reminders | Complete | Complete |
 | 12 | Announcements | Complete | Complete |
 | 13 | Pre-Registration | Complete | Complete |
-| 14 | Credit Settlement | Not started | Not started |
+| 14 | Credit Settlement | Complete | Complete |
 
 ## Shared Contracts
 
