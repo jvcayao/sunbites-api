@@ -16,7 +16,7 @@ This feature adds a **wallet top-up void**: a staff-initiated reversal of a spec
 
 ### Requirement 1 — Void a wallet top-up transaction
 
-**User Story:** As an admin or manager, I want to void a specific wallet top-up, so that a cashier's data-entry mistake can be corrected without a second, undocumented, offsetting transaction.
+**User Story:** As an admin, manager, or supervisor, I want to void a specific wallet top-up, so that a cashier's data-entry mistake can be corrected without a second, undocumented, offsetting transaction.
 
 #### Acceptance Criteria
 
@@ -45,27 +45,29 @@ This feature adds a **wallet top-up void**: a staff-initiated reversal of a spec
 #### Acceptance Criteria
 
 1. WHEN resolving who performed the original top-up THEN the system SHALL check the original transaction's `meta` JSON for `performed_by` (the key `WalletController::topUp` writes) first, then `cashier_id` (the key `InlineReloadController::store` writes) if `performed_by` is absent — mirroring the exact fallback order already implemented in `LedgerEntryFormatter::performerId()`.
-2. IF the resolved original performer's user id equals the id of the staff member making the void request THEN the system SHALL respond `403 Forbidden` with a message directing them to have another admin or manager perform the void, and SHALL NOT perform any mutation.
+2. IF the resolved original performer's user id equals the id of the staff member making the void request THEN the system SHALL respond `403 Forbidden` with a message directing them to have another admin, manager, or supervisor perform the void, and SHALL NOT perform any mutation.
 3. IF the original transaction's `meta` contains neither `performed_by` nor `cashier_id` (a legacy or malformed row) THEN the system SHALL treat the original performer as unknown and SHALL allow the void to proceed (the self-void check cannot block on data it does not have) — this edge case SHALL be covered by an explicit test rather than left to accidental behavior.
 
 ---
 
 ### Requirement 4 — Void authorization is tiered by role and transaction age
 
-**User Story:** As the school's operations lead, I want a manager to self-serve same-day corrections but require admin sign-off for older ones, so that stale top-ups can't be quietly rewritten while same-day mistakes don't stall on someone with a narrower schedule.
+**User Story:** As the school's operations lead, I want a manager or supervisor to self-serve same-day corrections but require admin sign-off for older ones, so that stale top-ups can't be quietly rewritten while same-day mistakes don't stall on someone with a narrower schedule.
+
+> **Amendment (post-implementation correction, approved by spec owner):** this requirement originally stated the route would be gated by `role:admin|manager`, "identical in form to `PaymentController::void`'s route gate." That claim was based on a wrong premise: the existing `/students/{student}/wallet/top-up` route (which the void route was to sit beside, per design.md Component 5) does **not** live in a dedicated `role:admin|manager` group — it lives in the broader `role:admin|manager|supervisor` "Enrollment & Students" group. This was caught by the implementer's own role-gate test during task 3.2 (a supervisor unexpectedly succeeded in voiding a top-up). Rather than pulling the void route into a narrower group than its sibling, the spec owner decided to keep it in the existing group and correct this requirement to match: **supervisors are allowed** through the role gate, same as the pre-existing `/wallet/top-up` route, and are subject to the same same-day restriction as managers. Only `cashier` is blocked by the role gate itself.
 
 #### Acceptance Criteria
 
-1. WHERE the route is registered THEN it SHALL be gated by `role:admin|manager` middleware, identical in form to `PaymentController::void`'s route gate — supervisors and cashiers SHALL receive `403 Forbidden` from the role middleware before the controller executes.
-2. WHEN the requesting user has the `manager` role (and not `admin`) AND the target transaction's `created_at` date is not equal to the current date in the application's configured timezone THEN the system SHALL respond `403 Forbidden` with a message stating the top-up is outside the same-day window and must be voided by an admin.
+1. WHERE the route is registered THEN it SHALL be gated by `role:admin|manager|supervisor` middleware, matching the existing `/students/{student}/wallet/top-up` route's role tier exactly (both routes share the "Enrollment & Students" route group) — cashiers SHALL receive `403 Forbidden` from the role middleware before the controller executes.
+2. WHEN the requesting user does not have the `admin` role (i.e. has `manager` or `supervisor`) AND the target transaction's `created_at` date is not equal to the current date in the application's configured timezone THEN the system SHALL respond `403 Forbidden` with a message stating the top-up is outside the same-day window and must be voided by an admin.
 3. WHEN the requesting user has the `admin` role THEN the system SHALL NOT apply the same-day restriction — an admin may void a top-up of any age.
-4. IF a user holds both `admin` and `manager` roles THEN the `admin` unrestricted rule SHALL apply (an admin-inclusive check, not a manager-restrictive one).
+4. IF a user holds the `admin` role together with any other role (`manager` and/or `supervisor`) THEN the `admin` unrestricted rule SHALL apply (an admin-inclusive check, not a manager/supervisor-restrictive one).
 
 ---
 
 ### Requirement 5 — Insufficient wallet balance converts the shortfall to credit debt
 
-**User Story:** As an admin or manager, I want a top-up voided even if part of it has already been spent, so that the correction isn't blocked indefinitely by ordinary spending that happened in between.
+**User Story:** As an admin, manager, or supervisor, I want a top-up voided even if part of it has already been spent, so that the correction isn't blocked indefinitely by ordinary spending that happened in between.
 
 #### Acceptance Criteria
 
@@ -133,13 +135,13 @@ This feature adds a **wallet top-up void**: a staff-initiated reversal of a spec
 
 ### Requirement 10 — Frontend: staff can void a top-up from the student wallet ledger
 
-**User Story:** As an admin or manager using the POS app, I want a "Void" action directly on a top-up row in the student's wallet ledger, so that correcting a mistake doesn't require leaving the screen I'm already looking at.
+**User Story:** As an admin, manager, or supervisor using the POS app, I want a "Void" action directly on a top-up row in the student's wallet ledger, so that correcting a mistake doesn't require leaving the screen I'm already looking at.
 
 #### Acceptance Criteria
 
 1. WHERE the unified ledger table in `WalletTab` (`~/sunbites-pos/app/(kitchen)/students/[id]/_components/wallet-tab.tsx`) renders a row with `entry_type === "deposit"` AND `voided === false` THE system SHALL show a "Void" action for that row.
-2. WHEN the current user's `roles` (from `useAuthStore`) includes neither `"admin"` nor `"manager"` THEN the "Void" action SHALL NOT be rendered for any row — mirroring the exact `user?.roles.includes("admin") === true || user?.roles.includes("manager") === true` pattern already used for `canSettleCredit-equivalent` gating in `page.tsx`.
-3. WHEN the current user's `roles` includes `"manager"` and NOT `"admin"` AND the row's `date` is not today THEN the "Void" action SHALL be disabled (not hidden) with a tooltip or adjacent text explaining that only an admin can void a top-up from a previous day — this is a client-side convenience only; Requirement 4 (server-side enforcement) is authoritative regardless of what the client renders or fails to render.
+2. WHEN the current user's `roles` (from `useAuthStore`) includes none of `"admin"`, `"manager"`, or `"supervisor"` THEN the "Void" action SHALL NOT be rendered for any row — extending (not mirroring exactly, per Requirement 4's amendment) the `user?.roles.includes("admin") === true || user?.roles.includes("manager") === true` pattern already used for `canSettleCredit-equivalent` gating in `page.tsx`, with `|| user?.roles.includes("supervisor") === true` added to match this feature's broader, corrected role tier.
+3. WHEN the current user's `roles` includes `"manager"` or `"supervisor"` and NOT `"admin"` AND the row's `date` is not today THEN the "Void" action SHALL be disabled (not hidden) with a tooltip or adjacent text explaining that only an admin can void a top-up from a previous day — this is a client-side convenience only; Requirement 4 (server-side enforcement) is authoritative regardless of what the client renders or fails to render.
 4. WHEN "Void" is clicked THEN a confirmation dialog SHALL open requiring a non-empty reason (mirroring `SettleCreditDialog`'s Zod-validated form pattern: local component, `useMutation`, `z.object` schema, field-level error display, submit disabled while `mutation.isPending`) before the request can be submitted.
 5. WHEN the void dialog is open THEN it SHALL display the top-up's original amount and the student's current wallet balance, and IF the current wallet balance is less than the original amount THEN it SHALL show a clear warning that some or all of the amount has already been spent and the unrecoverable portion will be added to the student's outstanding credit — so staff are not surprised by a resulting credit charge.
 6. WHEN the void mutation succeeds THEN the dialog SHALL close and the client SHALL invalidate the `["student", studentId]` and `["student-ledger", studentId]` TanStack Query cache keys, matching `SettleCreditDialog`'s existing `onSuccess` invalidation pattern, so the ledger and wallet/credit balance figures refresh without a manual reload.
@@ -161,7 +163,7 @@ This feature adds a **wallet top-up void**: a staff-initiated reversal of a spec
 
 ## Cross-Cutting Requirements
 
-**Security / Authorization:** Every acceptance criterion above that specifies a role or ownership check (Requirements 3, 4, 10.2) is enforced server-side; the frontend gating in Requirement 10 is a UX convenience, never the authorization boundary. The route MUST use `auth:sanctum` + `role:admin|manager` middleware, consistent with every other financial-mutation route in `routes/kitchen-api.php`.
+**Security / Authorization:** Every acceptance criterion above that specifies a role or ownership check (Requirements 3, 4, 10.2) is enforced server-side; the frontend gating in Requirement 10 is a UX convenience, never the authorization boundary. The route MUST use `auth:sanctum` + `role:admin|manager|supervisor` middleware, matching the existing `/students/{student}/wallet/top-up` route it sits beside — a deliberate broadening from the `admin|manager`-only gate used by most other financial-mutation routes (e.g. `PaymentController::void`), approved by the spec owner after the discrepancy was caught during task 3.2 implementation (see Requirement 4's amendment note).
 
 **Data Isolation (branch scoping):** `wallet_topup_voids.branch_id` is a snapshot column, not a `HasBranch`-scoped relation — this matches `CreditTransaction`'s documented rationale (the global `BranchScope` would break the ledger query in contexts with no active branch bound, such as the parent portal). Report queries that need branch filtering MUST filter explicitly on this snapshot column, the same way `WalletReportController` and `CreditReportController` already do for their respective tables. The void endpoint itself operates on `{student}`, which is already branch-scoped via `HasBranch` on `Student`, so an admin/manager cannot target a student outside their active branch through this endpoint.
 

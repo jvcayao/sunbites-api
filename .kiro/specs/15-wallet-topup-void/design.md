@@ -18,7 +18,7 @@ The one genuinely new piece of mechanics is `wallet_topup_voids`: an append-only
 
 ```mermaid
 sequenceDiagram
-    participant Staff as Admin/Manager (POS)
+    participant Staff as Admin/Manager/Supervisor (POS)
     participant API as WalletController::voidTopUp
     participant DB as MySQL
     participant Credit as CreditLedgerService
@@ -169,9 +169,10 @@ use Illuminate\Foundation\Http\FormRequest;
 class VoidWalletTopUpRequest extends FormRequest
 {
     /**
-     * The `role:admin|manager` middleware on the route is the authorization gate.
-     * Self-void and time-window checks happen in the controller — see design.md's
-     * "where enforcement logic lives" decision.
+     * The `role:admin|manager|supervisor` middleware on the route is the authorization
+     * gate, matching the existing `/wallet/top-up` route's tier (see Component 5's
+     * amendment note). Self-void and time-window checks happen in the controller —
+     * see design.md's "where enforcement logic lives" decision.
      */
     public function authorize(): bool
     {
@@ -228,7 +229,7 @@ public function voidTopUp(VoidWalletTopUpRequest $request, Student $student, int
     abort_if(
         $originalPerformerId === $request->user()->id,
         403,
-        'You cannot void a top-up you performed yourself. Ask another admin or manager to void it.'
+        'You cannot void a top-up you performed yourself. Ask another admin, manager, or supervisor to void it.'
     );
 
     $isAdmin = $request->user()->hasRole('admin');
@@ -340,18 +341,23 @@ Required new imports in `WalletController.php`: `App\Http\Requests\VoidWalletTop
 
 `amount` sign note: bavix stores deposit amounts as **positive** integers in minor units (centavos) and withdrawals as negative — this matches the existing `ABS(amount)` handling seen in `StudentLedgerQuery` and `WalletReportController`. This code only ever reads a row already filtered to `type = 'deposit'`, so the amount is expected to already be positive — but wrap the read in `abs()` anyway (`round(abs((float) $depositTransaction->amount) / 100, 2)`), matching the defensive convention every other reader of `transactions.amount` in this codebase already follows, rather than being the one reader that assumes sign without normalizing it.
 
+**Amendment (post-implementation correction, found during final QA, not previously reviewed):** the method signature above reads `int $transaction`. As written, this crashes: a route segment that is all digits but too large for PHP's native 64-bit int (e.g. a 23-digit string) passes the route's `whereNumber('transaction')` constraint but then fails PHP's implicit scalar-coercion against a plain `int` parameter, throwing an uncaught `TypeError` (500), not the 404 Requirement 1.2 requires. A non-numeric segment has the same failure mode and is separately blocked by `whereNumber` at the router level, but the oversized-numeric case still reaches the controller. Fix: declare the parameter as `int|string $transaction` and add `$transaction = (int) $transaction;` as the method's first line — an explicit cast clamps an out-of-range numeric string to `PHP_INT_MAX` instead of throwing, so the value simply matches no real `transactions.id` and falls through to the existing 404 path. Both the route's `whereNumber('transaction')` constraint (added at the same time, for the plain non-numeric case) and this cast are required; neither alone covers both failure modes. Covered by `test_a_non_numeric_transaction_segment_returns_not_found_not_a_server_error` and `test_a_transaction_segment_too_large_for_a_native_int_returns_not_found_not_a_server_error` in `WalletTopUpVoidTest.php`.
+
 **Balance accessor note, verified against the installed package** (`vendor/bavix/laravel-wallet/src/Traits/HasWalletFloat.php`): `balanceFloat` is declared `@property string $balanceFloat` — a **string** — while `balanceFloatNum` is declared `@property float $balanceFloatNum`. They are not interchangeable by name alone; `WalletController::topUp()` (the existing sibling method in this same controller) already uses `balanceFloatNum`, so `voidTopUp()` uses it too, consistently, throughout — both for reading the current balance mid-transaction and for the final response. (`CreditLedgerService` and `InlineReloadController` elsewhere in this codebase use `balanceFloat` instead and cast it — that pre-existing inconsistency across files is not introduced by this feature and is out of scope to fix here, but this feature's own new code does not repeat it internally.)
 
 #### 5. Route — `routes/kitchen-api.php`
 
-Add inside the existing `Route::middleware('role:admin|manager')->group(...)` block that already contains `/students/{student}/wallet/top-up` (around line 164), immediately after it:
+Add inside the existing route group that already contains `/students/{student}/wallet/top-up` (around line 164), immediately after it:
 
 ```php
 Route::post('/students/{student}/wallet/top-up', [WalletController::class, 'topUp']);
-Route::post('/students/{student}/wallet/top-ups/{transaction}/void', [WalletController::class, 'voidTopUp']);
+Route::post('/students/{student}/wallet/top-ups/{transaction}/void', [WalletController::class, 'voidTopUp'])
+    ->whereNumber('transaction');
 ```
 
-Both routes then share the same `role:admin|manager` gate already in place — no new middleware group needed.
+Both routes then share the same gate already in place — no new middleware group needed. `->whereNumber('transaction')` was added during final QA — see the amendment after Component 4's controller code for why it's necessary but not sufficient on its own (an oversized-but-still-numeric segment needs the `int|string` parameter fix too).
+
+**Amendment (post-implementation correction, approved by spec owner):** this section originally described that existing group as `role:admin|manager`, and Requirement 4.1 was written to match. That was wrong — the `/wallet/top-up` route actually lives inside the broader `role:admin|manager|supervisor` "Enrollment & Students" group (lines 148–174 of `routes/kitchen-api.php`), not a dedicated `admin|manager` group like `PaymentController::void`'s. This was caught by the implementer's own role-gate test (a supervisor unexpectedly got a 200 instead of the expected 403). Two fixes were possible: narrow the void route into its own `admin|manager` group (breaking the "add it right after the existing route, same group" instruction this section gives), or accept the broader tier and correct Requirement 4 to match. The spec owner chose the latter — **the void route stays in the `role:admin|manager|supervisor` group, unchanged from what's written above.** `supervisor` is therefore allowed through the role gate and is subject to the same same-day window as `manager` (Requirement 4.2, corrected); only `cashier` is blocked by the role gate itself. Requirement 4, the Error Handling table below, Testing Strategy scenario 12, and the frontend `canVoidTopUp` gating in Component 15 are all updated accordingly.
 
 #### 6. `CreditLedgerService::charge()` — parameter rename, behavior-preserving
 
@@ -680,8 +686,8 @@ Behavior, mapped directly to Requirement 10:
 #### 15. `wallet-tab.tsx` changes
 
 - Import and render `VoidTopUpDialog`, with local `useState` for which transaction (if any) is being voided — mirrors the existing `showSettle` boolean state, but needs to carry the target row's `walletTransactionId` + `original amount`, so use `useState<LedgerEntry | null>(null)` (e.g. `voidTarget`) rather than a boolean, since the dialog needs the row's data.
-- In `LedgerRow`, add a "Void" button rendered only `WHEN entry.entry_type === "deposit" && entry.voided === false && canVoidTopUp` — `canVoidTopUp` is a new prop threaded down from `WalletTab` (computed once, not per-row) as `user?.roles.includes("admin") === true || user?.roles.includes("manager") === true`, read via `useAuthStore` — same hook and same boolean-OR pattern already used in `app/(kitchen)/students/[id]/page.tsx` (see design's Security Considerations for the exact precedent line numbers).
-- Same-day disable hint (Requirement 10.3): when the current user has `"manager"` but not `"admin"`, and `entry.date` is not today (`new Date(entry.date).toDateString() === new Date().toDateString()`), render the Void button `disabled` with a `title="Only an admin can void a top-up from a previous day."` attribute — this is the one client-side check that needs today's date computed inline; no new hook is introduced for a single date comparison.
+- In `LedgerRow`, add a "Void" button rendered only `WHEN entry.entry_type === "deposit" && entry.voided === false && canVoidTopUp` — `canVoidTopUp` is a new prop threaded down from `WalletTab` (computed once, not per-row) as `user?.roles.includes("admin") === true || user?.roles.includes("manager") === true || user?.roles.includes("supervisor") === true`, read via `useAuthStore`. This extends — rather than exactly mirrors — the boolean-OR pattern already used in `app/(kitchen)/students/[id]/page.tsx` (see design's Security Considerations for the precedent line numbers): that existing pattern is `admin || manager` only, for a narrower permission (credit waiving); this feature's role tier is deliberately broader per Requirement 4's amendment, so `supervisor` is added.
+- Same-day disable hint (Requirement 10.3): when the current user has `"manager"` or `"supervisor"` but not `"admin"`, and `entry.date` is not today (`new Date(entry.date).toDateString() === new Date().toDateString()`), render the Void button `disabled` with a `title="Only an admin can void a top-up from a previous day."` attribute — this is the one client-side check that needs today's date computed inline; no new hook is introduced for a single date comparison.
 - Rows with `voided: true` render with a "Voided" badge (small `<span>` styled like the existing `entry_type.startsWith("credit_")` badge treatment already in `LedgerRow`, reusing the same badge visual language rather than introducing a new badge style) and the amount cell gets a `line-through` utility class added conditionally.
 - `entry_type === "topup_voided"` rows need no special-case styling beyond what already exists — `direction === "debit"` already drives the red/minus rendering generically, and `entry_label` from the API already reads "Top-up Voided".
 
@@ -768,7 +774,7 @@ None. This feature adds no columns to `transactions`, `credit_transactions`, `st
 
 ## Security Considerations
 
-- **Authorization model per endpoint:** `role:admin|manager` route middleware (Requirement 4.1) is the primary gate, consistent with every other financial-mutation route in `kitchen-api.php` (`PaymentController::void` uses the identical gate). Self-void (Requirement 3) and the manager same-day window (Requirement 4.2-4.3) are *additional* controller-level checks layered on top of the role gate — role membership alone is necessary but not sufficient.
+- **Authorization model per endpoint:** `role:admin|manager|supervisor` route middleware (Requirement 4.1) is the primary gate — a deliberate broadening from the `admin|manager`-only gate used by most other financial-mutation routes in `kitchen-api.php` (`PaymentController::void` uses the narrower gate), matching the existing `/wallet/top-up` route this endpoint sits beside instead (see Component 5's amendment note). Self-void (Requirement 3) and the manager/supervisor same-day window (Requirement 4.2-4.3) are *additional* controller-level checks layered on top of the role gate — role membership alone is necessary but not sufficient.
 - **Frontend gating is UX only.** The client-side `canVoidTopUp` boolean (Component 15) and the same-day disabled-button hint exist purely so staff without permission don't see an action that will 403 — removing or bypassing them client-side (e.g. via browser devtools) changes nothing about what the server will accept. This mirrors the existing precedent at `app/(kitchen)/students/[id]/page.tsx:2480` (`canWaiveCredit`), which is UX-only in exactly the same way for the existing waive-credit action.
 - **Data isolation:** the void endpoint operates on `{student}`, which is resolved through Laravel's route-model binding against the `Student` model — `Student` uses `HasBranch`, so a request for a student outside the requester's active branch already 404s before `voidTopUp()` executes, via the existing global `BranchScope`. No new branch-isolation code is needed in this feature; it inherits Student's existing scoping for free. `wallet_topup_voids.branch_id` itself is a plain snapshot column (not `HasBranch`-scoped) purely for report-query correctness (see Cross-Cutting Requirements in requirements.md) — it is not a security boundary.
 - **No new PII exposure.** `void_reason` is staff-authored free text, same category of data as `void_reason` on `Order` and `StudentMonthlyPayment` today, both of which are already staff-writable and already surfaced to staff. The one new decision (Component 9) is that it also surfaces to *parents* — evaluated above and judged low-risk because it is inherently about a change to the family's own money, not about a third party.
@@ -793,11 +799,12 @@ None. This feature adds no columns to `transactions`, `credit_transactions`, `st
 | `{transaction}` doesn't exist, belongs to another student's wallet, or is a `withdraw`-type row | 1.2 | 404 | `{"message": "Top-up transaction not found."}` |
 | `reason` missing or empty | 1.4 | 422 | `{"message": "...", "errors": {"reason": ["The reason field is required."]}}` |
 | `{transaction}` already has a `wallet_topup_voids` row | 2.1 | 422 | `{"message": "This top-up has already been voided."}` |
-| Requester is the original top-up's performer | 3.2 | 403 | `{"message": "You cannot void a top-up you performed yourself. Ask another admin or manager to void it."}` |
-| Requester is `manager` (not `admin`) and the top-up is not from today | 4.2 | 403 | `{"message": "This top-up is outside today and can only be voided by an admin."}` |
-| Requester is `supervisor` or `cashier` | 4.1 | 403 | Laravel's default role-middleware response (unchanged — this feature adds no new handling here, the existing `role:` middleware already produces this) |
+| Requester is the original top-up's performer | 3.2 | 403 | `{"message": "You cannot void a top-up you performed yourself. Ask another admin, manager, or supervisor to void it."}` |
+| Requester is `manager` or `supervisor` (not `admin`) and the top-up is not from today | 4.2 | 403 | `{"message": "This top-up is outside today and can only be voided by an admin."}` |
+| Requester is `cashier` | 4.1 | 403 | Laravel's default role-middleware response (unchanged — this feature adds no new handling here, the existing `role:` middleware already produces this) |
 | Student has no wallet at all | (implicit — no deposit can exist without a wallet) | 404 | Same message as "transaction not found" — a student with no wallet has no deposit transactions, so this collapses into the same 404 rather than needing a distinct message |
 | Race: two concurrent void requests for the same transaction | 2.2 | First succeeds 200; second gets 422 "already voided" (from the in-transaction re-check) or, if that re-check were ever bypassed, a 500 from the DB unique-constraint violation — the in-transaction re-check exists specifically so this always resolves to a clean 422, not a 500 | See controller code, Component 4 |
+| `{transaction}` is non-numeric, or numeric but too large for a native `int` | 1.2 (implicit — no such transaction can exist) | 404 | `{"message": "Top-up transaction not found."}` — see Component 4/5's post-implementation amendment; found during final QA, both were 500s before the `whereNumber` route constraint + `int|string` parameter fix |
 
 All 422s from `abort_if(...)` in the controller (as opposed to `FormRequest` validation failures) return the bare `{"message": "..."}` shape, not a `{"errors": {...}}` shape — consistent with how `TransactionController::void`'s "already voided" check (`if ($order->status === OrderStatus::Voided) { return response()->json(['message' => ...], 422); }`) and `PaymentController::void`'s `abort_if` calls already behave.
 
@@ -820,7 +827,7 @@ Per `testing.md`: Feature tests, real database, `RefreshDatabase`, `actingAs($us
 9. **Same-day window — manager blocked:** seed a deposit with `created_at` set to yesterday, attempt void as a `manager` → 403 with the window message, no mutation.
 10. **Same-day window — admin unrestricted:** same seed, void as `admin` → 200.
 11. **Same-day window — manager allowed for today's own transaction (not self-performed):** two different managers — manager A performs the top-up, manager B voids it same-day → 200 (proves the window check and the self-void check are independent and both correctly pass when they should).
-12. **Role gate — supervisor/cashier blocked:** `actingAs` a supervisor and a cashier separately, both get the standard role-middleware 403, no controller code executes (assert no `wallet_topup_voids` row either way).
+12. **Role gate — cashier blocked, supervisor allowed:** `actingAs` a cashier gets the standard role-middleware 403, no controller code executes (assert no `wallet_topup_voids` row). `actingAs` a supervisor is let through the role gate and succeeds on a same-day void exactly like a manager would (200); a supervisor is blocked from voiding a prior-day top-up by the same same-day window that restricts managers (403, per corrected Requirement 4.2) — see scenarios 9-11 for the manager-tier same-day coverage this mirrors.
 13. **Not found — wrong student's wallet:** create two students with wallets, attempt to void student A's transaction id via student B's route → 404.
 14. **Not found — withdraw-type transaction:** attempt to void a transaction id that is a genuine purchase deduction (`type=withdraw`) → 404 (proves the `type='deposit'` filter, not just wallet ownership, is enforced).
 15. **Validation — missing reason:** omit `reason` → 422 with field error.

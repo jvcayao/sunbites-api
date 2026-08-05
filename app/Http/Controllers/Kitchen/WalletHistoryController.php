@@ -97,6 +97,7 @@ class WalletHistoryController extends Controller
         }
 
         $transactions = DB::table('transactions')
+            ->leftJoin('wallet_topup_voids', 'wallet_topup_voids.wallet_transaction_id', '=', 'transactions.id')
             ->where('wallet_id', $wallet->id)
             ->where('type', 'deposit')
             ->where('transactions.confirmed', true)
@@ -122,8 +123,14 @@ class WalletHistoryController extends Controller
         }
 
         $transactions = $transactions
-            ->orderByDesc('created_at')
-            ->paginate($perPage, ['id', 'amount', 'meta', 'created_at']);
+            ->orderByDesc('transactions.created_at')
+            ->paginate($perPage, [
+                'transactions.id',
+                'transactions.amount',
+                'transactions.meta',
+                'transactions.created_at',
+                'wallet_topup_voids.id as void_id',
+            ]);
 
         // Resolve performed_by user IDs from meta in a single query (avoid N+1)
         $performedByIds = $transactions->getCollection()
@@ -167,6 +174,7 @@ class WalletHistoryController extends Controller
             'description' => 'Wallet Top-Up',
             'amount' => abs((float) $tx->amount) / 100,
             'added_by' => $addedByName,
+            'voided' => $tx->void_id !== null,
         ];
     }
 }

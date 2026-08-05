@@ -162,6 +162,8 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
         Route::get('/students/{student}/subscription-downgrade-preview', [SubscriptionDowngradeController::class, 'preview']);
         Route::get('/students/{student}/orders', [StudentController::class, 'orders']);
         Route::post('/students/{student}/wallet/top-up', [WalletController::class, 'topUp']);
+        Route::post('/students/{student}/wallet/top-ups/{transaction}/void', [WalletController::class, 'voidTopUp'])
+            ->whereNumber('transaction');
         Route::get('/students/{student}/payments', [PaymentController::class, 'index']);
 
         // Student contacts

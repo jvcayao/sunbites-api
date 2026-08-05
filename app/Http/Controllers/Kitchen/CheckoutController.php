@@ -170,7 +170,7 @@ class CheckoutController extends Controller
                     $isCredit = true;
                     $creditAmount = round($shortfall, 2);
 
-                    $this->creditLedger->charge($student, $creditAmount, $receiptNumber, $request->user());
+                    $this->creditLedger->charge($student, $creditAmount, "order {$receiptNumber}", $request->user());
                     $student->refresh();
 
                     $availableBalance = $student->wallet?->balanceFloat ?? 0;

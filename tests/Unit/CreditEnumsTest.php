@@ -51,16 +51,18 @@ class CreditEnumsTest extends TestCase
     {
         $this->assertSame('Top-up', LedgerEntryType::Deposit->label());
         $this->assertSame('Purchase', LedgerEntryType::Withdraw->label());
+        $this->assertSame('Top-up Voided', LedgerEntryType::TopupVoided->label());
         $this->assertSame('Credit Charged', LedgerEntryType::CreditCharged->label());
         $this->assertSame('Credit Paid', LedgerEntryType::CreditSettled->label());
         $this->assertSame('Credit Waived', LedgerEntryType::CreditWaived->label());
         $this->assertSame('Credit Reversed', LedgerEntryType::CreditVoided->label());
     }
 
-    public function test_only_withdrawals_and_credit_charges_are_debits(): void
+    public function test_only_withdrawals_credit_charges_and_topup_voids_are_debits(): void
     {
         $this->assertSame('debit', LedgerEntryType::Withdraw->direction());
         $this->assertSame('debit', LedgerEntryType::CreditCharged->direction());
+        $this->assertSame('debit', LedgerEntryType::TopupVoided->direction());
 
         $this->assertSame('credit', LedgerEntryType::Deposit->direction());
         $this->assertSame('credit', LedgerEntryType::CreditSettled->direction());
@@ -84,16 +86,23 @@ class CreditEnumsTest extends TestCase
 
         $this->assertFalse(LedgerEntryType::Deposit->isCreditEntry());
         $this->assertFalse(LedgerEntryType::Withdraw->isCreditEntry());
+        $this->assertFalse(LedgerEntryType::TopupVoided->isCreditEntry());
     }
 
-    public function test_topup_filter_matches_only_deposits(): void
+    public function test_topup_filter_matches_deposits_and_their_voided_reversals(): void
     {
-        $this->assertSame([LedgerEntryType::Deposit], LedgerEntryType::forFilter('topup'));
+        $this->assertSame(
+            [LedgerEntryType::Deposit, LedgerEntryType::TopupVoided],
+            LedgerEntryType::forFilter('topup')
+        );
     }
 
-    public function test_purchase_filter_matches_only_withdrawals(): void
+    public function test_purchase_filter_matches_only_withdrawals_and_excludes_topup_voided(): void
     {
-        $this->assertSame([LedgerEntryType::Withdraw], LedgerEntryType::forFilter('purchase'));
+        $result = LedgerEntryType::forFilter('purchase');
+
+        $this->assertSame([LedgerEntryType::Withdraw], $result);
+        $this->assertNotContains(LedgerEntryType::TopupVoided, $result);
     }
 
     public function test_credit_filter_matches_all_four_credit_entry_types(): void

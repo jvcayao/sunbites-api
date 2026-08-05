@@ -174,6 +174,41 @@ class WalletReportTest extends TestCase
         $this->assertCount(1, $response->json('data'));
     }
 
+    public function test_voided_top_up_deposit_and_purchase_totals_are_corrected_independently(): void
+    {
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $performer = User::factory()->create();
+        $performer->assignRole('manager');
+        $performer->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+
+        // ₱1000 deposit, ₱400 genuinely spent before the void, then voided — recovers ₱600
+        // (a refund withdrawal), leaving a ₱400 shortfall (irrelevant to this report).
+        $deposit = $student->deposit(100000, ['payment_method' => 'cash', 'performed_by' => $performer->id]);
+        $student->withdraw(40000);
+
+        $this->asAdmin()->postJson("/api/v1/students/{$student->id}/wallet/top-ups/{$deposit->id}/void", [
+            'reason' => 'Report correction check.',
+        ])->assertOk();
+
+        // An unrelated, unvoided deposit and purchase — proves the two corrections don't
+        // conflate real activity with the void's own bookkeeping.
+        $student->deposit(200000);
+        $student->withdraw(30000);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/wallet');
+        $response->assertOk();
+
+        $summary = $response->json('summary');
+        // Genuinely spent from the voided deposit (400) + the unrelated unvoided deposit (2000).
+        $this->assertEquals(2400.0, $summary['total_credits'], 'Deposit totals must subtract only the recovered voided_amount, never the full original amount.');
+        // Both real purchases (400 + 300); the 600 refund withdrawal must be excluded.
+        $this->assertEquals(700.0, $summary['total_debits'], "The void's own reversal withdrawal must not be counted as a purchase.");
+
+        $row = collect($response->json('data'))->firstWhere('id', $student->id);
+        $this->assertEquals(2400.0, $row['total_credited']);
+        $this->assertEquals(700.0, $row['total_debited']);
+    }
+
     public function test_wallet_export_includes_students_with_wallet_activity_only(): void
     {
         Student::factory()->create(['branch_id' => $this->branch->id]); // no wallet — excluded

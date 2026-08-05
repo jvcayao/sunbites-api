@@ -203,6 +203,38 @@ class WalletHistoryTest extends TestCase
         $this->assertEquals(OrderStatus::Completed->value, Order::find($response->json('data.0.id'))->status->value);
     }
 
+    public function test_a_voided_top_up_still_appears_in_the_list_flagged_voided(): void
+    {
+        $deposit = $this->student->deposit(50000, ['payment_method' => 'cash', 'performed_by' => $this->admin->id]);
+
+        $voider = User::factory()->create();
+        $voider->assignRole('admin');
+        $voider->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+        Sanctum::actingAs($voider, ['staff']);
+        $this->withHeaders(['X-Branch-Id' => $this->branch->id])
+            ->postJson("/api/v1/students/{$this->student->id}/wallet/top-ups/{$deposit->id}/void", [
+                'reason' => 'History coverage.',
+            ])->assertOk();
+
+        $response = $this->asAdmin()
+            ->getJson("/api/v1/reports/wallet/{$this->student->id}/history?type=topups");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'), 'A voided top-up must still appear in the list, not be silently removed.');
+        $this->assertTrue($response->json('data.0.voided'));
+    }
+
+    public function test_a_non_voided_top_up_is_flagged_not_voided(): void
+    {
+        $this->student->deposit(50000, ['performed_by' => $this->admin->id]);
+
+        $response = $this->asAdmin()
+            ->getJson("/api/v1/reports/wallet/{$this->student->id}/history?type=topups");
+
+        $response->assertOk();
+        $this->assertFalse($response->json('data.0.voided'));
+    }
+
     public function test_student_from_other_branch_returns_404(): void
     {
         $otherBranch = Branch::factory()->create();
