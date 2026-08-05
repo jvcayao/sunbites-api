@@ -50,26 +50,40 @@ class StudentLedgerQuery
      * `ABS(amount) / 100.0` — bavix stores minor units and signs withdrawals negative.
      * The `.0` is mandatory: tests run on SQLite, which performs integer division, so
      * `2550 / 100` would silently yield 25 and destroy the centavos.
+     *
+     * Joins `wallet_topup_voids` twice: `original_void` identifies a deposit that has
+     * since been voided (drives the `voided` flag), `refund_void` identifies the
+     * withdrawal that a void itself created (drives the `topup_voided` entry_type so the
+     * reversal doesn't display as an ordinary purchase).
      */
     private function walletLeg(int $walletId): Builder
     {
         return DB::table('transactions')
+            ->leftJoin('wallet_topup_voids as original_void', 'original_void.wallet_transaction_id', '=', 'transactions.id')
+            ->leftJoin('wallet_topup_voids as refund_void', 'refund_void.refund_wallet_transaction_id', '=', 'transactions.id')
             ->selectRaw("
-                CONCAT('wallet-', id) AS row_id,
-                created_at,
-                type AS entry_type,
-                ABS(amount) / 100.0 AS amount,
-                meta AS details,
+                CONCAT('wallet-', transactions.id) AS row_id,
+                transactions.created_at,
+                CASE WHEN refund_void.id IS NOT NULL THEN 'topup_voided' ELSE transactions.type END AS entry_type,
+                ABS(transactions.amount) / 100.0 AS amount,
+                transactions.meta AS details,
                 NULL AS payment_method,
                 NULL AS reference_number,
                 NULL AS order_id,
-                NULL AS performed_by
+                NULL AS performed_by,
+                CASE WHEN original_void.id IS NOT NULL THEN 1 ELSE 0 END AS voided,
+                CASE WHEN transactions.type = 'deposit' THEN transactions.id ELSE NULL END AS wallet_transaction_id
             ")
-            ->where('wallet_id', $walletId)
-            ->where('confirmed', true)
-            ->whereNull('deleted_at');
+            ->where('transactions.wallet_id', $walletId)
+            ->where('transactions.confirmed', true)
+            ->whereNull('transactions.deleted_at');
     }
 
+    /**
+     * Trailing `voided`/`wallet_transaction_id` placeholder columns must stay in lockstep
+     * with walletLeg()'s — unionAll() is positional, so a column-count mismatch here fails
+     * at the database level, not in a way a PHP-level diff review would catch.
+     */
     private function creditLeg(Student $student): Builder
     {
         return DB::table('credit_transactions')
@@ -82,7 +96,9 @@ class StudentLedgerQuery
                 payment_method,
                 reference_number,
                 order_id,
-                performed_by
+                performed_by,
+                0 AS voided,
+                NULL AS wallet_transaction_id
             ")
             ->where('student_id', $student->id);
     }
