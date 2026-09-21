@@ -13,8 +13,11 @@
     ],
     "sail": true,
     "skills": [
+        "infer-conventions",
+        "deploying-to-cloud",
         "fortify-development",
         "laravel-best-practices",
+        "testing-best-practices",
         "tailwindcss-development",
         "laravel-excel",
         "laravel-permission-development",
