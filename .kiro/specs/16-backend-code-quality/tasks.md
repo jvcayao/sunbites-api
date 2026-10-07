@@ -1,0 +1,462 @@
+# Implementation Plan: Spec 16
+
+## Ground rules (apply to every task)
+
+- **Non-negotiable tooling (Req 12, design §12):**
+  - **Before any PHP work:** activate `laravel-best-practices` and read its mapped rule files (design §12.1).
+  - **Before any test work:** activate `testing-best-practices`.
+  - **Domain skills:** `laravel-excel` (exports), `laravel-permission-development` (roles), `fortify-development` (T-17.1).
+  - **Boost:** confirm the Laravel Boost MCP is connected (`vendor/bin/sail up -d`); run `application-info` at PR start and `search-docs` before using any Laravel or package API. Use `database-schema`/`database-query` before model, enum or raw-SQL changes (design §12.2). **Do not proceed without Boost.**
+  - **Tooling log:** every PR description includes one listing skills, rule files read, and each `search-docs` query with the section used.
+
+- **Before starting any task:**
+  - Read `design.md` §3 (hazards H1–H15).
+  - Read the design section the task cites.
+  - Read the current code of every file you will touch.
+  - If the code differs from what the design describes, **stop and report**. Do not adapt silently.
+- **One task group = one PR** (branch `refactor/spec16-T{n}-{slug}` or `fix/spec16-B{nn}-{slug}`), except where a task says otherwise.
+- **Track A PRs must not modify any file under `tests/Fixtures/contracts/`.** Track B PRs modify only the fixtures listed in the task.
+- **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
+- **`make:request` generates `authorize(): bool { return false; }`** (verified in the framework stub). Every Form Request in this spec MUST change it to `return true;`, since authorization lives in route middleware and `#[Authorize]`. Leaving `false` makes the endpoint return 403 for everyone. The contract suite catches this, but check it anyway.
+- **Create files with Artisan**, then fill them in:
+  - `vendor/bin/sail artisan make:request Kitchen/ListActivityLogsRequest --no-interaction`
+  - `make:class`, `make:enum`, `make:middleware`, `make:resource`, `make:test --phpunit`
+- **Verification gate (every task):**
+  1. `vendor/bin/sail artisan test --compact` (MySQL), all green
+  2. `DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact` (SQLite, as in CI), all green
+  3. `vendor/bin/sail bin pint --dirty --format agent`
+  4. Contract suite green with **zero** fixture diffs (Track A)
+  5. Re-read the diff against every hazard the task lists
+
+---
+
+## Track A
+
+- [ ] 1. Contract freeze harness and fixtures *(design §4.1; Req 1)*
+  - [ ] 1.1 Create the shape extractor
+    - Create `tests/Support/Contract/ShapeExtractor.php` implementing the grammar in design §4.1.1 exactly (token names, check order, `ksort`, `__map__`, `__list__`, `__list_union__`, `list:empty`).
+    - Write `tests/Unit/Contract/ShapeExtractorTest.php` with one test per token, plus:
+      - key order is ignored
+      - mixed lists produce a union
+      - `mapPaths` collapse data keys
+      - `"150.00"` gives `string:decimal2`, not `string`
+      - `"2026-10-15T09:30:00.000000Z"` gives `string:iso8601_micro`
+    - _Requirements: 1.1, 1.8_
+  - [ ] 1.2 Create the assertion trait
+    - Create `tests/Support/Contract/AssertsApiContract.php` with `assertContract()` and `assertFileContract()` (design §4.1.2): slug rule, fixture path, record mode via `CONTRACT_RECORD=1`, failure messages verbatim, pretty JSON flags.
+    - Unit test: the slug for `GET api/v1/students/{student}` is `get__api_v1_students_{student}`; record mode writes a file; compare mode fails on a changed shape.
+    - _Requirements: 1.1, 1.2, 1.6_
+  - [ ] 1.3 Create the deterministic scenario
+    - Create `tests/Support/Contract/ContractScenario.php` building every record in design §4.1.3 with existing factories and states only (`Student::factory()->subscription()`, `StudentMonthlyPayment::factory()->paid()`, `Order::factory()->credit()`, `->voided()`, `PreRegistration::factory()->pending()/approved()/expired()`, `ParentUserFactory::unactivated()`, …). Freeze time with `travelTo('2026-10-15 09:30:00')`.
+    - Expose typed public properties (`$branchA`, `$branchB`, `$admin`, `$manager`, `$supervisor`, `$cashier`, `$subscriptionStudent`, …) and helpers `asStaff(User $u)` and `asParent(ParentUser $p)` following the `tests/Feature/PosCheckoutTest.php` pattern.
+    - Test (`tests/Feature/Contract/ContractScenarioTest.php`): builds twice in separate tests with identical counts per table; branch B data is not visible with the branch A header.
+    - _Requirements: 1.1_
+  - [ ] 1.4 Write the contract tests for every route
+    - One test class per controller under `tests/Feature/Contract/{Kitchen,Portal,Public}/{Controller}ContractTest.php`.
+    - For each route in `php artisan route:list --path=api --except-vendor` (165 on 2026-09-26), write the variants required by design §4.1.4.
+    - Use `Http::fake` for reCAPTCHA, and `Mail::fake()`/`Notification::fake()`/`Storage::fake('private')`/`Storage::fake('public')` where the endpoint sends or stores.
+    - Declare `mapPaths` for data-keyed maps. At minimum: `summary.grade_breakdown`, `summary.status_breakdown` (student report); `school_month_defaults` (enrollment index); `subscription_monthly_status.categories`, `subscription_daily_status` (lookup/portal); `payment_method_split` (spending summary); `settled_by_method` (credit report).
+    - Record on MySQL with `CONTRACT_RECORD=1 vendor/bin/sail artisan test --compact tests/Feature/Contract`, then create SQLite overrides only where shapes differ: `CONTRACT_RECORD=1 CONTRACT_DRIVER_OVERRIDE=1 DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact tests/Feature/Contract` (design §4.1.2, H15). Then run again **without** the flags on both drivers; both must be green with no diffs. List every `.sqlite.json` override in `contract-gaps.md`.
+    - _Requirements: 1.1, 1.2, 1.3_
+  - [ ] 1.5 Add the route coverage test
+    - `tests/Feature/Contract/RouteCoverageTest.php` per design §4.1.5. It must pass after 1.4.
+    - Also add a test that asserts the route count is 165, with a comment explaining the number, so an added or removed route is a visible, deliberate change.
+    - _Requirements: 1.4_
+  - [ ] 1.6 Add the role authorization matrix
+    - `tests/Feature/Contract/RoleAuthorizationMatrixTest.php` per design §4.1.5: parameter resolver by URI, the exceptions array, portal 401 without token and with a staff token.
+    - Uses a PHPUnit data provider built from `Route::getRoutes()` with one row per (route, role).
+    - _Requirements: 1.5_
+  - [ ] 1.7 Cross-check against the frontend types
+    - Create `.kiro/specs/16-backend-code-quality/contract-gaps.md` seeded with the four rows in design §4.1.6.
+    - For every fixture, compare it with its FE type (`rg -n "apiClient\.(get|post|put|patch|delete)<" ~/sunbites-pos/lib/api ~/sunbites-portal/lib/api`) and add a row per mismatch. Do **not** fix mismatches here.
+    - No test is needed (this is documentation); the PR description links the file.
+    - _Requirements: 1.7_
+
+- [ ] 2. Base authorization and policy wiring *(design §4.2.1 list of 14 calls, §4.5.3; Req 4.5, 6.2, 6.4)*
+  - [ ] 2.1 Move `AuthorizesRequests` to the base controller
+    - Add `use AuthorizesRequests;` to `app/Http/Controllers/Controller.php`.
+    - Remove the 7 per-controller `use AuthorizesRequests;` statements and their imports.
+    - Tests: the existing suite passes; fixtures are unchanged.
+    - _Requirements: 6.4_
+  - [ ] 2.2 Replace `$this->authorize()` with `#[Authorize]`
+    - Replace all 14 calls with the attributes in the design §4.2.1 table (`use Illuminate\Routing\Attributes\Controllers\Authorize;`). Delete the call lines.
+    - Confirm `rg -n '\$this->authorize\(' app` returns nothing afterwards.
+    - Tests: add `tests/Feature/Kitchen/AuthorizeAttributeTest.php` with one test per attribute asserting 403 `{"message":"Forbidden."}` for a denied actor (e.g. a parent without a link to the student, supervisor voiding when the policy denies, and a user deactivating self).
+    - Matrix and fixtures are unchanged.
+    - _Requirements: 6.2_
+  - [ ] 2.3 Bind policies with `#[UsePolicy]`
+    - Add `#[UsePolicy]` to `Order`, `User` and `Student` (design §4.5.3), and remove the four `Gate::policy()` lines and their imports from `AppServiceProvider`.
+    - Run `rg -n "ReportPolicy|StudentPolicy" app routes tests`. If only the class files match, delete `app/Policies/ReportPolicy.php` and `app/Policies/StudentPolicy.php`. If tests match, stop and report.
+    - Tests: `tests/Unit/PolicyResolutionTest.php` asserts `Gate::getPolicyFor(Order::class)` is an `OrderPolicy` (likewise `User` and `Student`); the suite and fixtures are unchanged.
+    - _Requirements: 4.5_
+
+- [ ] 3. POS domain: checkout, void, stock *(design §4.3.1–4.3.3, §4.2.1/4.2.2 rows for CheckoutController and TransactionController; hazards H1, H3, H5, H10)*
+  - [ ] 3.1 Create `InventoryStockService`
+    - Create `app/Services/InventoryStockService.php` with the four methods and the exact write styles in design §4.3.1 (query builder for sale, Eloquent for restock and adjust).
+    - Tests: `tests/Feature/Kitchen/InventoryStockServiceTest.php` covers:
+      - sale deduction writes the stale-quantity value (reproduce H10: two cart lines sharing an item end at `start - 1`, not `start - 2`). This test is **deleted by B-03**, which is allowed there.
+      - the sale log fields
+      - restock writes a Restock log and an `inventory.updated` activity row
+      - adjust add/deduct clamps at 0 and writes a log
+      - initial stock writes an `'Initial stock'` log
+    - _Requirements: 2.3_
+  - [ ] 3.2 Create `CheckoutRequest`
+    - Create `app/Http/Requests/Kitchen/CheckoutRequest.php` with the 12 rules copied verbatim.
+    - Tests: covered by fixtures (the `422-validation` variant); add one test sending `payment_method=bitcoin` and asserting the same `errors.payment_method` message as before the move.
+    - _Requirements: 3.1, 3.2_
+  - [ ] 3.3 Create `CheckoutAction` and slim the controller
+    - Create `app/Actions/Pos/CheckoutAction.php` per design §4.3.2 (order of steps 1–10, every message verbatim; walk-in guards as `HttpResponseException`, others `abort`). Reduce `CheckoutController::store` to the 3-line body shown in the design.
+    - Tests: include a cashier checkout **without** a discount that succeeds (proves the discount check stays conditional). `tests/Feature/Kitchen/CheckoutActionTest.php` has one test per guard message (walk-in wallet, walk-in subscription, unmapped item, out of stock, discount 403, not enrolled, non-subscription student, ineligible item, daily limit, insufficient balance, credit limit exceeded), plus:
+      - loyalty points
+      - `WalletAlertJob` dispatched only for wallet orders (`Queue::fake()`)
+      - `pos.order_created` and `pos.discount_applied` activity rows
+    - All `PosCheckoutTest`, `PosInsufficientFundsTest`, `SubscriptionCheckoutTest` and `PosWalletLockTest` tests pass unchanged.
+    - _Requirements: 2.1, 2.2, 2.5, 2.6_
+  - [ ] 3.4 Create `VoidOrderRequest` and `VoidOrderAction`
+    - `app/Http/Requests/Kitchen/VoidOrderRequest.php` has the already-voided guard in `prepareForValidation()` (design §4.2.2) plus `void_reason` required|string|max:500.
+    - `app/Actions/Pos/VoidOrderAction.php` per design §4.3.3. The controller method keeps `#[Authorize('void', 'order')]` from T-2.
+    - Tests: `tests/Feature/Kitchen/VoidOrderActionTest.php` covers:
+      - wallet refund excludes the credit portion
+      - credit reversal via the ledger
+      - restock logs
+      - loyalty recompute
+      - `pos.order_voided` activity
+      - **precedence:** an already-voided order with a missing `void_reason` returns 422 `"Order is already voided."`, not a validation error
+    - `PosVoidTest` and `CreditVoidReversalTest` pass unchanged.
+    - _Requirements: 2.1, 2.5, 3.3_
+  - [ ] 3.5 Form Requests for the remaining POS endpoints
+    - `ListTransactionsRequest`, `InlineReloadRequest` and `StudentLookupRequest` per the design §4.2.1 table.
+    - Tests: fixtures unchanged.
+    - _Requirements: 3.1_
+
+- [ ] 4. Wallet and credit *(design §4.3.4, §4.4 `CreditLedgerEntryResource`; hazards H1, H3)*
+  - [ ] 4.1 Create `TopUpWalletRequest`
+    - Keep `strip_tags(note)` at the point of use.
+    - Tests: fixtures unchanged; `WalletTopUpTest` unchanged.
+    - _Requirements: 3.1, 3.5_
+  - [ ] 4.2 Create `VoidWalletTopUpAction`
+    - Create `app/Actions/Wallet/VoidWalletTopUpAction.php` moving the body verbatim (design §4.3.4). The controller keeps the `int|string $transaction` parameter and its comment.
+    - Tests: `tests/Feature/Kitchen/VoidWalletTopUpActionTest.php` has one test per guard (not found ×2, already voided, self-void, outside today for non-admin, admin outside today allowed), full and partial recovery, and the shortfall charged as credit. `WalletTopUpVoidTest` passes unchanged.
+    - _Requirements: 2.1, 2.2_
+  - [ ] 4.3 Create `CreditLedgerEntryResource`
+    - Replace `CreditController::entryPayload()` with `app/Http/Resources/CreditLedgerEntryResource.php`, nested as `'transaction' => new CreditLedgerEntryResource($entry)` (H6).
+    - Tests: fixtures unchanged; `CreditSettlementTest` and `CreditWaiveTest` unchanged.
+    - _Requirements: 5.1, 5.2_
+  - [ ] 4.4 Wallet history and ledger requests
+    - Create `ListWalletHistoryRequest` (`per_page` max 50, H13) and the shared `app/Http/Requests/StudentLedgerRequest.php`. Change the `ResolvesStudentLedger` trait signature (design §4.2.1).
+    - Tests: fixtures unchanged; `StudentLedgerTest` unchanged; plus a portal precedence test: an unlinked parent with `per_page=999` gets 403, not 422.
+    - _Requirements: 3.1, 3.4_
+
+- [ ] 5. Students, enrollment, payments, contacts *(design §4.3.6, §4.2.1–4.2.3; hazards H3, H4, H8, H13)*
+  - [ ] 5.1 Create `EnrollStudentRequest` and `EnrollStudentAction`
+    - End-before-start goes in `passedValidation()` as an errors-only `HttpResponseException`.
+    - Tests: `tests/Feature/Kitchen/EnrollStudentActionTest.php` covers:
+      - contacts `is_primary` by index
+      - every emailed contact provisioned
+      - photo stored on the `private` disk
+      - `students.enrolled` activity
+    - Plus an assertion that the end-before-start response body has **no** `message` key. `EnrollmentTest` is unchanged.
+    - _Requirements: 2.1, 3.1, 3.2_
+  - [ ] 5.2 `StudentController` requests
+    - Create `ListStudentsRequest` (permissive, §4.2.3), `UpdateStudentRequest`, `UpdateStudentStatusRequest` (copy `from()` as is, H-note), `UpdateStudentTypeRequest`, `UploadStudentPhotoRequest` and `ListStudentOrdersRequest`.
+    - Tests: fixtures unchanged, plus a test that `GET /students?deleted=1&type=all&month=june&year=abc` still returns 200 (permissive rules).
+    - _Requirements: 3.1, 3.6_
+  - [ ] 5.3 `PaymentController` requests
+    - Create `RecordPaymentRequest`, `AddPaymentRangeRequest` (errors-only in `passedValidation()`), `UpdatePaymentAmountRequest` and `VoidPaymentRequest` with the `prepareForValidation()` guards in design §4.2.2, in the same order.
+    - Tests, precedence:
+      - `updateAmount` on a paid payment with a non-numeric amount → 422 `"Can only edit amount on unpaid payments."`
+      - `void` on another student's payment with an empty body → 404
+      - `void` on an unpaid payment with an empty body → 422 `"Only paid payments can be voided."`
+    - `PaymentControllerTest`, `VoidPaymentTest` and `PaymentRangeTest` unchanged.
+    - _Requirements: 3.3_
+  - [ ] 5.4 `StudentContactController` requests
+    - Create `StoreStudentContactRequest` and `UpdateStudentContactRequest` (404 guard in `prepareForValidation()`).
+    - Tests, precedence: updating another student's contact with invalid email → 404 `"Contact does not belong to this student."`. `StudentContactTest` unchanged.
+    - _Requirements: 3.3_
+
+- [ ] 6. Staff, branches, configuration *(design §4.2.1; hazard H7)*
+  - [ ] 6.1 Kitchen auth requests
+    - Create `StaffLoginRequest`, `SendStaffResetLinkRequest`, `ResetStaffPasswordRequest` (keep `$request->only(...)`, H7) and `SwitchBranchRequest`.
+    - Tests: fixtures unchanged; `StaffAuthTest`/`AuthTest` unchanged; plus a test that password reset still succeeds, which proves `password_confirmation` reaches the broker.
+    - _Requirements: 3.1, 3.7_
+  - [ ] 6.2 User management requests
+    - Create `ListStaffUsersRequest` (permissive), `StoreStaffUserRequest`/`UpdateStaffUserRequest` sharing the `App\Http\Requests\Kitchen\Concerns\StaffUserRules` trait, `UploadUserPhotoRequest` and `AssignUserBranchRequest`.
+    - Tests: fixtures unchanged; `UserManagementTest` unchanged; precedence: a manager uploading a photo for a user the policy denies with no file → 403.
+    - _Requirements: 3.1, 3.4, 3.6_
+  - [ ] 6.3 Branch and configuration requests
+    - Create `UpdateBranchRequest`, `UpdateSystemConfigurationRequest` (memoised `configuration()`, 404 before 422), `UpdateSubscriptionConfigRequest`, and `ListBranchMonthlyAmountsRequest`/`StoreBranchMonthlyAmountRequest`/`UpdateBranchMonthlyAmountRequest`.
+    - Tests: fixtures unchanged, plus `PUT /system-configurations/unknown_key` with an empty body → 404 `{"message":"Not found."}`.
+    - _Requirements: 3.1, 3.3_
+
+- [ ] 7. Inventory, menu, meal planner *(design §4.3.1, §4.4, §4.6; hazards H5, H6)*
+  - [ ] 7.1 Inventory controller
+    - `InventoryController` uses `InventoryStockService::adjust()`/`recordInitialStock()`. Create `StoreInventoryItemRequest`, `UpdateInventoryItemRequest`, `AdjustInventoryRequest` and `ListInventoryHistoryRequest`.
+    - Tests: fixtures unchanged; `InventoryTest` unchanged; the activity rows for adjust are identical in count and description (assert against the `activity_log` table).
+    - _Requirements: 2.3, 3.1_
+  - [ ] 7.2 Inventory resources and shared scope
+    - Create `InventoryItemResource` and `InventoryLogResource` replacing `formatItem`/`formatLog` and the report's log map.
+    - Add the `InventoryLog::forActiveItemsInBranch` `#[Scope]` (design §4.6), used in 3 places. Do not change `buildDiscrepancySection`.
+    - Tests: fixtures unchanged; `InventoryReportTest` unchanged.
+    - _Requirements: 5.1, 7.5_
+  - [ ] 7.3 Menu item and ingredient resources
+    - Create `PosMenuItemResource` (with `resolveInventoryStatus`), `SavePosMenuItemRequest`, `InventoryIngredientResource` and `AttachIngredientRequest`.
+    - Tests: fixtures unchanged; `PosMenuItemTest` and `InventoryIngredientTest` unchanged.
+    - _Requirements: 3.1, 5.1_
+  - [ ] 7.4 Meal planner requests
+    - Create `ShowMealPlanRequest` (permissive), `UpdateMealPlanRequest`, `ResetMealPlanWeekRequest` and `UpdateMealPlanWeekVisibilityRequest`.
+    - Tests: fixtures unchanged; `MealPlannerTest` unchanged.
+    - _Requirements: 3.1, 3.6_
+
+- [ ] 8. Pre-registration (kitchen and public) *(design §4.3.5, §4.2.2; hazard H3)*
+  - [ ] 8.1 Create `ApprovePreRegistrationAction`
+    - Create `app/Actions/PreRegistrations/ApprovePreRegistrationAction.php` per design §4.3.5.
+    - Tests: `tests/Feature/Kitchen/ApprovePreRegistrationActionTest.php` covers:
+      - only the primary contact with an email is provisioned
+      - all contacts are copied
+      - both duplicate 422 messages
+      - the approved mail is queued to the primary, falling back to the first contact
+    - `PreRegistrationTest` and `PreRegistrationApprovalDuplicateTest` unchanged.
+    - _Requirements: 2.1, 2.2_
+  - [ ] 8.2 Kitchen pre-registration requests
+    - Create `ListPreRegistrationsRequest`, `UpdatePreRegistrationRequest` and `RejectPreRegistrationRequest` (pending guards as `HttpResponseException`).
+    - Tests, precedence: rejecting an approved record with an empty body → 422 `"Only pending pre-registrations can be rejected."`.
+    - _Requirements: 3.3_
+  - [ ] 8.3 Public pre-registration request
+    - Create `app/Services/RecaptchaVerifier.php` and `StorePublicPreRegistrationRequest` (honeypot, then captcha in `prepareForValidation()`; errors-only month check in `passedValidation()`; `recaptchaScore()`).
+    - Tests: `tests/Feature/Public/PreRegistrationTest.php` unchanged, plus:
+      - honeypot with an invalid body → 201 and no record created
+      - `Http::fake` throwing `ConnectionException` → 503 and a logged warning (`Log::spy()`)
+      - a low score with an invalid body → 422 `"Submission could not be verified. Please try again."`
+    - _Requirements: 3.3_
+
+- [ ] 9. Reminders, announcements, notifications, feedback, dashboard, kitchen parents *(design §4.3.7, §4.4, §4.6; hazard H11)*
+  - [ ] 9.1 Create `PaymentReminderService`
+    - Create `app/Services/PaymentReminderService.php` per design §4.3.7, moving the logic verbatim including the `+1` year logic (H11), with Req 7.4 applied in `send()`.
+    - Tests: `tests/Feature/Kitchen/PaymentReminderServiceTest.php` covers unpaid periods excluding future months, due date, bell count, and the `send` force/skip paths; plus a query-count test (N=1 vs N=5 parents). `ReminderTest` unchanged.
+    - _Requirements: 2.1, 7.4, 7.6_
+  - [ ] 9.2 Reminder requests
+    - Create `ListEligibleParentsRequest` (+ permissive `page`) and `SendRemindersRequest`.
+    - Tests: fixtures unchanged.
+    - _Requirements: 3.1, 3.6_
+  - [ ] 9.3 Announcement N+1 fixes
+    - Implement the read-count and recipient queries in `AnnouncementController` per design §4.6, and create `StoreAnnouncementRequest`.
+    - Tests: query-count tests for index (N=1 vs 5 announcements) and show (N=1 vs 5 recipients); `AnnouncementTest` unchanged; fixtures unchanged.
+    - _Requirements: 7.1, 7.2, 7.6_
+  - [ ] 9.4 Notification resource
+    - Create `NotificationResource`, used by the Portal and Staff notification index.
+    - Tests: fixtures unchanged; `NotificationTest`/`StaffNotificationTest` unchanged.
+    - _Requirements: 5.1_
+  - [ ] 9.5 Credit notification debounce
+    - Rewrite the `CreditLedgerService::notifyParentsOfCharge` debounce as an `exists()` query (design §4.6).
+    - Tests: `CreditNotificationTest` unchanged, plus a query-count test with 1 vs 5 prior notifications that day.
+    - _Requirements: 7.3, 7.6_
+  - [ ] 9.6 Feedback, dashboard and parent requests
+    - Create `ListFeedbackRequest`, `ReplyFeedbackRequest` (sanitise in `prepareForValidation()`), `UpdateStaffStatusRequest` and `ListParentsRequest`.
+    - Tests: precedence: a reply of `"<br><br>"` → 422 on `reply` (`min:5` applied to sanitised text); fixtures unchanged.
+    - _Requirements: 3.1, 3.5_
+
+- [ ] 10. Reports *(design §4.2.1, §4.6; hazards H1, H8)*
+  - [ ] 10.1 Sales report
+    - Create `ExportSalesReportRequest` and `ListSalesReportRequest extends` it, and add the private `filteredOrders()` builder.
+    - Tests: fixtures unchanged; `SalesReportTest` unchanged; `GET /reports/sales/export?per_page=500` still returns 200 (H8).
+    - _Requirements: 3.1, 7.5_
+  - [ ] 10.2 Billing and student reports
+    - Create `ExportBillingReportRequest`/`ListBillingReportRequest` and `ExportStudentReportRequest`/`ListStudentReportRequest`.
+    - Tests: fixtures unchanged, plus the same export `per_page` test.
+    - _Requirements: 3.1_
+  - [ ] 10.3 Remaining report requests
+    - Create `ShowInventoryReportRequest`, `ExportInventoryReportRequest`, `ShowSubscriptionReportRequest`, `ListWalletReportRequest`, `ListCreditReportRequest`, `ShowDailySummaryRequest`, `ListActivityLogsRequest` and `ShowAnalyticsRequest`.
+    - Tests: fixtures unchanged.
+    - _Requirements: 3.1_
+
+- [ ] 11. Portal *(design §4.2.1 Portal rows; hazards H4, H7, H13)*
+  - [ ] 11.1 Portal auth and profile requests
+    - Create `ParentLoginRequest`, `ParentForgotPasswordRequest`, `ResetParentPasswordRequest` (keep `only()`, `min:8`), `UpdateParentProfileRequest`, `ChangeParentPasswordRequest` and `UploadParentPhotoRequest`.
+    - Tests: fixtures unchanged; `PortalAuthTest` and `ProfileTest` unchanged.
+    - _Requirements: 3.1_
+  - [ ] 11.2 Portal feedback request
+    - Create `StoreFeedbackRequest` with the memoised `linkedStudents()` and the guard in design §4.2.2.
+    - Tests, precedence: a parent with no linked students sending an empty body → 422 `"You have no linked students."`. `FeedbackTest` unchanged.
+    - _Requirements: 3.3, 3.5_
+  - [ ] 11.3 Remaining portal requests
+    - Create `ListStudentActivityRequest`, `ShowSpendingSummaryRequest`, `UploadPortalStudentPhotoRequest` (`max:5120`), `ListPortalWalletRequest`, `SetWalletAlertRequest` and `ShowPortalMealPlanRequest`.
+    - Tests: fixtures unchanged, plus a precedence test for each `#[Authorize]` + request pair (an unlinked parent with invalid input → 403).
+    - _Requirements: 3.1, 3.4_
+  - [ ] 11.4 Portal pre-registration requests (conditional)
+    - **Only if B-04 is rejected:** create `CheckPreRegistrationRequest` and `StorePortalPreRegistrationRequest`. Otherwise mark this task N/A.
+    - _Requirements: 3.1_
+
+- [ ] 12. Model modernisation *(design §4.5; hazard H2)*
+  - [ ] 12.1 Scopes, accessors and casts
+    - `#[Scope]` on `InventoryItem`, an `Attribute` accessor on `PreRegistration`, `casts()` on `ParentPaymentReminder`, and `EnrollmentStatus::Enrolled` in `EnrollmentService`.
+    - Tests: fixtures unchanged (`PreRegistration::toArray()` still has no `full_name`; assert this explicitly in a unit test).
+    - _Requirements: 4.1, 4.2, 4.4_
+  - [ ] 12.2 Report literals to enums
+    - Replace `'subscription'`/`'non_subscription'`/`'completed'` literals in **Eloquent** (not raw-SQL) queries in report controllers with `StudentType::Subscription`, `StudentType::NonSubscription` and `OrderStatus::Completed`. Grep: `rg -n "'(subscription|non_subscription|completed)'" app/Http/Controllers`.
+    - Tests: fixtures unchanged.
+    - _Requirements: 4.4_
+  - [ ] 12.3 `PaymentStatus` enum cast
+    - Create `app/Enums/PaymentStatus.php` (design §4.5.1), add the cast, and change **exactly** the sites in the design §4.5.2 table, including `tests/Feature/EnrollmentTest.php:106` (the only permitted test edit).
+    - Tests: `tests/Unit/PaymentStatusTest.php` (labels); billing export totals are correct with paid and unpaid rows (this would have silently become 0 without the collection fix); fixtures unchanged.
+    - _Requirements: 4.3_
+  - [ ] 12.4 Post-cast grep check
+    - Run the grep in design §4.5.2 and paste its output into the PR description, with each hit classified as safe.
+    - _Requirements: 4.3_
+
+- [ ] 13. Lazy-loading guard *(design §4.5.4; hazard H14)*
+  - [ ] 13.1 Enable the guard and fix violations
+    - Add the `configureDefaults()` code, run the full suite, and fix every `LazyLoadingViolationException` with eager loading at the query site. Never use model `$with`.
+    - Tests: the full suite is green; fixtures unchanged; plus a unit test that the violation handler logs rather than throws when the environment is `staging` (`app()->detectEnvironment(fn () => 'staging')`, `Log::spy()`).
+    - _Requirements: 4.6_
+
+- [ ] 14. Notifications after commit *(design §4.7)*
+  - [ ] 14.1 `afterCommit()` in notification constructors
+    - Add `$this->afterCommit();` to the 5 notification constructors.
+    - Tests: `tests/Feature/Kitchen/NotificationAfterCommitTest.php`: inside `DB::transaction(fn () => … throw …)` calling `CreditLedgerService::charge`, assert with `Queue::fake()` that no `SendQueuedNotifications` job was pushed; on success, assert it was pushed. Existing notification tests unchanged.
+    - _Requirements: 8.1, 8.4, 8.5_
+  - [ ] 14.2 `afterCommit()` on the welcome mail
+    - Queue `ParentWelcomeMail` with `->afterCommit()` in `ParentProvisioningService` and `EnableParentAction`.
+    - Tests: a rolled-back enrollment queues no welcome mail (`Mail::fake()` + `assertNothingQueued()` after rollback).
+    - _Requirements: 8.2_
+  - [ ] 14.3 `WalletAlertJob` retries (gated)
+    - **Gated on Q7 approval:** add `#[Tries(3)]` and `#[Backoff(10, 60)]` to `WalletAlertJob`.
+    - Test: reflection asserts the attributes.
+    - _Requirements: 8.3_
+
+- [ ] 15. Project hygiene *(Req 9.1)*
+  - [ ] 15.1 `composer.json` metadata and scripts
+    - Update `composer.json` `name`/`description` and remove the npm steps from the `dev` and `ci:check` scripts. Do not touch `require`/`require-dev`. Run `vendor/bin/sail composer validate`.
+    - Tests: none (no behaviour); CI green.
+    - _Requirements: 9.1_
+
+- [ ] 16. Optional: Laravel 13 model class attributes *(Q4; Req 4.7)*
+  - [ ] 16.1 Convert all models (only if Q4 is approved)
+    - Convert `$table`/`$fillable`/`$hidden` to `#[Table]`/`#[Fillable]`/`#[Hidden]` on **all** models in `app/Models/` in one PR. Attributes merge with properties (design §1.2), so remove the properties.
+    - Tests: a unit test per model asserting `getFillable()`, `getHidden()` and `getTable()` are unchanged (snapshot the arrays before the change); fixtures unchanged.
+    - _Requirements: 4.7_
+
+- [ ] 17. Gated: dependency and surface cleanup *(Req 11, Q6)*
+  - [ ] 17.1 Fortify
+    - **If approved:** first run `rg -n "Fortify|fortify" app config routes tests`. Remove `laravel/fortify` or call `Fortify::ignoreRoutes()` per the approved option.
+    - Tests: `route:list` shows no `login`/`two-factor` web routes; staff password reset tests pass; the `skipUnlessFortifyHas` helper in `tests/TestCase.php` is reviewed together with its callers.
+    - _Requirements: 11.1_
+  - [ ] 17.2 `binafy/laravel-cart`
+    - **If approved:** remove `binafy/laravel-cart` via `vendor/bin/sail composer remove`, after `rg -n "binafy|Cart" app config database` confirms there is no usage.
+    - Tests: suite green.
+    - _Requirements: 11.2_
+  - [ ] 17.3 Top-level `/broadcasting/auth` route
+    - **If approved:** drop `channels:` from `withRouting()` and `require` `routes/channels.php` from `routes/api.php` or the provider.
+    - Tests: route coverage (165 routes); both scoped `broadcasting/auth` endpoints still authorize (existing channel tests); the top-level route is gone.
+    - _Requirements: 11.3_
+
+---
+
+- [ ] 18. Final `laravel-simplifier` pass *(non-negotiable; design §12.3; Req 12.6, 12.7)*
+  - [ ] 18.1 Run the simplifier over the complete backend diff
+    - Starts only after **every** Track A task and every approved Track B item has merged.
+    - Build the file list from `git diff --name-only <spec16-start-sha>..main -- app routes bootstrap config` (record `<spec16-start-sha>` in the T-1 PR description when T-1 starts).
+    - Invoke the `laravel:laravel-simplifier` agent with the verbatim fenced prompt in design §12.3 plus the file list.
+    - Tests: none new. Run the full verification gate: MySQL + SQLite suites green, **zero** contract-fixture diffs, role matrix green, Pint.
+    - Revert (don't fix) any individual simplifier change that fails the gate.
+    - The PR lists applied changes, rejected suggestions (`rejected: H#`) and reverted changes.
+    - _Requirements: 12.6, 12.7_
+
+---
+
+## Track B (each item needs explicit approval; one PR each; failing test first)
+
+- [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
+  - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
+  - Fixtures: add `404-other-branch` variants only.
+  - _Requirements: 10.2_
+- [ ] B-02. Branch header required *(design §5.2; after T-6)*
+  - Create `EnsureActiveBranch` via `make:middleware`, register the alias, apply it to the group with the exact allowlist, and remove the dead `MealPlannerController` checks.
+  - Failing tests: a branch-scoped list without a header returns 422 with the exact message; each allowlisted route works without a header; the matrix test still passes.
+  - Fixtures: new `422-no-branch` variants.
+  - **Staging smoke test before production.**
+  - _Requirements: 10.3_
+- [ ] B-03. Stock race *(design §5.3; after T-3 and T-7)*
+  - Failing test: two cart lines sharing one inventory item deduct both units (replaces the H10 test from T-3.1, which is deleted here). Also: an ordered-lock query is issued (assert via the query log); adjust inside a transaction.
+  - Fixtures: none.
+  - _Requirements: 10.4_
+- [ ] B-04. Remove unused portal pre-registration routes *(design §5.4; before T-11)*
+  - Remove the routes, both controllers and both test files (approved deletion).
+  - Tests: route coverage count becomes 163 (update the test and remove the two fixture sets); `POST api/v1/portal/pre-registrations` returns 404/405.
+  - _Requirements: 10.5_
+- [ ] B-05. School year *(design §5.5; after T-9 and T-10)*
+  - Add the `SchoolMonth` helpers and fix `PaymentReminderService`, `BillingReportController` (index and export) and `SubscriptionReportController`.
+  - Failing tests at `travelTo('2027-01-20')`, as listed in design §5.5; existing June tests pass.
+  - Apply the permitted `BillingReportTest` edit described in design §5.5 (seed calendar year; add frozen-clock variants).
+  - Fixtures: none (shapes unchanged).
+  - _Requirements: 10.6_
+- [ ] B-07. Receipt cashier name *(design §5.6; after T-3)*
+  - Failing test: checkout response `order.cashier.name` equals the cashier's full name.
+  - Fixtures: the 4 listed in the design.
+  - _Requirements: 10.7_
+- [ ] B-08. Portal login disclosure *(design §5.7; after T-11.1)*
+  - Failing test: a disabled parent with a wrong password gets 422 `"Invalid credentials."`; with the right password gets 401 `account_disabled`; an unactivated parent still gets `account_not_activated`.
+  - Fixtures: as listed in the design.
+  - _Requirements: 10.8_
+- [ ] B-09. Atomic pre-registration writes *(design §5.8; after T-8)*
+  - Failing test: force `createMany` to throw (a contact payload violating a DB constraint, or a DB listener) and assert the parent record is rolled back.
+  - _Requirements: 10.9_
+- [ ] B-10. LIKE wildcards *(design §5.9; after T-10)*
+  - Add the macro and apply it at every listed site.
+  - Failing tests: a search for `50%` does not match `500`, and a search for `a_b` does not match `axb`, on both MySQL and SQLite.
+  - _Requirements: 10.10_
+- [ ] B-11. Analytics credit limit *(design §5.10; after T-10)*
+  - Failing test: set `credit_limit` to 100 in System Settings; a student with 60 credit counts as near the limit.
+  - _Requirements: 10.11_
+- [ ] B-12 + B-13. Report row shapes *(design §5.11; after T-10)*
+  - Failing tests:
+    - sales `data.0.student.full_name` present
+    - sales `data.0.cashier` has no `daily_rate`, `phone` or `birthday`
+    - billing `data.0.recorder` has no `daily_rate`
+    - `data.0.student` has no `qr_code`
+  - Fixtures: sales and billing `ok`.
+  - _Requirements: 10.12, 10.13_
+- [ ] B-14. Status update 500 *(design §5.12; after T-5)*
+  - Failing test: `PATCH /students/{student}/status` with `{}` returns 422, not 500.
+  - Fixture: new `422-missing-status`.
+  - _Requirements: 10.14_
+- [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
+  - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
+  - Fixture: the `403` variant.
+  - _Requirements: 6.3, 10.15_
+
+---
+
+## Coverage check (every acceptance criterion maps to a task)
+
+| Requirement | Tasks |
+|---|---|
+| 1.1–1.8 | T-1.1–1.7 |
+| 2.1, 2.2 | T-3.3, 3.4, 4.2, 5.1, 8.1, 9.1 |
+| 2.3 | T-3.1, 7.1 |
+| 2.4 | the test bullet of every extraction task |
+| 2.5, 2.6 | T-3.3, 3.4, 4.2, 8.1 (+ H3 checks) |
+| 2.7 | ground rules + review |
+| 3.1–3.7 | T-3.2, 3.4, 3.5, 4.1, 4.4, 5.x, 6.x, 7.x, 8.2, 8.3, 9.2, 9.3, 9.6, 10.x, 11.x |
+| 4.1, 4.2, 4.4 | T-12.1, 12.2 |
+| 4.3 | T-12.3, 12.4 |
+| 4.5 | T-2.3 |
+| 4.6 | T-13.1 |
+| 4.7 | T-16.1 |
+| 4.8 | nothing to implement (prohibition); reviewer checks that no `preventSilentlyDiscardingAttributes` appears |
+| 5.1–5.5 | T-4.3, 7.2, 7.3, 9.4 (+ H6 checks) |
+| 6.1 | nothing to implement (prohibition); matrix test T-1.6 |
+| 6.2 | T-2.2 |
+| 6.3 | B-15 |
+| 6.4 | T-2.1 |
+| 6.5 | H3 checks in all tasks |
+| 7.1–7.6 | T-9.1, 9.3, 9.5, 7.2, 10.1 |
+| 7.7 | fixtures in each task |
+| 8.1–8.5 | T-14.1–14.3 |
+| 9.1 | T-15.1 |
+| 9.2–9.4 | nothing to implement (keep as is / prohibition) |
+| 10.2–10.15 | B-01 … B-15 |
+| 11.1–11.3 | T-17.1–17.3 |
+| 12.1–12.5 | ground rules (every task) + the Tooling log in every PR |
+| 12.6, 12.7 | T-18.1 |
+
+No acceptance criterion is without a task. Req 4.8, 6.1 and 9.2–9.4 are prohibitions or "keep as is", verified in review.

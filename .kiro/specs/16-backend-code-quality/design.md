@@ -1,0 +1,976 @@
+# Design Document: Spec 16, Backend Code Quality (Laravel 13)
+
+> **Audience:** the implementer (human or LLM). Every class name, file path, method signature, rule and message below was taken from the code as of 2026-09-26. If something you find in the code contradicts this document, **stop and report it**. Do not improvise. §3 lists the behaviour-preservation hazards; read it before touching any file.
+
+## 1. Overview
+
+The refactor has two tracks:
+
+- **Track A (refactor):** behaviour-neutral. It is proven neutral by contract fixtures (§4.1) that are recorded *before* any refactor and must not change.
+- **Track B (defect fixes):** each item is approved separately, lands in its own PR with a failing test first, and is allowed to change only the fixtures it names (§5).
+
+### 1.1 Decisions
+
+| # | Decision | Status |
+|---|---|---|
+| Q1 | Migrate all inline validation to Form Requests | **Approved** (steering amended 2026-09-25) |
+| Q2 | Track B lives in this spec, tracked per item | *Assumed* (recommended option; confirm) |
+| Q3 | Delivery: one PR per domain, contract freeze first (§6) | *Assumed* (recommended option; confirm) |
+| Q4 | `#[Fillable]`/`#[Hidden]`/`#[Table]` model attributes | *Assumed:* **deferred** to optional final PR T-16 |
+| Q5 | After-commit via `afterCommit()` per notification/mailable, not `after_commit => true` globally | *Assumed* (recommended option; confirm) |
+| Q6 | Dependency removals (Req 11) | *Assumed:* **not approved**; tasks T-17.x are gated |
+| Q7 | `WalletAlertJob` retries (Req 8.3), a behaviour change | *Assumed:* **not approved**; T-14.3 is gated |
+
+### 1.2 Verified framework facts (installed `laravel/framework` v13.33.0)
+
+| Fact | Verified in |
+|---|---|
+| `#[Authorize(ability, models)]` is a **middleware** attribute; it runs before the controller method and before Form Request resolution. `SubstituteBindings` has higher priority than `Authorize`, so route models are bound first. | `Illuminate/Routing/Attributes/Controllers/Authorize.php`; `Foundation/Http/Kernel.php` L113-114 |
+| `#[Scope]`, `#[UsePolicy]`, `#[Fillable]`, `#[Hidden]`, `#[Table]` exist. `#[Fillable]`/`#[Hidden]` are **merged** with the properties (`mergeFillable`/`mergeHidden`). | `Illuminate/Database/Eloquent/Attributes/*`, `Concerns/GuardsAttributes.php` L49, `HidesAttributes.php` L33 |
+| `#[Tries(int)]`, `#[Backoff(int ...)]` exist | `Illuminate/Queue/Attributes/*` |
+| `Exceptions::render()` and `renderable()` both call `$handler->renderable()`; they are aliases | `Illuminate/Foundation/Configuration/Exceptions.php` L49-67 |
+| `FormRequest::validateResolved()` runs `prepareForValidation()` → `authorize()` → validation → `passedValidation()` | framework `ValidatesWhenResolvedTrait` |
+| A `JsonResource` returned directly from a controller is wrapped in `{"data": …}`. When serialised via `response()->json($resource)` or nested in an array it is **not** wrapped. | `Illuminate/Http/Resources/Json/JsonResource` (`toResponse` vs `jsonSerialize`) |
+
+## 2. Architecture
+
+```mermaid
+graph LR
+  R[routes/*.php<br/>role: middleware] --> M[Middleware<br/>SetActiveBranch → SubstituteBindings → #Authorize]
+  M --> FR[Form Request<br/>prepareForValidation guards → rules → passedValidation]
+  FR --> C[Controller<br/>HTTP ↔ domain only]
+  C --> A[Actions / Services<br/>transactions, locks, wallet, credit, stock]
+  A --> DB[(Models + BranchScope)]
+  C --> RES[Resources / inline arrays<br/>unchanged shapes]
+```
+
+Rules of the target architecture:
+
+1. **Route files** own role authorization (unchanged).
+2. **`#[Authorize]`** owns policy authorization (replaces `$this->authorize()`).
+3. **Form Requests** own input validation, input sanitising, and any guard that must run *before* validation to preserve which error wins.
+4. **Controllers** unpack the validated input, call one Action/Service (or do a trivial read), and shape the response.
+5. **Actions/Services** own transactions, locks, wallet/credit/stock mutations, notifications and activity logging for multi-step operations.
+
+## 3. Behaviour-preservation hazards (read before every task)
+
+Each hazard names the concrete sites. A task is not done until its diff has been checked against every hazard it touches.
+
+| ID | Hazard | Rule | Known sites |
+|---|---|---|---|
+| H1 | **Numeric serialisation.** `decimal:2` casts serialise as **strings** (`"150.00"`); `(float)` casts serialise as **numbers** (`150` or `150.5`). The FE TypeScript often says `number` for fields that are actually strings and parses with `Number()`. | Never add or remove a `(float)` cast or change a cast. Copy each field's expression exactly. | `OrderResource` (`total`, `subtotal`, …: strings), `StudentResource.total_spent`/`credit_balance` (strings), most report controllers (floats) |
+| H2 | **Enum vs string comparison.** After `status` is cast to `PaymentStatus`, `$p->status === 'paid'` is always false and in-memory `$collection->where('status', 'paid')` matches nothing. PHP compares enum to string as not equal. Query-builder `->where('status', 'paid')` still works. | Update every site in §4.5.2. Grep afterwards (T-12.4). | §4.5.2 |
+| H3 | **`abort()` vs `response()->json()`.** `abort(422, 'x')` renders `{"message":"x"}` in production but adds `exception`/`file`/`line`/`trace` when `APP_DEBUG=true`. `response()->json(['message' => 'x'], 422)` never does. | Keep each guard's original mechanism. When a `return response()->json(...)` guard moves out of a controller, throw `new HttpResponseException(response()->json(<same>, <same>))`. | §4.2.2, §4.3 |
+| H4 | **Error precedence.** Form Requests validate before the controller body. Guards that ran *before* `validate()` would now run after, so a different error would win. | Move each pre-validation guard into `prepareForValidation()`, or move it to `#[Authorize]` if it is an authorize call (§4.2.2). | 18 methods, §4.2.2 |
+| H5 | **Activity log side effects.** Eloquent `$model->update()`/`save()` on a `LogsActivity` model (`Student`, `Order`, `User`, `InventoryItem`, `PosMenuItem`) writes an activity row. Query-builder `Model::where()->update()` does not. | Never switch between the two. Keep manual `activity()` calls with identical log name, description and property keys, in the same order. | Checkout stock write (query builder, no log), void restock (Eloquent, logs), adjust (Eloquent, logs), `PosMenuItemController::toggleAvailability` (`Activity::withoutLogging`) |
+| H6 | **Resource wrapping.** A `JsonResource` returned directly gets a `data` wrapper. | Only ever `response()->json($resource)` or nest it in an array. Never `return new XResource(...)`. | §4.4 |
+| H7 | **Validated vs raw input.** `validated()` drops keys without a rule, including `password_confirmation` under `confirmed`, and the `website` honeypot. | The password-broker `reset()` calls keep `$request->only('email', 'password', 'password_confirmation', 'token')`; this is the only permitted non-`validated()` read. The honeypot reads `$this->filled('website')` in `prepareForValidation()`. | `Kitchen\AuthController::resetPassword`, `Portal\AuthController::resetPassword`, `Public\PreRegistrationController::store` |
+| H8 | **Permissive magic-input rules.** Adding rules to previously unvalidated inputs must not reject anything accepted today. | Use `['nullable']` (plus `'sometimes'` if needed) only, and keep the original coercion (`(int)`, `integer()`, truthiness). | §4.2.3 |
+| H9 | **MySQL vs SQLite.** CI runs on SQLite. | No MySQL-only SQL without an `isSqlite()`-style branch. `LIKE … ESCAPE` uses `'!'`, not a backslash (§5.9). JSON: `json_extract(...)` works on both. | Announcement read counts, B-10 |
+| H10 | **Stale quantities are preserved in Track A.** Checkout computes new stock from the pre-loaded (stale) `InventoryItem` instances, including when two cart lines share an inventory item: the second write overwrites the first. | Track A reproduces this exactly. Only B-03 fixes it. | `InventoryStockService::deductForSale` |
+| H11 | **Year semantics are preserved in Track A.** The `+1 for Jan–Mar` logic in reminders and the calendar-year filters in reports stay as they are in Track A. | Only B-05 changes them. | `ReminderController`, `BillingReportController`, `SubscriptionReportController` |
+| H12 | **Status codes.** Keep 200 vs 201 vs 204 exactly (e.g. `StudentContactController::destroy` → 204 `null`, `StaffNotificationController::destroy` → 204, `Portal\NotificationController::destroy` → 200 with message, `BranchMonthlyAmountController::store` → 201 or 200 depending on `wasRecentlyCreated`). | Fixtures record status. | all |
+| H13 | **Different limits that look like duplicates.** Kitchen student photo `max:2048` vs portal student photo `max:5120`; `per_page` caps of 50 vs 100; defaults of 15/20/25/50. | Never unify rule sets across endpoints. | §4.2 |
+| H15 | **Driver-dependent aggregate types.** MySQL returns `SUM()`/`AVG()` over DECIMAL columns as **strings**; SQLite returns floats. Any response value that is an uncast aggregate therefore has a different JSON shape per driver. | Never remove an existing `(float)`/`(int)`/`round()` around an aggregate. Contract fixtures are recorded on MySQL (production engine); where SQLite differs, a `.sqlite.json` override is recorded and logged (§4.1.2). | report and dashboard controllers |
+| H14 | **Lazy-loading prevention.** Enabling it throws on existing lazy loads (e.g. `OrderResource` reads `student->wallet` where only `student` is eager-loaded in `TransactionController::index`). | T-13 must fix every violation the full suite surfaces, and must throw only in `local`/`testing`. | §4.5.4 |
+
+## 4. Track A components
+
+### 4.1 Contract freeze harness (Req 1)
+
+**Files (new):**
+
+```
+tests/Support/Contract/ShapeExtractor.php      Tests\Support\Contract\ShapeExtractor
+tests/Support/Contract/AssertsApiContract.php  Tests\Support\Contract\AssertsApiContract (trait)
+tests/Support/Contract/ContractScenario.php    Tests\Support\Contract\ContractScenario
+tests/Fixtures/contracts/*.json                one file per route × variant
+tests/Feature/Contract/Kitchen/*ContractTest.php
+tests/Feature/Contract/Portal/*ContractTest.php
+tests/Feature/Contract/Public/*ContractTest.php
+tests/Feature/Contract/RouteCoverageTest.php
+tests/Feature/Contract/RoleAuthorizationMatrixTest.php
+```
+
+`tests/Support` and `tests/Fixtures` are new directories under `tests/`, not new `app/` base folders. They are covered by the existing `Tests\` PSR-4 autoload.
+
+#### 4.1.1 Shape grammar (`ShapeExtractor::shapeOf(mixed $decodedJson, array $mapPaths = [], string $path = ''): mixed`)
+
+| JSON value | Shape token |
+|---|---|
+| `null` | `"null"` |
+| `true`/`false` | `"bool"` |
+| number (int or float) | `"number"` (int and float are not distinguished: `json_encode(150.0)` is `150` unless `JSON_PRESERVE_ZERO_FRACTION`) |
+| string matching `/^-?\d+\.\d{2}$/` | `"string:decimal2"` |
+| string `Y-m-d` | `"string:date"` |
+| string `Y-m-d H:i:s` | `"string:datetime"` |
+| string `/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/` | `"string:iso8601_micro"` (default Eloquent/Carbon JSON) |
+| string `/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/` | `"string:iso8601"` (`toIso8601String()`) |
+| any other string | `"string"` |
+| object | `{ key: shape }` with keys sorted (`ksort`, recursive), so key order is ignored |
+| object at a path listed in `$mapPaths` (data-keyed maps such as `summary.grade_breakdown`) | `{"__map__": shape of first value}` |
+| empty array | `"list:empty"` |
+| non-empty list | `{"__list__": shape}` if all elements share one shape, else `{"__list_union__": [sorted unique shapes]}` |
+
+Decimal detection runs **before** date detection. Order of checks: decimal2 → iso8601_micro → iso8601 → datetime → date → string.
+
+#### 4.1.2 Assertion API (`AssertsApiContract` trait)
+
+```php
+protected function assertContract(
+    TestResponse $response,
+    string $routeKey,          // e.g. 'GET api/v1/students/{student}' — exactly as in route:list
+    string $variant = 'ok',    // 'ok', '422-validation', '422-end-before-start', '404', …
+    array $mapPaths = [],
+): void;
+
+protected function assertFileContract(TestResponse $response, string $routeKey, string $variant = 'ok'): void;
+// records ['status', 'content_type', 'disposition_pattern'] where disposition_pattern replaces
+// digits with '9' (e.g. 'attachment; filename=sales-report-ant-9999-99-99-9999-99-99.xlsx').
+```
+
+- Fixture path: `tests/Fixtures/contracts/{slug}@{variant}.json`, where `slug = strtolower(method).'__'.trim(preg_replace('/[^a-z0-9{}]+/i', '_', uri), '_')`. Example: `get__api_v1_students_{student}@ok.json`.
+- Fixture content: `{"status": 200, "body": <shape>}`, pretty-printed with `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES`.
+- **Driver overrides:** the primary fixture is recorded on **MySQL** (`vendor/bin/sail artisan test`). When run on SQLite, the trait first looks for `{slug}@{variant}.sqlite.json` and uses it if present. The override is created only when the SQLite shape differs (H15), and every override gets a row in `contract-gaps.md` (column `proposed Track B item` = `driver divergence`). Record order: MySQL first, then SQLite with `CONTRACT_RECORD=1 CONTRACT_DRIVER_OVERRIDE=1`, which writes an override **only** when the shape differs from the MySQL fixture.
+- **Record mode:** when `env('CONTRACT_RECORD') === '1'`, write the fixture and `markTestIncomplete('recorded')`. Otherwise a missing fixture fails with `"No contract fixture for {slug}@{variant}; run with CONTRACT_RECORD=1 in the contract-freeze PR only."`. A mismatch fails with `assertSame($expected, $actual)` so PHPUnit prints a diff.
+
+#### 4.1.3 Deterministic scenario (`ContractScenario`)
+
+`ContractScenario::build(TestCase $test, string $now = '2026-10-15 09:30:00'): self` creates, in one call, using existing factories and states. It takes the running test case because it needs `$test->travelTo()`, `$test->seed()` and `$test->postJson()`, which are public test-case methods. It cannot be a static factory-only helper:
+
+- **Clock:** time is frozen with `$test->travelTo(Carbon::parse($now))`. The default is school year 2026, month October; pass `'2027-01-20 09:30:00'` for the January scenarios used by B-05.
+- **Branches:** A (`slug` `ant`, active) and B (active).
+- **Staff:** one user per role, `admin`, `manager`, `supervisor`, `cashier` (`$this->seed(PermissionSeeder::class)`), all attached to branch A. Plus one manager attached only to branch B.
+- **Students in branch A:**
+  - a subscription student with a wallet (deposit ₱500 performed by the cashier), `credit_balance` 50.00 via `CreditLedgerService::charge`, and payments: June 2026 paid, October 2026 unpaid, January 2027 unpaid, one voided payment
+  - a non-subscription student
+  - a soft-deleted student
+- **Student in branch B:** one, for isolation checks.
+- **Contacts and parents:** `StudentContact` rows (primary and secondary, one with an email), and a `ParentUser` linked to the subscription student (`wallet_alert_threshold` 100) plus one unactivated parent.
+- **Menu and inventory:** `PosMenuItem` (subscription-eligible, meal) mapped to an `InventoryItem` (quantity 100, `quantity_used` 1), one archived `InventoryItem`, and a `WeeklyMealPlan` for June week 1.
+- **Orders:** cash walk-in, wallet order, credit order (`OrderFactory::credit()`), and a voided order (`voided()`), all with items and `InventoryLog` sale rows.
+- **Wallet:** a `WalletTopupVoid` created through the real endpoint, `$test->postJson('/api/v1/students/{id}/wallet/top-ups/{txId}/void', ['reason' => 'Contract scenario'])`, as the manager with the branch A header. It goes through HTTP because `VoidWalletTopUpAction` does not exist yet at T-1.
+- **Communication:** an `Announcement` with one notification, a `Feedback` row, `PreRegistration` rows in each status with contacts, and a `ParentPaymentReminder`.
+
+Each contract test class uses `LazilyRefreshDatabase`, calls `ContractScenario::build()` in `setUp()`, and authenticates:
+- **Staff:** `Sanctum::actingAs($user, ['staff'])` plus `withHeaders(['X-Branch-Id' => $branchA->id])` (the pattern in `tests/Feature/PosCheckoutTest.php`).
+- **Parents:** `Sanctum::actingAs($parent, ['parent'], 'parents')`.
+
+Endpoints with external HTTP (`Public\PreRegistrationController::store`) use `Http::fake(['www.google.com/recaptcha/*' => Http::response(['success' => true, 'score' => 0.9])])`. `Mail::fake()` and `Notification::fake()` apply where the endpoint sends.
+
+Fill optional fields in the scenario wherever possible (e.g. `section`, `allergies`, `reference_number`) so fewer shapes record as `"null"`.
+
+#### 4.1.4 Required variants per route
+
+| Route kind | Variants |
+|---|---|
+| Every route | `ok` (2xx) |
+| Routes with a Form Request / `validate()` | `422-validation` (send `{}` or one invalid field) |
+| Routes with a hand-built error envelope (A-12, portal login) | one variant per envelope, e.g. `422-end-before-start`, `401-not-activated`, `401-disabled`, `422-invalid-credentials` |
+| Routes with a named `abort()` business guard | one variant per guard (e.g. `422-already-voided` for `POST api/v1/pos/transactions/{order}/void`) |
+| Route-model-bound routes | `404` using a branch-B id (documents today's isolation, including the B-01 gaps as today's 200s) |
+| File routes (6 exports, 2 photo GETs) | `assertFileContract` `ok`; photo GET also `404` |
+
+#### 4.1.5 Coverage and authorization guards
+
+- **`RouteCoverageTest`:** iterates `Route::getRoutes()`, keeps URIs starting with `api/` whose action class is in the `App\` namespace or is a closure (the `api/health` closure is included; the two framework-owned `Illuminate\Broadcasting\BroadcastController@authenticate` routes are **explicitly excluded**, and their auth behaviour is covered by the 401 checks below and the existing channel tests), builds `"{METHOD} {uri}"` from the first non-HEAD method, converts it to a slug, and asserts `tests/Fixtures/contracts/{slug}@ok.json` exists. Failure message: `"Route {key} has no contract fixture."`.
+- **`RoleAuthorizationMatrixTest`:** for each kitchen route, reads `$route->gatherMiddleware()` and finds any `role:x|y` entry. For each role in `['admin', 'manager', 'supervisor', 'cashier']` it calls the route with scenario-resolved parameters and a `{}` body.
+  - It asserts `403` when the role is not listed.
+  - Otherwise it asserts the status is **not** `403`, with an explicit exceptions array for business-rule 403s: `POST api/v1/users/{user}/deactivate` when `{user}` is the actor.
+  - Parameter resolution is by URI:
+    - `{item}` under `pos/menu-items` or `references/menu-items` → `PosMenuItem`; under `inventory` → `InventoryItem`
+    - `{student}`, `{order}`, `{payment}`, `{contact}`, `{parent}`, `{user}`, `{branch}`, `{feedback}`, `{announcement}`, `{preRegistration}`, `{branchMonthlyAmount}`, `{inventoryItem}`, `{key}` = `credit_limit`, `{id}` = a notification uuid of the actor, `{transaction}` = the deposit id
+  - Also asserts every portal route (and `POST api/v1/portal/broadcasting/auth`) returns 401 with no token and 401 with a **staff** token, and every kitchen route inside `auth:sanctum` returns 401 with a **parent** token. These use **real** tokens (`$user->createToken('t', ['staff'])->plainTextToken` sent as `Authorization: Bearer …`), not `Sanctum::actingAs`, because the property under test is Sanctum's `hasValidProvider()` check (verified in `vendor/laravel/sanctum/src/Guard.php` L130/L145).
+  - Performance: the matrix does **not** use the full `ContractScenario`. It uses a minimal fixture built once per data-provider row: one branch, one user per role, and one instance of each bound model. Otherwise it would build the full scenario roughly 560 times.
+
+#### 4.1.6 Frontend cross-check (Req 1.7)
+
+After recording, the implementer compares each fixture with the TS interface used by the calling module. `rg -n "apiClient\.(get|post|put|patch|delete)<" lib/api` in each FE repo gives the generic type per URL; follow it to `types/*.ts` or the inline interface.
+
+Record every mismatch in `.kiro/specs/16-backend-code-quality/contract-gaps.md` as a table with columns: `route | field | backend shape | FE type (file:line) | UI impact | proposed Track B item`.
+
+Pre-verified entries to seed the file with:
+
+| Route | Field | Backend | FE | Impact | Item |
+|---|---|---|---|---|---|
+| `GET api/v1/reports/sales` | `data[].student.full_name` | absent (raw `Student` has no `full_name`) | `SalesOrder.student.full_name: string` (`sunbites-pos/lib/api/reports.ts:89`) | Student column blank (`reports/sales/page.tsx:391`) | B-13 |
+| `POST api/v1/pos/checkout` (+ void, transactions, student orders) | `order.cashier.name` | always `null` | `OrderCashier.name: string` (`types/order.ts:95`) | Receipt cashier blank (`components/pos/receipt-modal.tsx:72`) | B-07 |
+| `GET api/v1/reports/sales`, `GET api/v1/reports/billing` | `cashier` / `recorder` / `student` | full models incl. `daily_rate`, `phone`, `birthday`, `qr_code` | FE reads only names/ids | PII over-exposure | B-12 |
+| many | decimal fields | `"string:decimal2"` | typed `number` | none today (UI parses) | none: document only |
+
+### 4.2 Form Requests (Req 3)
+
+Base conventions for every new request:
+- `final class X extends FormRequest`, and `authorize(): bool { return true; }`, because authorization lives in routes and `#[Authorize]`.
+- `rules(): array` with `@return array<string, mixed>`.
+- Messages are copied verbatim.
+- Route models are read with `$this->route('student')` and typed with `/** @var Student $student */`.
+- Sanitising is ported exactly: `strip_tags` after validation becomes `passedValidation()` or stays at the point of use. `sanitizeText` before validation becomes `prepareForValidation()` using `$this->merge()`. Because `sanitizeText()` lives on the base `Controller`, the request inlines `is_string($v) ? trim(strip_tags($v)) : $v`.
+
+#### 4.2.1 Mapping (all 83 inline `validate()` call sites)
+
+Directory: `app/Http/Requests/Kitchen/` unless noted. "=" means copy the rules verbatim from the method.
+
+| Controller::method | Form Request | Notes |
+|---|---|---|
+| ActivityLogController::index | `ListActivityLogsRequest` | = |
+| AnalyticsController::index | `ShowAnalyticsRequest` | = |
+| AnnouncementController::store | `StoreAnnouncementRequest` | = |
+| AuthController::login | `StaffLoginRequest` | controller reads `validated('email')`/`validated('password')` instead of magic props |
+| AuthController::resetPassword | `ResetStaffPasswordRequest` | keep `$request->only(...)` for the broker (H7); uses the FQCN `\Illuminate\Validation\Rules\Password::defaults()` |
+| AuthController::sendResetEmail | `SendStaffResetLinkRequest` | = |
+| AuthController::setBranch | `SwitchBranchRequest` | = |
+| BillingReportController::export | `ExportBillingReportRequest` | rules = `filterRules()` |
+| BillingReportController::index | `ListBillingReportRequest extends ExportBillingReportRequest` | `parent::rules()` + `per_page`. Do **not** add `per_page` to export (H8) |
+| BranchController::update | `UpdateBranchRequest` | = |
+| BranchMonthlyAmountController::index | `ListBranchMonthlyAmountsRequest` | `'year' => ['nullable']`; controller keeps `$request->integer('year') ?: now()->year` |
+| BranchMonthlyAmountController::store | `StoreBranchMonthlyAmountRequest` | `Rule::prohibitedIf($this->integer('days') === 0)` |
+| BranchMonthlyAmountController::update | `UpdateBranchMonthlyAmountRequest` | same as above |
+| CheckoutController::store | `CheckoutRequest` | = (12 rules) |
+| CreditReportController::index | `ListCreditReportRequest` | = |
+| DailySummaryController::index | `ShowDailySummaryRequest` | = |
+| DashboardController::updateStaffStatus | `UpdateStaffStatusRequest` | = (B-01 later tightens `user_id`) |
+| EnrollmentController::store | `EnrollStudentRequest` | unique rule uses `$this->input('branch_id')`. The end-before-start check goes in `passedValidation()` and throws `HttpResponseException(response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422))`. Do **not** use `after()`, which would add `message` |
+| FeedbackController::index | `ListFeedbackRequest` | = |
+| FeedbackController::reply | `ReplyFeedbackRequest` | `prepareForValidation()`: `merge(['reply' => sanitize(input('reply'))])` |
+| InlineReloadController::store | `InlineReloadRequest` | = |
+| InventoryController::adjust | `AdjustInventoryRequest` | = ; the "Sale adjustments…" 422 stays after validation in the controller |
+| InventoryController::history | `ListInventoryHistoryRequest` | = |
+| InventoryController::store | `StoreInventoryItemRequest` | = |
+| InventoryController::update | `UpdateInventoryItemRequest` | = |
+| InventoryIngredientController::attach | `AttachIngredientRequest` | = |
+| InventoryReportController::export | `ExportInventoryReportRequest` | `from`, `to` only |
+| InventoryReportController::index | `ShowInventoryReportRequest` | 4 rules, independent of the export request (different sets) |
+| MealPlannerController::show | `ShowMealPlanRequest` | `'month' => ['nullable'], 'week' => ['nullable']`; controller keeps `input('month', 'june')`, `(int) input('week', 1)` |
+| MealPlannerController::update | `UpdateMealPlanRequest` | = ; the `app()->bound('active_branch')` 422 stays after validation |
+| MealPlannerController::reset | `ResetMealPlanWeekRequest` | = |
+| MealPlannerController::updateWeekVisibility | `UpdateMealPlanWeekVisibilityRequest` | = |
+| ParentController::index | `ListParentsRequest` | = |
+| PaymentController::addRange | `AddPaymentRangeRequest` | end-before-start in `passedValidation()` → `HttpResponseException` errors-only (same text) |
+| PaymentController::record | `RecordPaymentRequest` | = |
+| PaymentController::updateAmount | `UpdatePaymentAmountRequest` | `prepareForValidation()` guards (§4.2.2) |
+| PaymentController::void | `VoidPaymentRequest` | `prepareForValidation()` guards (§4.2.2); the past-month 422 stays after validation |
+| PosMenuItemController::store / update | `SavePosMenuItemRequest` (shared) | identical rules verified |
+| PreRegistrationController::index | `ListPreRegistrationsRequest` | = |
+| PreRegistrationController::update | `UpdatePreRegistrationRequest` | pending guard in `prepareForValidation()`; `strip_tags` of allergies/notes stays after validation |
+| PreRegistrationController::reject | `RejectPreRegistrationRequest` | pending guard in `prepareForValidation()` |
+| ReminderController::eligibleParents | `ListEligibleParentsRequest` | = + `'page' => ['nullable']`; controller keeps `$request->integer('page', 1)` |
+| ReminderController::send | `SendRemindersRequest` | = |
+| SalesReportController::export | `ExportSalesReportRequest` | 5 rules |
+| SalesReportController::index | `ListSalesReportRequest extends ExportSalesReportRequest` | + `per_page` |
+| StudentContactController::store | `StoreStudentContactRequest` | = ; the ">= 3 contacts" 422 stays after validation |
+| StudentContactController::update | `UpdateStudentContactRequest` | `prepareForValidation()`: contact-belongs-to-student 404 (§4.2.2) |
+| StudentController::index | `ListStudentsRequest` | permissive (§4.2.3) |
+| StudentController::orders | `ListStudentOrdersRequest` | = |
+| StudentController::update | `UpdateStudentRequest` | unique rule uses `$this->route('student')->branch_id`/`->id` |
+| StudentController::updateStatus | `UpdateStudentStatusRequest` | copy `Rule::when(EnrollmentStatus::from($this->input('enrollment_status'))->requiresReason(), …)` **as is**, including its 500 on bad input (fixed only by B-14) |
+| StudentController::updateType | `UpdateStudentTypeRequest` | = |
+| StudentController::uploadPhoto | `UploadStudentPhotoRequest` | `max:2048` |
+| StudentLookupController::lookup | `StudentLookupRequest` | = |
+| StudentReportController::export | `ExportStudentReportRequest` | 7 rules |
+| StudentReportController::index | `ListStudentReportRequest extends ExportStudentReportRequest` | + `per_page` |
+| SubscriptionConfigController::update | `UpdateSubscriptionConfigRequest` | = |
+| SubscriptionReportController::index | `ShowSubscriptionReportRequest` | = |
+| SystemConfigurationController::update | `UpdateSystemConfigurationRequest` | `configuration(): SystemConfiguration` memoises `SystemConfiguration::where('key', $this->route('key'))->firstOrFail()`; `rules()` is the `match` on `configuration()->type` (404 still precedes 422) |
+| TransactionController::index | `ListTransactionsRequest` | = |
+| TransactionController::void | `VoidOrderRequest` | `#[Authorize('void', 'order')]` on the method; already-voided guard in `prepareForValidation()` |
+| UserManagementController::index | `ListStaffUsersRequest` | permissive (§4.2.3) |
+| UserManagementController::store | `StoreStaffUserRequest` | `...staffRules()` moves to a shared trait `App\Http\Requests\Kitchen\Concerns\StaffUserRules`; the admin-role 403 stays after validation in the controller |
+| UserManagementController::update | `UpdateStaffUserRequest` | email rule `"unique:users,email,{$this->route('user')->id}"` (same string form) |
+| UserManagementController::uploadPhoto | `UploadUserPhotoRequest` | `#[Authorize('update', 'user')]` |
+| UserManagementController::assignBranch | `AssignUserBranchRequest` | `#[Authorize('update', 'user')]` |
+| WalletController::topUp | `TopUpWalletRequest` | `strip_tags(note)` stays at the point of use |
+| WalletHistoryController::index | `ListWalletHistoryRequest` | = (`per_page` max **50**, H13) |
+| WalletReportController::index | `ListWalletReportRequest` | = (export has no validation; unchanged) |
+| Concerns/ResolvesStudentLedger::paginatedLedgerEntries | `App\Http\Requests\StudentLedgerRequest` (shared) | trait signature becomes `paginatedLedgerEntries(StudentLedgerRequest $request, Student $student, StudentLedgerQuery $q)`; Portal controller gains `#[Authorize('view', 'student')]` in the same PR |
+| **Portal** (`app/Http/Requests/Portal/`) | | |
+| ActivityController::index | `ListStudentActivityRequest` | `#[Authorize('view', 'student')]` |
+| AuthController::login | `ParentLoginRequest` | = |
+| AuthController::forgotPassword | `ParentForgotPasswordRequest` | = |
+| AuthController::resetPassword | `ResetParentPasswordRequest` | keep `$request->only(...)` (H7); `min:8` (not `Password::defaults()`, H13) |
+| FeedbackController::store | `StoreFeedbackRequest` | `prepareForValidation()`: no-linked-students guard, then sanitise `message`; `Rule::in` of linked ids from `$this->user()->students()` (§4.2.2) |
+| MealPlannerController::show | `ShowPortalMealPlanRequest` | = ; subscription 403 and branch 403 stay after validation |
+| PreRegistrationCheckController::check | `CheckPreRegistrationRequest` | **skip if B-04 is approved** (route removed) |
+| PreRegistrationController::store | `StorePortalPreRegistrationRequest` | **skip if B-04 is approved** |
+| ProfileController::update | `UpdateParentProfileRequest` | = |
+| ProfileController::changePassword | `ChangeParentPasswordRequest` | = ; the current-password mismatch errors-only 422 stays in the controller |
+| ProfileController::uploadPhoto | `UploadParentPhotoRequest` | `max:2048` |
+| SpendingSummaryController::show | `ShowSpendingSummaryRequest` | `#[Authorize('view', 'student')]` |
+| StudentPhotoController::store | `UploadPortalStudentPhotoRequest` | `#[Authorize('view', 'student')]`, `max:5120` (H13) |
+| WalletController::index | `ListPortalWalletRequest` | `#[Authorize('view', 'student')]` |
+| WalletController::setAlert | `SetWalletAlertRequest` | `#[Authorize('view', 'student')]` |
+| **Public** (`app/Http/Requests/Public/`) | | |
+| PreRegistrationController::store | `StorePublicPreRegistrationRequest` | `prepareForValidation()`: honeypot, then reCAPTCHA (§4.2.2); `passedValidation()`: end-before-start errors-only 422; exposes `recaptchaScore(): ?float` |
+
+**Complete list of the 14 existing `$this->authorize()` calls** (`rg -n '\$this->authorize\(' app/Http/Controllers`, 2026-09-26). Each becomes exactly one `#[Authorize]` attribute, with no additions and no omissions:
+
+| Call site | Attribute |
+|---|---|
+| `Kitchen\TransactionController::void` | `#[Authorize('void', 'order')]` |
+| `Kitchen\UserManagementController::deactivate` | `#[Authorize('deactivate', 'user')]` |
+| `Kitchen\UserManagementController::reactivate` | `#[Authorize('reactivate', 'user')]` (route `->withTrashed()`, so binding resolves trashed users before `Authorize` runs) |
+| `Kitchen\UserManagementController::sendResetEmail` | `#[Authorize('update', 'user')]` |
+| `Kitchen\UserManagementController::uploadPhoto` | `#[Authorize('update', 'user')]` |
+| `Kitchen\UserManagementController::assignBranch` | `#[Authorize('update', 'user')]` |
+| `Kitchen\UserManagementController::detachBranch` | `#[Authorize('update', 'user')]` |
+| `Portal\WalletController::index` | `#[Authorize('view', 'student')]` |
+| `Portal\WalletController::setAlert` | `#[Authorize('view', 'student')]` |
+| `Portal\StudentLedgerController::index` | `#[Authorize('view', 'student')]` |
+| `Portal\StudentPhotoController::show` | `#[Authorize('view', 'student')]` |
+| `Portal\StudentPhotoController::store` | `#[Authorize('view', 'student')]` |
+| `Portal\SpendingSummaryController::show` | `#[Authorize('view', 'student')]` |
+| `Portal\ActivityController::index` | `#[Authorize('view', 'student')]` |
+
+`UserManagementController::update` and `::store` have **no** policy call today; they rely only on `role:` middleware. **Do not add one** (that would be a Track B change). `UserManagementController::deactivate` keeps its `abort_if(self, 403, 'You cannot deactivate your own account.')` and `abort_if(last admin, …)` after the attribute. The policy denies both cases first today as well, so precedence is unchanged.
+
+#### 4.2.2 Pre-validation guards (H4): exact ports
+
+| Method | Guard (verbatim today) | Port |
+|---|---|---|
+| `Kitchen\FeedbackController::reply` | `$request->merge(['reply' => $this->sanitizeText($request->input('reply'))])` | `ReplyFeedbackRequest::prepareForValidation()` |
+| `PaymentController::updateAmount` | `abort_if($payment->student_id !== $student->id, 403);` then `abort_if($payment->isPaid() \|\| $payment->isVoided(), 422, 'Can only edit amount on unpaid payments.');` | `UpdatePaymentAmountRequest::prepareForValidation()`, same two `abort_if` calls in the same order |
+| `PaymentController::void` | `abort_if($payment->student_id !== $student->id, 404);` then `abort_if(! $payment->isPaid(), 422, 'Only paid payments can be voided.');` | `VoidPaymentRequest::prepareForValidation()` |
+| `Kitchen\PreRegistrationController::update` | `return response()->json(['message' => 'Only pending pre-registrations can be edited.'], 422)` when status ≠ Pending | `prepareForValidation()`: `throw new HttpResponseException(response()->json([...same...], 422))` |
+| `Kitchen\PreRegistrationController::reject` | same, text `'Only pending pre-registrations can be rejected.'` | same pattern |
+| `StudentContactController::update` | `$this->assertContactBelongsToStudent($contact, $student)` → `abort(404, 'Contact does not belong to this student.')` | `prepareForValidation()`: the same `abort()` call |
+| `TransactionController::void` | `$this->authorize('void', $order)` then `return response()->json(['message' => 'Order is already voided.'], 422)` | `#[Authorize('void', 'order')]` + `VoidOrderRequest::prepareForValidation()` throwing `HttpResponseException` |
+| `UserManagementController::uploadPhoto`, `::assignBranch` | `$this->authorize('update', $user)` | `#[Authorize('update', 'user')]` |
+| `Portal\ActivityController::index`, `SpendingSummaryController::show`, `StudentPhotoController::store`, `WalletController::index`, `::setAlert`, `StudentLedgerController::index` | `$this->authorize('view', $student)` | `#[Authorize('view', 'student')]` |
+| `Portal\FeedbackController::store` | ① load linked students; ② if empty → `response()->json(['message' => 'You have no linked students.'], 422)`; ③ sanitise `message` | `prepareForValidation()`: ② as `HttpResponseException`, then ③. `rules()` computes `Rule::in($this->linkedStudents()->pluck('id')->all())`, where `linkedStudents()` memoises `$this->user()->students()->get(['students.id', 'branch_id'])`. The controller reads `$request->linkedStudents()` for the branch lookup |
+| `Public\PreRegistrationController::store` | ① `if ($request->filled('website'))` → `response()->json(['message' => 'Pre-registration received.'], 201)`; ② reCAPTCHA `Http::timeout(5)->asForm()->post(...)`; `ConnectionException` → `Log::warning('reCAPTCHA verification service unavailable', ['ip' => …])` + 503 `{'message': 'Verification service temporarily unavailable. Please try again shortly.'}`; failed or low score → 422 `{'message': 'Submission could not be verified. Please try again.'}` | `prepareForValidation()`: ① and ② each as `HttpResponseException` with identical bodies. ② is extracted verbatim to `App\Services\RecaptchaVerifier::verify(?string $token, string $ip): array` (returns the decoded JSON or throws `ConnectionException`). Store the score in a private property for `recaptchaScore()` |
+
+`SystemConfigurationController::update` also looks the record up before validating; see the §4.2.1 note.
+
+#### 4.2.3 Permissive rules for magic input (H8)
+
+| Method | Inputs → rules | Controller reads |
+|---|---|---|
+| `StudentController::index` | `deleted`, `search`, `grade`, `status`, `type`, `month`, `payment_status`, `year` → each `['nullable']` | `$v = $request->validated();` then `$v['deleted'] ?? null` etc. Keep truthiness checks exactly (`if ($v['deleted'] ?? null)`, `($v['type'] ?? null) && ($v['type'] ?? null) !== 'all'`) |
+| `UserManagementController::index` | `search`, `role`, `status` → `['nullable']` | same pattern |
+| `Kitchen\MealPlannerController::show` | `month`, `week` → `['nullable']` | `$v['month'] ?? SchoolMonth::June->value`, `(int) ($v['week'] ?? 1)` |
+| `BranchMonthlyAmountController::index` | `year` → `['nullable']` | `$request->integer('year') ?: now()->year` (unchanged) |
+| `ReminderController::eligibleParents` | `page` → `['nullable']` | `$request->integer('page', 1)` (unchanged) |
+
+### 4.3 Actions and Services (Req 2)
+
+All new classes: `final class`, constructor property promotion, typed returns, docblock with purpose and cross-branch notes. Each Action has one public `execute()`. Controllers inject Actions into the method, following the `SubscriptionDowngradeController::execute` precedent.
+
+#### 4.3.1 `App\Services\InventoryStockService`
+
+```php
+final class InventoryStockService
+{
+    /**
+     * Deduct stock for a completed checkout. Must be called inside the checkout transaction.
+     * Track A: reproduces today's stale-quantity write exactly (H10): for each cart line, for each
+     * mapped inventory item, newQty = max(0, (float) $invItem->quantity - $invItem->pivot->quantity_used * $qty),
+     * written with InventoryItem::where('id', $invItem->id)->update(['quantity' => $newQty]) (query builder, H5),
+     * then InventoryLog::create([... type Sale, quantity_change => -$deduction, stock_after => $newQty,
+     * item_name_snapshot => $invItem->name, reason => 'Order #'.$order->receipt_number,
+     * order_id, adjusted_by, branch_id => $branchId]).
+     *
+     * @param  Collection<int, PosMenuItem>  $menuItems  keyed by id, with inventoryItems loaded
+     * @param  array<int, array{pos_menu_item_id: int, quantity: int}>  $cartItems
+     */
+    public function deductForSale(Order $order, Collection $menuItems, array $cartItems, User $by, int $branchId): void;
+
+    /**
+     * Restock a voided order from its Sale logs. Must be called inside the void transaction.
+     * Track A: per log row, InventoryItem::lockForUpdate()->find($id); if found,
+     * $invItem->update(['quantity' => (float) $invItem->quantity + abs((float) $log->quantity_change)]) (Eloquent, H5),
+     * then an InventoryLog type Restock, reason 'Void: Order #'.$order->receipt_number, branch_id => $order->branch_id,
+     * item_name_snapshot => $saleLog->item_name_snapshot.
+     */
+    public function restockForVoid(Order $order, User $by): void;
+
+    /** Manual adjust. $item->update(['quantity' => $new]) (Eloquent, H5) + InventoryLog; returns [$oldQty, $change, $newQty]. */
+    public function adjust(InventoryItem $item, InventoryLogType $type, float $quantity, string $direction, string $reason, User $by, int $branchId): array;
+
+    /** Initial stock log when an item is created with quantity > 0 (reason 'Initial stock', type Restock). */
+    public function recordInitialStock(InventoryItem $item, User $by, int $branchId): void;
+}
+```
+
+The callers keep their `activity('inventory')` calls and response building. Only the stock and log writes move.
+
+#### 4.3.2 `App\Actions\Pos\CheckoutAction`
+
+```php
+final class CheckoutAction
+{
+    public function __construct(
+        private CreditLedgerService $creditLedger,
+        private InventoryStockService $stock,
+    ) {}
+
+    /** @param array<string, mixed> $input  CheckoutRequest::validated() */
+    public function execute(array $input, User $cashier): Order;
+}
+```
+
+`execute()` contains, **in this order and verbatim**, everything from today's `CheckoutController::store`:
+
+1. The walk-in guards. They `return response()->json(..., 422)` today and become `HttpResponseException` with the same bodies:
+   - `'Walk-in customers cannot use the student wallet.'`
+   - `'Walk-in customers cannot use the subscription payment method.'`
+2. The menu load.
+3. The inventory-mapping pre-check (`HttpResponseException`, 422, `'One or more items are not configured for inventory tracking. Please contact your administrator.'`).
+4. The stock pre-check (`HttpResponseException`, 422, `"{$invItem->name} is out of stock."`).
+5. Subtotal.
+6. Discount authorization, **only when** `! empty($input['discount_type']) && ! empty($input['discount_value'])` (as today): `abort(403, 'Only admin and manager roles can apply discounts.')` unless `$cashier->hasAnyRole(['admin', 'manager'])`. A cashier checking out without a discount must never hit this check.
+7. Discount and total.
+8. `strip_tags` on notes.
+9. `DB::transaction(...)` with the identical `abort(422, ...)` messages:
+   - `'Student is not enrolled and cannot make purchases.'`
+   - `'This payment method is only available for subscription students.'`
+   - `'Item "…" is not eligible for subscription payment.'`
+   - `"Daily {$category} limit of {$limit} reached for this student."`
+   - `'Insufficient wallet balance.'`
+   - `'Credit limit exceeded.'`
+
+   Inside the transaction, in this order: receipt number, credit charge / withdraw, `Order::create`, items, `$this->stock->deductForSale(...)`, loyalty points, `$order->update(['points_earned' => ...])`.
+10. After the transaction:
+    - `$order->load(['items', 'student.wallet', 'cashier'])`
+    - `WalletAlertJob::dispatch(...)`, only for wallet orders with a student
+    - `activity('pos')` `'pos.order_created'`
+    - `activity('pos')` `'pos.discount_applied'`, only if discount > 0
+
+The controller becomes:
+
+```php
+public function store(CheckoutRequest $request, CheckoutAction $checkout): JsonResponse
+{
+    $order = $checkout->execute($request->validated(), $request->user());
+
+    return response()->json(['message' => 'Order created successfully.', 'order' => new OrderResource($order)], 201);
+}
+```
+
+The walk-in checks read `$input['student_id']` exactly as today (`empty(...)`). The cash `amount_tendered` check reads `$input['payment_method'] === 'cash'` (string compare, as today).
+
+#### 4.3.3 `App\Actions\Pos\VoidOrderAction`
+
+`execute(Order $order, User $voidedBy, string $reason): Order` moves today's `TransactionController::void` transaction verbatim:
+- `$order->update([...Voided...])`
+- lock the student
+- wallet refund of `total - credit_amount` with meta `['source' => 'void_refund', 'order_id', 'receipt_number', 'voided_by']`
+- `$this->creditLedger->void(...)` when `is_credit`
+- `$this->stock->restockForVoid(...)`
+- the loyalty recompute
+
+Then, after the transaction, the `activity('pos')` `'pos.order_voided'` call and `$order->load(['items', 'student', 'cashier'])`. The already-voided guard lives in `VoidOrderRequest` (§4.2.2), and the policy lives in `#[Authorize]`.
+
+#### 4.3.4 `App\Actions\Wallet\VoidWalletTopUpAction`
+
+`execute(Student $student, int $transactionId, User $performer, string $reason): WalletTopupVoid`. It moves `WalletController::voidTopUp` from line `$walletId = …` to the `activity('wallet')` `'wallet.topup_voided'` call **verbatim**, including:
+- the four `abort_if` guards and their texts (404 `'Top-up transaction not found.'` ×2, 422 `'This top-up has already been voided.'` ×2, 403 self-void text, 403 outside-today text)
+- the in-transaction re-check
+- `DB::table('transactions')` reads/updates
+- `performed_by ?? cashier_id` meta resolution
+
+The controller keeps the `int|string $transaction` parameter and its explanatory comment, casts to int, calls the action, `$student->refresh()->load('wallet')`, and builds the same 5-key response.
+
+#### 4.3.5 `App\Actions\PreRegistrations\ApprovePreRegistrationAction`
+
+`execute(PreRegistration $preRegistration, User $approver): Student`. It moves the transaction body verbatim:
+- lock
+- 404 `'Pre-registration not found.'`
+- pending 422
+- the two duplicate 422s
+- `EnrollmentService::enroll`
+- contacts: copy all, provision **only primary with email**
+- status update
+- `activity('pre_registrations')` `'pre-registration.approved'`
+
+Every `auth()->id()`/`auth()->user()` becomes `$approver->id`/`$approver`; they are the same user.
+
+After the transaction it queues `PreRegistrationApprovedMail` (primary email, else first contact's email). The controller's up-front pending check (`return response()->json(..., 422)`) stays in the controller before calling the action.
+
+#### 4.3.6 `App\Actions\Students\EnrollStudentAction`
+
+`execute(array $validated, ?UploadedFile $photo, User $enrolledBy): Student`. It moves the `EnrollmentController::store` transaction:
+- photo store to `photos/students` on the `private` disk
+- `EnrollmentService::enroll`
+- contacts with `is_primary => $index === 0`
+- provision **every** contact with an email
+- `activity('students')` `'students.enrolled'` with `student_type` and `branch`
+
+Do **not** merge this with §4.3.5. Their contact and provisioning rules differ on purpose. The response and `subscription_period` label stay in the controller.
+
+#### 4.3.7 `App\Services\PaymentReminderService`
+
+Moves all private helpers and the enrichment from `ReminderController` verbatim:
+
+```php
+public function parentsWithUnpaidPayments(Branch $branch, ?string $search = null, ?string $schoolMonth = null, ?int $schoolYear = null): Builder;
+/** @return Collection<int, array{school_month: string, year: int}> */
+public function unpaidPeriods(ParentUser $parent): Collection;
+public function dueDate(SchoolMonth $schoolMonth, int $year): Carbon;
+public function bellCount(Branch $branch): int;
+/** @return Collection<int, array<string, mixed>> the enriched rows incl. the private _all_sent/_none_sent keys */
+public function eligibleParents(Branch $branch, array $filters): Collection;
+/** @return array{sent: int, skipped: int, skipped_names: list<string>} */
+public function send(Branch $branch, array $parentIds, bool $force, User $sender): array;
+```
+
+The controller keeps the status filter `match`, the removal of the `_all_sent`/`_none_sent` keys, and the manual pagination with the 4-key `meta`.
+
+`send()` applies Req 7.4: one `ParentPaymentReminder::where('branch_id', …)->whereIn('parent_user_id', $parents->pluck('id'))->get()->groupBy('parent_user_id')` before the loop. Per parent, `->get($id, collect())->keyBy(fn ($r) => $r->school_month.'_'.$r->school_year)` replaces the per-parent query. The `+1` year logic is preserved (H11).
+
+#### 4.3.8 Not extracted (stay in controllers)
+
+- `topUp`
+- inline reload
+- credit settle/waive, which already delegate to `CreditLedgerService`
+- `SubscriptionDowngradeController`, which already uses an action
+- all report `index`/`export` methods (query building only; see §4.6)
+
+### 4.4 Resources (Req 5)
+
+Only these six. Each `toArray()` copies the current array **character for character**, including casts and `?->`.
+
+| Resource | Replaces | Keys (exact) |
+|---|---|---|
+| `App\Http\Resources\NotificationResource` (wraps `DatabaseNotification`) | `Portal\NotificationController::index` and `StaffNotificationController::index` map | `id`, `type`, `data`, `read_at`, `created_at` |
+| `InventoryItemResource` | `InventoryController::formatItem` | `id`, `name`, `quantity`, `unit`, `restock_threshold`, `overstock_threshold`, `cost_per_unit`, `is_archived`, `status`, `has_inventory_mapping` (keeps `relationLoaded('menuItems')` logic) |
+| `InventoryLogResource` | `InventoryController::formatLog` + `InventoryReportController` logs map (identical, verified) | `id`, `item_name_snapshot`, `type` (`->value`), `type_label`, `quantity_change`, `stock_after`, `reason`, `adjusted_by` (`?->full_name`), `order_id`, `created_at` |
+| `PosMenuItemResource` | `PosMenuItemController::formatItem` + `resolveInventoryStatus` | `id`, `name`, `price`, `category` (`->value`), `is_available`, `sort_order`, `has_inventory_mapping`, `inventory_status`, `is_subscription_item` |
+| `InventoryIngredientResource` | `InventoryIngredientController` index + attach map | `inventory_item_id`, `name`, `unit`, `quantity_used` (`pivot`) |
+| `CreditLedgerEntryResource` | `CreditController::entryPayload` | `id` (`"credit-{id}"`), `date`, `type`, `amount` (`(float)`), `payment_method`, `reference_number`, `note` |
+
+Serialisation (H6):
+- `response()->json(InventoryItemResource::collection($items))`
+- `response()->json(new InventoryItemResource($item), 201)`
+- in arrays: `'data' => InventoryLogResource::collection($paginated->items())`
+
+Pass `->items()` (a plain array) to `::collection()`, **never** the paginator: a paginator input makes a collection returned directly add `links`/`meta`. Nesting prevents that too, but keep it uniform.
+
+### 4.5 Models (Req 4)
+
+#### 4.5.1 `App\Enums\PaymentStatus`
+
+```php
+enum PaymentStatus: string
+{
+    case Paid = 'paid';
+    case Unpaid = 'unpaid';
+    case Voided = 'voided';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Paid => 'Paid',
+            self::Unpaid => 'Unpaid',
+            self::Voided => 'Voided',
+        };
+    }
+}
+```
+
+`StudentMonthlyPayment::casts()` gains `'status' => PaymentStatus::class`. Then:
+- `isPaid()` → `$this->status === PaymentStatus::Paid`
+- `isUnpaid()` → `$this->status === PaymentStatus::Unpaid`
+- `isVoided()` → `$this->status === PaymentStatus::Voided`
+
+#### 4.5.2 Sites that MUST change with the cast (H2), verified by grep on 2026-09-26
+
+| File:line | Today | Change to |
+|---|---|---|
+| `Models/StudentMonthlyPayment.php:57/62/67` | `=== 'paid'` etc. | enum compare (above) |
+| `Http/Controllers/Kitchen/BillingReportController.php:77` | `$payments->where('status', 'paid')` (collection) | `->where('status', PaymentStatus::Paid)` |
+| `…BillingReportController.php:78` | `->where('status', 'unpaid')` (collection) | `PaymentStatus::Unpaid` |
+| `Http/Controllers/Kitchen/SubscriptionReportController.php:88` | `$payment->status === 'paid' => 'paid'` | `$payment->status === PaymentStatus::Paid => 'paid'` (output stays a string) |
+| `Actions/DowngradeStudentSubscriptionAction.php:18/19` | `$p->status === 'unpaid'` / `'paid'` | enum compare |
+| `Exports/BillingReportExport.php:51` | `$payment->status` written to a cell | `$payment->status->value` |
+| `tests/Feature/EnrollmentTest.php:106` | `$p->status === 'unpaid'` | `$p->status === PaymentStatus::Unpaid`. This is the **only** test edit allowed by this change: a model-level assertion, not an HTTP contract |
+
+Safe as is (query builder or JSON output; no change needed, listed so the implementer doesn't touch them):
+- query-builder `where('status', …)` in `BillingReportController` L39/40/120/121, `StudentReportController` L165, `SubscriptionReportController` L47/123/128, `AnalyticsController` L295 (raw `DB::table`), `ReminderController` L180/312/318, `Portal\StudentPaymentHistoryController` L26
+- string writes such as `'status' => 'paid'` in `PaymentController`/`EnrollmentService` (the cast accepts strings)
+- JSON outputs `'status' => $p->status` (a backed enum `json_encode`s to its value)
+- `StudentReportController` `'status' => $payment?->status ?? 'no_record'`
+
+After the change, run `rg -n "status (===|!==|==) '(paid|unpaid|voided)'|where\('status', '(paid|unpaid|voided)'\)" app` and confirm every hit is either query-builder or in the "safe" list.
+
+#### 4.5.3 Other model changes
+
+- `InventoryItem`:
+  ```php
+  #[Scope] protected function active(Builder $query): void { $query->where('is_archived', false); }
+  #[Scope] protected function archived(Builder $query): void { $query->where('is_archived', true); }
+  ```
+  Call sites (`InventoryController:17`, `InventoryReportController:30/119`) are unchanged.
+- `PreRegistration`: `protected function fullName(): Attribute { return Attribute::make(get: fn (): string => "{$this->first_name} {$this->last_name}"); }`. Note that `PreRegistration::toArray()` (used by `show`) does **not** include `full_name` today, because it is not in `$appends`. Keep it that way.
+- `ParentPaymentReminder`: `protected function casts(): array { return ['sent_at' => 'datetime', 'send_count' => 'integer']; }`
+- `EnrollmentService:54`: `'enrollment_status' => EnrollmentStatus::Enrolled`
+- `#[UsePolicy(OrderPolicy::class)]` on `Order`, `#[UsePolicy(UserPolicy::class)]` on `User`, `#[UsePolicy(ParentStudentPolicy::class)]` on `Student`. Remove the four `Gate::policy()` lines. Delete `app/Policies/ReportPolicy.php` and `app/Policies/StudentPolicy.php` (0 references; confirm with `rg -n "ReportPolicy|StudentPolicy" app routes tests` before deleting; test references block the deletion and must be reported).
+- Base `Controller` gains `use AuthorizesRequests;`. Remove the per-controller `use AuthorizesRequests;` lines. Keep the trait on the base even after `#[Authorize]` adoption; it costs nothing.
+
+#### 4.5.4 Lazy-loading guard (T-13)
+
+In `AppServiceProvider::configureDefaults()`:
+
+```php
+Model::preventLazyLoading(! $this->app->isProduction());
+
+if (! $this->app->environment(['local', 'testing'])) {
+    Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
+        Log::warning('Lazy loading violation', ['model' => $model::class, 'relation' => $relation]);
+    });
+}
+```
+
+Run the full suite, then fix each violation with `with()`/`loadMissing()` at the query site. Never add `$with` to models, which would change serialisation. Known one: `TransactionController::index` must load `student.wallet` (`OrderResource` reads `student->wallet`).
+
+Adding eager loads does not change output, because the same data is read. Fixtures prove it.
+
+### 4.6 Query de-duplication and performance (Req 7)
+
+- **`SalesReportController`:** private `filteredOrders(int $branchId, array $v, string $dateFrom, string $dateTo): Builder` returns the `withoutBranch()->where(branch)->where(Completed)->whereBetween(...)->when(...)×3` chain. `index` uses it twice (list and summary); `export` once. `with(...)`, `latest()` and `selectRaw` are applied by the callers exactly as today.
+- **Inventory logs:** `InventoryLog` gains
+  ```php
+  #[Scope] protected function forActiveItemsInBranch(Builder $query, int $branchId): void
+  {
+      $query->join('inventory_items', 'inventory_logs.inventory_item_id', '=', 'inventory_items.id')
+          ->where('inventory_items.branch_id', $branchId)
+          ->where('inventory_items.is_archived', false)
+          ->select('inventory_logs.*');
+  }
+  ```
+  It is used by `InventoryController::history`, `InventoryReportController::index` and `::export`. `buildDiscrepancySection` does **not** filter `is_archived`, so leave it alone.
+- **Announcement read counts:**
+  ```php
+  $readCounts = DB::table('notifications')
+      ->selectRaw("json_extract(data, '$.announcement_id') AS announcement_id, COUNT(*) AS total")
+      ->whereIn(DB::raw("json_extract(data, '$.announcement_id')"), $ids)
+      ->whereNotNull('read_at')
+      ->groupBy('announcement_id')
+      ->pluck('total', 'announcement_id');
+  ```
+  Then `(int) ($readCounts[$announcement->id] ?? 0)`. No `type` filter, matching today.
+- **Announcement recipients:** `$model = recipient_type === 'parents' ? ParentUser::class : User::class;` then `$model::whereIn('id', $notifications->pluck('notifiable_id'))->get()->keyBy('id')`. Soft-deleted rows stay excluded, as with `find()`. The `'Unknown'` fallback is kept.
+- **Credit debounce:** `$parent->notifications()->where('type', CreditChargedNotification::class)->whereDate('created_at', now()->toDateString())->where('data->student_id', $locked->id)->exists()`. `data->student_id` compiles on both MySQL and SQLite; the value is written as an int by `CreditChargedNotification::toDatabase()`.
+- **Query-count tests:** `DB::enableQueryLog()` around the request for N=1 and N=5 announcements, notifications or parents; assert `count(DB::getQueryLog())` is equal for both.
+
+### 4.7 Notifications (Req 8)
+
+- Each of the five notification constructors ends with `$this->afterCommit();`.
+- `ParentProvisioningService::provision()` and `EnableParentAction::execute()` queue `ParentWelcomeMail` with `(new ParentWelcomeMail($parent, $token))->afterCommit()`.
+- `PreRegistrationApprovedMail`/`RejectedMail`/`ReceivedMail` and the wallet-alert, feedback-reply and reset mails are queued outside transactions, so they need no change.
+
+Tests use `RefreshDatabase`/`LazilyRefreshDatabase`, which run after-commit callbacks when the application transaction commits (Laravel's test-transaction-aware mode). `Notification::fake()` records at `notify()` time. So existing tests keep passing, and the new test asserts the rollback case with a real `sync` dispatch and `Queue::fake()`.
+
+## 5. Track B designs
+
+Each subsection gives the behaviour before and after, the fixtures it changes, and the verified FE impact.
+
+### 5.1 B-01: Cross-branch access
+
+- **`Kitchen\ParentController`:** add `private function ensureVisibleInActiveBranch(ParentUser $parent): void` that throws `(new ModelNotFoundException)->setModel(ParentUser::class)` unless `$parent->students()->withTrashed()->where('students.branch_id', app('active_branch')->id)->exists()`. Call it first in `show`, `resendActivation`, `disable`, `enable`, `destroy`, `restore`.
+  - Use `withTrashed` on students so a parent whose child was soft-deleted is still manageable.
+  - Rendered as `{"message":"Not found."}` by `bootstrap/app.php`.
+- **`InventoryController::unarchive`:** replace `InventoryItem::withoutBranch()` with `InventoryItem::query()`.
+- **`UpdateStaffStatusRequest`:** `'user_id' => ['required', Rule::exists('branch_user', 'user_id')->where('branch_id', app('active_branch')->id)]`. This gives a 422 validation error.
+- **Fixtures:** new `404-other-branch` variants only.
+- **FE impact:** none. The POS only lists parents, inventory and roster users from the active branch (`references/parents`, `references/inventory`, dashboard roster).
+
+### 5.2 B-02: Branch required
+
+New `App\Http\Middleware\EnsureActiveBranch` (alias `branch.required` in `bootstrap/app.php`). If `! app()->bound('active_branch')`, it returns `response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422)`. The text reuses the existing `MealPlannerController` message.
+
+In `routes/kitchen-api.php`, add `'branch.required'` to the authenticated group's middleware, and `->withoutMiddleware('branch.required')` on exactly these routes, which the POS calls before a branch is chosen or which are not branch data:
+
+```
+POST broadcasting/auth · POST auth/logout · GET auth/user · POST auth/branch
+GET branches · PUT branches/{branch} · POST branches/{branch}/toggle
+GET system-configurations · PUT system-configurations/{key}
+GET/POST users · GET/PUT users/{user} · POST users/{user}/{deactivate,reactivate,reset-password,photo,branches} · DELETE users/{user}/branches/{branch}
+GET/POST/PATCH/DELETE staff/notifications*
+```
+
+- **Verified:** the POS `(auth)/branch/page.tsx` calls `GET /branches` and `POST /auth/branch` without a branch. `(kitchen)/layout.tsx` and `(pos)/layout.tsx` redirect to `/branch` when `activeBranch` is null, so every other call carries `X-Branch-Id` (`lib/api/client.ts:36`).
+- Remove the now-dead `if (! app()->bound('active_branch'))` blocks in `MealPlannerController` (3×). `FeedbackController::index`/`ParentController::index` `if (app()->bound(...))` become unconditional.
+- **Fixtures:** new `422-no-branch` variant on one representative route per controller.
+- **FE impact:** none if the verification above holds. **Deploy to staging and smoke-test login → branch select → dashboard before production.**
+
+### 5.3 B-03: Stock race
+
+Inside the `CheckoutAction` transaction, before `deductForSale`, run `InventoryItem::withoutBranch()->whereIn('id', array_keys($deductions))->orderBy('id')->lockForUpdate()->get()->keyBy('id')`.
+- `withoutBranch` is justified: the ids came from branch-scoped menu items, and ingredient attach enforces the same branch.
+- Re-check `quantity - units < 0` against the locked rows and `abort(422, "{$name} is out of stock.")`.
+- Deduct from the **locked, aggregated** quantity: one write per inventory item using the summed `$deductions[$id]`, which also fixes the same-order double-line lost update (H10).
+- Log rows stay one per cart line × mapping, as today, with `stock_after` equal to the running quantity after each line.
+
+`restockForVoid` locks all involved items in one ordered query first. `adjust` does `InventoryItem::lockForUpdate()->find($item->id)` inside `DB::transaction` and updates via Eloquent (H5).
+
+- **Fixtures:** none change.
+- **FE impact:** none.
+- **Tests:** two cart lines sharing an inventory item deduct both; stock can't go negative across two sequential checkouts at the boundary; `InventoryLog.stock_after` values are correct.
+
+### 5.4 B-04: Remove unused portal pre-registration routes
+
+Delete from `routes/portal-api.php` the two `throttle` groups: `POST /pre-registrations/check` and `POST /pre-registrations`. Delete `app/Http/Controllers/Portal/PreRegistrationController.php`, `app/Http/Controllers/Portal/PreRegistrationCheckController.php`, and their tests `tests/Feature/Portal/PreRegistrationStoreTest.php` and `tests/Feature/Portal/PreRegistrationCheckTest.php`. Deleting tests requires this item's approval (testing rule 5).
+
+- `StudentDuplicateService` stays; it is still used by the Kitchen controller.
+- **Verified:** there are no FE callers: `rg "portal/pre-registrations" ~/sunbites-portal ~/sunbites-pos` returns nothing, and the portal `lib/api/pre-registration.ts:8` uses `/public/pre-registrations`.
+- **FE impact:** none.
+- If B-04 is rejected: apply reCAPTCHA via `StorePublicPreRegistrationRequest`'s verifier to the portal store instead.
+
+### 5.5 B-05: School year (B-06 merged here)
+
+Add to `App\Enums\SchoolMonth`:
+
+```php
+/** Calendar year in which this month falls for the school year starting in June of $schoolYearStart. */
+public function calendarYearFor(int $schoolYearStart): int
+{
+    return $this->toMonthNumber() >= 6 ? $schoolYearStart : $schoolYearStart + 1;
+}
+
+/** @return list<string> */
+public static function firstHalfValues(): array  // June–December
+/** @return list<string> */
+public static function secondHalfValues(): array // January–March
+```
+
+1. **`PaymentReminderService`:**
+   - `unpaidPeriods`: `Carbon::create($p->year, $monthNum, 1)`, with no `+1`.
+   - `dueDate`: `Carbon::create($year, $monthNumber, 1)->endOfMonth()`.
+   - The overdue check: same, no `+1`.
+2. **`school_year` filter** (reminders), **`year` param** (`/reports/billing` index and export, `/reports/subscription`): these mean *school-year start*.
+   - With a month: filter `year = $month->calendarYearFor($sy)`.
+   - Without a month (billing "All months"): `where(fn ($q) => $q->where(fn ($a) => $a->whereIn('school_month', SchoolMonth::firstHalfValues())->where('year', $sy))->orWhere(fn ($b) => $b->whereIn('school_month', SchoolMonth::secondHalfValues())->where('year', $sy + 1)))`.
+   - **Subscription report:** orders use `whereYear('orders.created_at', $calendarYear)`, and the response `subscription_monthly_status.year` becomes the calendar year. Verified that the POS does not read it (`reports/subscription/page.tsx` only reads `.categories`).
+3. The billing default `year` stays `now()->month >= 6 ? now()->year : now()->year - 1`, which is now correct as a school year.
+4. The billing export filename keeps `{$year}` (school year).
+
+- **Scope note:** in `eligibleParents`, the `school_month`/`school_year` filters apply to the `whereHas` that selects parents (as today). The eager-loaded `monthlyPayments` used to build `unpaid_periods` are **not** filtered by them today, and this item does not change that.
+- **Existing test that must change (permitted edit, this item only):** `tests/Feature/Reports/BillingReportTest.php::test_default_school_month_and_year_filters_to_current_school_period` seeds `'year' => now()->month >= 6 ? now()->year : now()->year - 1` for the **current** month. That encodes the buggy convention, so the test fails in January–March after the fix. Change both seeds to `'year' => now()->year` (calendar year, which is what `EnrollmentService` writes), and add `$this->travelTo('2027-01-20')` and `$this->travelTo('2026-10-15')` variants so the test no longer depends on the month it runs in. Several other billing and subscription tests use the real clock (`now()`); they are safe for June-seeded data and are not edited.
+- **Fixtures:** none change. Shapes are identical, only values change.
+- **FE impact:** positive and requires no FE change. Jan–Mar rows appear in billing, subscription and reminders; reminder notification due dates shift to the correct year. Row `year` values stay calendar years (`{row.school_month} {row.year}` in the billing and reminders pages shows e.g. "january 2027").
+- **Tests** (`travelTo('2027-01-20')`):
+  - A January unpaid payment (year 2027) appears in bell-count, eligible-parents (with and without `school_year=2026`) and send.
+  - The due date is `2027-01-31`.
+  - Billing `year=2026&school_month=january` returns it.
+  - The subscription report `year=2026&month=january` counts January 2027 orders.
+  - All existing June tests stay green.
+
+### 5.6 B-07: Receipt cashier name
+
+`OrderResource`: `'name' => $this->cashier->full_name`.
+
+- **Fixture:** unchanged. `cashier.name` was `"null"` and becomes `"string"`; update the 4 affected fixtures (`POST api/v1/pos/checkout`, `POST api/v1/pos/transactions/{order}/void`, `GET api/v1/pos/transactions`, `GET api/v1/students/{student}/orders`).
+- **FE impact:** the receipt shows the cashier name, which was blank before.
+
+### 5.7 B-08: Portal login disclosure
+
+New order in `Portal\AuthController::login`:
+1. Not found → 422 `Invalid credentials.`
+2. Not activated → 401 `account_not_activated` (kept first: unactivated parents have `password = null`)
+3. `! Hash::check` → 422 `Invalid credentials.`
+4. Disabled → 401 `account_disabled`
+
+- **Fixtures:** the `401-disabled` variant is now recorded with the correct password; add a `422-disabled-wrong-password`.
+- **FE impact:** none. `(auth)/login/page.tsx:45` special-cases only `account_not_activated`; disabled users still see the server `message` toast when their password is right.
+
+### 5.8 B-09: Atomic writes
+
+Wrap in `DB::transaction()`:
+- `Kitchen\PreRegistrationController::update`: the `update` plus the contacts `delete`/`createMany`.
+- `Public\PreRegistrationController::store`: `create` + `contacts()->createMany` + `load`.
+
+`Mail::…->queue()` and the staff notifications stay **after** the transaction.
+
+- **Fixtures:** none.
+- **FE impact:** none.
+
+### 5.9 B-10: LIKE wildcards
+
+A macro in `AppServiceProvider::boot()`:
+
+```php
+Builder::macro('whereContainsLiteral', function (string $column, string $term, string $boolean = 'and') {
+    $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term);
+    return $this->whereRaw("{$column} LIKE ? ESCAPE '!'", ["%{$escaped}%"], $boolean);
+});
+```
+
+Register it on both `Illuminate\Database\Query\Builder` and `Illuminate\Database\Eloquent\Builder` through the query builder. Column names are literals from code, never input.
+
+Apply it to the search clauses in:
+- `TransactionController::index`
+- `StudentLookupController::lookupBySearch`
+- `SubscriptionReportController`
+- `WalletHistoryController` (items and users)
+- `ActivityLogController`
+- `CreditReportController` (both)
+- `StudentReportController::applySearch`
+- `UserManagementController::index`
+- `StudentController::index` (replacing its backslash escaping, which does not work on SQLite)
+
+The `lower(...) like ?` searches (`ParentController`, `FeedbackController`, `PreRegistrationController`, `ReminderController`, `BillingReportController`) get the same escaping via `whereRaw("lower(col) LIKE ? ESCAPE '!'", …)`.
+
+- **Fixtures:** none.
+- **FE impact:** searches containing `%` or `_` now match literally.
+
+### 5.10 B-11: Analytics credit limit
+
+`AnalyticsController:442`: `(float) SystemConfiguration::getValue('credit_limit', config('sunbites.credit_limit', 300))`.
+
+- **FE impact:** the "near limit" count respects System Settings.
+
+### 5.11 B-12 and B-13: Report row shapes
+
+- **`SalesReportController::index`** `data`:
+  ```php
+  collect($orders->items())->map(fn (Order $o) => [
+      ...$o->attributesToArray(),
+      'items' => $o->items->toArray(),
+      'student' => $o->student ? [
+          'id' => ..., 'first_name' => ..., 'last_name' => ..., 'full_name' => ...,
+          'student_number' => ..., 'grade_level' => ..., 'section' => ...,
+      ] : null,
+      'cashier' => $o->cashier ? ['id', 'first_name', 'last_name', 'full_name'] : null,
+  ])
+  ```
+- **`BillingReportController::index`** `data`: `[...$p->attributesToArray(), 'student' => <same 7 keys> | null, 'recorder' => ['id', 'first_name', 'last_name', 'full_name'] | null]`. Drop the `append('full_name')` loop.
+
+`attributesToArray()` applies the same casts and date format as `toArray()`, so the order and payment columns are unchanged.
+
+- **Verified FE reads:**
+  - Sales: `cashier.first_name`/`last_name`, `student.full_name`, `items`, and order columns (`reports/sales/page.tsx`, `SalesOrder` in `lib/api/reports.ts:85`).
+  - Billing: `student.full_name`/`grade_level`/`section`/`student_number`, `recorder.first_name`/`last_name`, and payment columns (`reports/billing/page.tsx`).
+- **Fixtures:** the sales and billing `ok` fixtures change (keys removed from the nested `student`/`cashier`/`recorder`, `full_name` added to sales `student`).
+- **FE impact:** the sales student column now shows names. No field the FE reads is removed.
+
+### 5.12 B-14: Status update 500
+
+`UpdateStudentStatusRequest`: `EnrollmentStatus::tryFrom((string) $this->input('enrollment_status'))?->requiresReason() ?? false`.
+
+- **Fixtures:** new `422-missing-status` variant.
+- **FE impact:** none.
+
+### 5.13 B-15: Portal payment-history 403 body
+
+Replace the `abort_unless(..., 403, 'You do not have access to this student.')` with `#[Authorize('view', 'student')]`.
+
+- **Fixture:** the `403` variant body changes the `message` text.
+- **FE impact:** none. `payment-history-tab.tsx:31` shows a fixed "Failed to load payment history." on any error.
+
+## 6. Delivery plan (PR sequence)
+
+```mermaid
+graph TD
+  T1[T-1 Contract freeze] --> T2[T-2 Base authorization + policies]
+  T2 --> T3[T-3 POS: checkout, void, stock]
+  T2 --> T4[T-4 Wallet & credit]
+  T2 --> T5[T-5 Students, enrollment, payments, contacts]
+  T2 --> T6[T-6 Staff, branches, config]
+  T3 --> T7[T-7 Inventory, menu, meal planner]
+  T2 --> T8[T-8 Pre-registration]
+  T2 --> T9[T-9 Reminders, announcements, notifications, feedback]
+  T2 --> T10[T-10 Reports]
+  T2 --> T11[T-11 Portal]
+  T3 & T4 & T5 & T6 & T7 & T8 & T9 & T10 & T11 --> T12[T-12 Models + PaymentStatus enum]
+  T12 --> T13[T-13 Lazy-loading guard]
+  T13 --> T14[T-14 afterCommit]
+  T14 --> T15[T-15 composer hygiene]
+  T15 -.optional.-> T16[T-16 model attributes]
+  T15 -.gated.-> T17[T-17 dependency cleanup]
+  T15 & T16 & T17 --> T18[T-18 laravel-simplifier final pass<br/>after ALL backend tasks incl. approved Track B]
+```
+
+Track B items run after the Track A task they depend on (listed per item in `tasks.md`), in any order.
+
+If approved, B-04 should land before T-11 (Portal), so the portal pre-registration Form Requests are never written (T-11.4 becomes N/A).
+
+## 7. Integration points
+
+- **Routes:** unchanged in Track A (165 API routes). B-04 removes 2, and B-02 adds a middleware alias.
+- **Contracts:** the fixtures in `tests/Fixtures/contracts/` become the authoritative API contract. Frontend teams can read them.
+- **Depends on:** `CreditLedgerService` (unchanged API), `EnrollmentService`, `ParentProvisioningService`, `StudentLedgerQuery`/`LedgerEntryFormatter` (unchanged), bavix wallet `deposit`/`withdraw`.
+
+## 8. Security considerations
+
+- Track A cannot widen access: this is proven by `RoleAuthorizationMatrixTest` and the portal 401 checks (§4.1.5).
+- `#[Authorize]` runs after `auth:*` and `SubstituteBindings` (§1.2), keeping `Gate` user resolution identical to `$this->authorize()`.
+- B-01, B-02, B-04, B-08 and B-12 reduce exposure.
+- No secrets or PII are added to logs. The lazy-loading log records only the class and relation names.
+- `whereContainsLiteral` interpolates only code-defined column names.
+
+## 9. Migration and rollout
+
+- There are no schema or data migrations.
+- Each PR is independently revertible.
+- Deploy each PR to staging (`staging.yml` → Laravel Cloud) and click through the affected POS/portal pages before production.
+- B-02 additionally needs the login → branch → dashboard smoke test.
+- **Rollback:** `git revert` of the PR. Fixtures revert with it.
+
+## 10. Error handling
+
+- All envelopes are unchanged (hazards H3, H4, H12).
+- New code paths throw only `HttpResponseException` (for ported `response()->json` guards), `abort()` (for ported `abort` guards), `ModelNotFoundException` (B-01), or `ValidationException` via Form Requests.
+- No new exception classes and no `app/Exceptions/` directory.
+
+## 11. Testing strategy
+
+- **Contract suite** (§4.1): shapes, coverage, role matrix, portal 401s.
+- **Per-extraction feature tests:** each Action/Service in §4.3 gets a direct test class:
+  - `tests/Feature/Kitchen/CheckoutActionTest.php`
+  - `VoidOrderActionTest.php`
+  - `InventoryStockServiceTest.php`
+  - `VoidWalletTopUpActionTest.php`
+  - `ApprovePreRegistrationActionTest.php`
+  - `EnrollStudentActionTest.php`
+  - `PaymentReminderServiceTest.php`
+
+  Each covers the happy path and every `abort` path listed for that class.
+- **Form Request precedence tests:** for each §4.2.2 row, a test sends a request that violates both the guard and a validation rule, and asserts the guard's response wins.
+- **Query-count tests** (§4.6).
+- **After-commit test** (§4.7).
+- **Track B:** a failing test first, per §5.
+- Every PR runs the full suite on **MySQL** (`vendor/bin/sail artisan test --compact`) and **SQLite** (`DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact`), plus `vendor/bin/sail bin pint --dirty --format agent`.
+- Existing tests are never edited except the single line in §4.5.2 and the deletions in B-04.
+
+## 12. Mandatory tooling and final simplification (Req 12, non-negotiable)
+
+### 12.1 Skills per task
+
+| When | Skill | What to do |
+|---|---|---|
+| Every task that writes or changes PHP | `laravel-best-practices` (`.claude/skills/laravel-best-practices/SKILL.md`) | Read the index, then every mapped rule file. Minimum per task type: Form Requests → `rules/validation.md`; controllers/resources/middleware/`#[Authorize]` → `rules/routing.md`, `rules/security.md`; Actions/Services → `rules/architecture.md`; models/enums/scopes/casts → `rules/eloquent.md`; query changes/N+1 → `rules/db-performance.md`, `rules/advanced-queries.md`; notifications/mail → `rules/events-notifications.md`, `rules/mail.md`, `rules/queue-jobs.md`; `composer.json` → `rules/config.md`; outbound HTTP (`RecaptchaVerifier`, T-8.3) → `rules/http-client.md`; error envelopes → `rules/error-handling.md`; naming/style → `rules/style.md` |
+| Every task that writes or changes tests | `testing-best-practices` | Coverage, naming, structure and assertions for the new tests |
+| Tasks touching `app/Exports/` (T-10.x, T-12.3) | `laravel-excel` | Export behaviour and `Excel::fake()` usage |
+| Tasks touching roles or `role:` middleware (T-1.6, T-2, B-01, B-02) | `laravel-permission-development` | Spatie role and guard semantics (roles are seeded on guard `web`; `User::getDefaultGuardName()`) |
+| T-17.1 | `fortify-development` | Fortify route and feature removal |
+
+The skill's own first rule, *"Consistency First: the best choice is the one the codebase already uses"*, agrees with this spec. Where a skill rule would change behaviour protected by §3 (e.g. unifying rule sets, H13), §3 wins, and the PR notes the conflict.
+
+### 12.2 Laravel Boost tools per task
+
+Boost runs through Sail (`.mcp.json`: `vendor/bin/sail artisan boost:mcp`). Start the task with `vendor/bin/sail up -d` and confirm the `laravel-boost` MCP server is connected. If it is not, stop and fix it before continuing (Req 12.4).
+
+| Tool | Mandatory use |
+|---|---|
+| `application-info` | Once per PR, at the start: confirm Laravel 13.33.x and the package versions this design assumes (§1.2) |
+| `search-docs` | **Before** writing code that uses any framework or package API: Form Request hooks (`prepareForValidation`, `passedValidation`), `#[Authorize]`, `#[Scope]`, `#[UsePolicy]`, `#[Tries]`/`#[Backoff]`, `JsonResource` serialisation, enum casts, `afterCommit()`, `preventLazyLoading`/`handleLazyLoadingViolationUsing`, `lockForUpdate`, Sanctum tokens, Spatie roles, maatwebsite exports. Scope with `packages` and use several broad queries (Boost guidelines) |
+| `database-schema` | Before any change to models, casts or enums (T-12), and before writing raw or JSON queries (§4.6, B-05, B-10), to confirm column names and types (e.g. `notifications.data` type, `student_monthly_payments.status`, `year`) |
+| `database-query` (read-only) | To confirm real value sets before introducing enums (e.g. `SELECT DISTINCT status FROM student_monthly_payments` returns only `paid`/`unpaid`/`voided`), and to verify B-05 year conventions on local data |
+| `last-error`, `read-log-entries` | When a test or request fails unexpectedly, before changing code |
+| `get-absolute-url` | Before sharing any local URL (e.g. for the B-02 staging smoke-test notes) |
+
+A `search-docs` result that contradicts §1.2 means stop and report it, as with any design drift. Record every query and the section relied on in the PR's **Tooling log** (Req 12.5).
+
+### 12.3 Final `laravel-simplifier` pass (task T-18)
+
+Agent: `laravel:laravel-simplifier` (installed via the Laravel plugin). Its default behaviour conflicts with this spec in three places, so it runs **once**, after all backend tasks are merged, with the fenced prompt below. It is not run after each task.
+
+1. Create branch `refactor/spec16-T18-simplifier` from `main` after the last Spec 16 PR merges.
+2. Build the scope: `git diff --name-only <spec16-start-sha>..main -- app routes bootstrap config` (the `<spec16-start-sha>` is recorded in T-1's PR). Only PHP files in that list are in scope; tests and fixtures are **out of scope**.
+3. Invoke the agent with this prompt, verbatim, with the file list appended:
+
+   > Review and simplify ONLY these files, which were changed by Spec 16: <file list>. Read `.kiro/specs/16-backend-code-quality/design.md` §3 (hazards H1–H15) first; every hazard is a hard constraint. Do NOT: create custom exception classes or an `app/Exceptions/` directory (spec Req 2.7); merge or "consolidate" validation rule sets, Form Requests or Resources across endpoints (H13); add, remove or change any `(float)`/`(int)`/`round()` cast (H1, H15); change any `abort()` into `response()->json()` or the reverse (H3); move guards out of `prepareForValidation()` (H4); switch between Eloquent `update()` and query-builder `update()` (H5); return a `JsonResource` directly from a controller (H6); replace `$request->only(...)` in the password-reset controllers (H7); tighten any permissive rule (H8); change any response key, message text, status code, activity-log name or property; remove docblocks that explain cross-branch (`withoutBranch`) reasons, or the comment on `WalletController::voidTopUp`'s `int|string` parameter. Do simplify: naming, nesting, dead code, redundant local variables, import order, nested ternaries into `match`, and duplicated private helpers *within* one class. For every change, state the file and a one-line reason. For every rule of yours you chose NOT to apply because of the constraints above, list it as "rejected: <hazard id>".
+
+4. Run the full verification gate: both databases, zero fixture diffs, role matrix, Pint.
+5. Revert any single change that fails the gate; don't debug the simplifier's output. List the reverted items in the PR.
+6. The PR description contains the agent's change list, the rejected list, and the gate results.
