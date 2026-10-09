@@ -11,8 +11,10 @@
   - **Laravel Pint (non-negotiable, `.claude/rules/backend/laravel-pint.md`):** every backend task ends with `vendor/bin/sail bin pint --dirty --format agent` before it is reported done or committed. Before pushing the branch, `vendor/bin/sail bin pint --format agent` must report no changes (CI runs `pint --test`).
   - **Laravel 13 standards:** each task also applies the design §14.1 rows (S1–S10) assigned to it, and never introduces anything in §14.3.
 
+- **Test environment (H18):** never run `config:cache`, `route:cache`, `event:cache` or `optimize` locally. Before each test run, `bootstrap/cache/` must contain only `packages.php` and `services.php` (run `vendor/bin/sail artisan config:clear` if unsure); otherwise tests can hit the real dev database.
+- **Attributes (design §14.5):** use only the attributes marked *Adopt*. Never add the *Forbidden* Form Request attributes (H17: `#[FailOnUnknownFields]`, `#[StopOnFirstFailure]`, `#[ErrorBag]`, `#[RedirectTo]`, `#[RedirectToRoute]`), and never add any attribute marked N/A.
 - **Before starting any task:**
-  - Read `design.md` §3 (hazards H1–H16) and §14 (Laravel 13 standards).
+  - Read `design.md` §3 (hazards H1–H18) and §14 (Laravel 13 standards, including the §14.5 attribute inventory).
   - Read the design section the task cites.
   - Read the current code of every file you will touch.
   - If the code differs from what the design describes, **stop and report**. Do not adapt silently.
@@ -44,7 +46,7 @@
 - [ ] 1. Contract freeze harness and fixtures *(design §4.1; Req 1)*
   - [ ] 1.1 Create the shape extractor
     - Create `tests/Support/Contract/ShapeExtractor.php` implementing the grammar in design §4.1.1 exactly (token names, check order, `ksort`, `__map__`, `__list__`, `__list_union__`, `list:empty`).
-    - Write `tests/Unit/Contract/ShapeExtractorTest.php` with one test per token, plus:
+    - Write `tests/Unit/Contract/ShapeExtractorTest.php`, extending `PHPUnit\Framework\TestCase` (pure logic), with one test per token, plus:
       - key order is ignored
       - mixed lists produce a union
       - `mapPaths` collapse data keys
@@ -73,7 +75,7 @@
     - _Requirements: 1.4_
   - [ ] 1.6 Add the role authorization matrix
     - `tests/Feature/Contract/RoleAuthorizationMatrixTest.php` per design §4.1.5: parameter resolver by URI, the exceptions array, portal 401 without token and with a staff token.
-    - Uses a PHPUnit data provider built from `Route::getRoutes()` with one row per (route, role).
+    - **No data provider:** PHPUnit 12 runs providers before Laravel boots, so `Route::getRoutes()` would fail there. Write one test method per role that iterates the routes at runtime and asserts once on the collected mismatches (design §4.1.5).
     - _Requirements: 1.5_
   - [ ] 1.7 Cross-check against the frontend types
     - Create `.kiro/specs/16-backend-code-quality/contract-gaps.md` seeded with the five rows in design §4.1.6, then extend it from design §13.1 (unused routes) and §13.2.
@@ -96,7 +98,7 @@
   - [ ] 2.3 Bind policies with `#[UsePolicy]`
     - Add `#[UsePolicy]` to `Order`, `User` and `Student` (design §4.5.3), and remove the four `Gate::policy()` lines and their imports from `AppServiceProvider`.
     - Run `rg -n "ReportPolicy|StudentPolicy" app routes tests`. If only the class files match, delete `app/Policies/ReportPolicy.php` and `app/Policies/StudentPolicy.php`. If tests match, stop and report.
-    - Tests: `tests/Unit/PolicyResolutionTest.php` asserts `Gate::getPolicyFor(Order::class)` is an `OrderPolicy` (likewise `User` and `Student`); the suite and fixtures are unchanged.
+    - Tests: `tests/Unit/PolicyResolutionTest.php` (extends `Tests\TestCase`; needs Gate) asserts `Gate::getPolicyFor(Order::class)` is an `OrderPolicy` (likewise `User` and `Student`); the suite and fixtures are unchanged.
     - _Requirements: 4.5_
 
 - [ ] 3. POS domain: checkout, void, stock *(design §4.3.1–4.3.3, §4.2.1/4.2.2 rows for CheckoutController and TransactionController; hazards H1, H3, H5, H10)*
@@ -309,7 +311,7 @@
     - _Requirements: 4.4_
   - [ ] 12.3 `PaymentStatus` enum cast
     - Create `app/Enums/PaymentStatus.php` (design §4.5.1), add the cast, and change **exactly** the sites in the design §4.5.2 table, including `tests/Feature/EnrollmentTest.php:106` (the only permitted test edit).
-    - Tests: `tests/Unit/PaymentStatusTest.php` (labels); billing export totals are correct with paid and unpaid rows (this would have silently become 0 without the collection fix); fixtures unchanged.
+    - Tests: `tests/Unit/PaymentStatusTest.php` (extends `PHPUnit\Framework\TestCase`; labels); billing export totals are correct with paid and unpaid rows (this would have silently become 0 without the collection fix); fixtures unchanged.
     - _Requirements: 4.3_
   - [ ] 12.4 Post-cast grep check
     - Run the grep in design §4.5.2 and paste its output into the PR description, with each hit classified as safe.
@@ -348,7 +350,7 @@
 
 - [ ] 16. Laravel 13 model PHP attributes *(Q4 approved; design §4.5.5; Req 4.7)*
   - [ ] 16.1 Snapshot test first
-    - Create `tests/Unit/ModelAttributesTest.php`. For every model in `app/Models/`, assert `getTable()`, `getFillable()` (exact array and order), `getHidden()`, `usesTimestamps()`, `getKeyName()` and `getCasts()` equal literals copied from the current code.
+    - Create `tests/Unit/ModelAttributesTest.php` (extends `Tests\TestCase`; model construction boots traits that use the container). For every model in `app/Models/`, assert `getTable()`, `getFillable()` (exact array and order), `getHidden()`, `usesTimestamps()`, `getKeyName()` and `getCasts()` equal literals copied from the current code.
     - It must pass on the unconverted code before 16.2 starts.
     - _Requirements: 4.7_
   - [ ] 16.2 Convert every model

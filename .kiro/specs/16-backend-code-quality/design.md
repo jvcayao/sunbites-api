@@ -77,6 +77,8 @@ Each hazard names the concrete sites. A task is not done until its diff has been
 | H13 | **Different limits that look like duplicates.** Kitchen student photo `max:2048` vs portal student photo `max:5120`; `per_page` caps of 50 vs 100; defaults of 15/20/25/50. | Never unify rule sets across endpoints. | §4.2 |
 | H15 | **Driver-dependent aggregate types.** MySQL returns `SUM()`/`AVG()` over DECIMAL columns as **strings**; SQLite returns floats. Any response value that is an uncast aggregate therefore has a different JSON shape per driver. | Never remove an existing `(float)`/`(int)`/`round()` around an aggregate. Contract fixtures are recorded on MySQL (production engine); where SQLite differs, a `.sqlite.json` override is recorded and logged (§4.1.2). | report and dashboard controllers |
 | H16 | **Carbon mutability.** `now()`/`today()` return `CarbonImmutable` here (`Date::use(CarbonImmutable::class)` in `AppServiceProvider`), but `Carbon\Carbon::create*()` returns a **mutable** instance. The month loops `while ($current->lte($end)) { … $current->addMonth(); }` in `EnrollmentService::seedMonthlyPayments` and `PaymentController::addRange` rely on mutation. With an immutable instance `addMonth()` returns a new object, `$current` never advances, and **the request loops forever**. | Never replace `Carbon::create*()`/`Carbon::createFromDate()` with `now()`, `Date::…` or `CarbonImmutable` in these loops. If a loop is touched, write `$current = $current->addMonth();`, which is correct for both mutable and immutable. T-5.1 and T-5.3 add a test that seeds June→March (10 rows) and returns. | `EnrollmentService`, `PaymentController::addRange` |
+| H17 | **Form Request class attributes that change responses.** Laravel 13.35 ships `#[FailOnUnknownFields]` (rejects any input key without a rule; `FormRequest::validateNoUnknownFields`), `#[StopOnFirstFailure]` (returns only the first error), `#[ErrorBag]`, `#[RedirectTo]` and `#[RedirectToRoute]` (web redirects). Both FEs send keys that have no rule (e.g. `page` on list endpoints, verified in §13.2), and the FE shows every field error. | **Never** add these attributes to any Form Request, and never call `FormRequest::failOnUnknownFields()` globally. They look like "Laravel 13 style" but would break pages (422 on every paginated list) or change error envelopes. | all Form Requests (§4.2) |
+| H18 | **Config cache during tests points tests at the real database.** `bootstrap/cache/config.php` overrides `phpunit.xml`/env. If it exists, tests boot with the local `.env` database (`laravel`), and `RefreshDatabase` can run `migrate:fresh` against it. *Observed on 2026-10-09:* a `config:cache` run concurrently with the SQLite suite made `ParentProvisioningTest` read the dev DB (301 real rows + 1). Its transaction rolled back and the data was intact. | Never run `config:cache`, `route:cache`, `event:cache` or `optimize` locally while working on this spec. Before every test run, `bootstrap/cache/` must contain only `packages.php` and `services.php`; run `vendor/bin/sail artisan config:clear` if unsure (the composer `test` script does this too). | every task |
 | H14 | **Lazy-loading prevention.** Enabling it throws on existing lazy loads (e.g. `OrderResource` reads `student->wallet` where only `student` is eager-loaded in `TransactionController::index`). | T-13 must fix every violation the full suite surfaces, and must throw **only in `testing`**. `local` and `staging` log instead, because developers run both frontends against `APP_ENV=local`. | §4.5.4 |
 
 ## 4. Track A components
@@ -182,6 +184,7 @@ Fill optional fields in the scenario wherever possible (e.g. `section`, `allergi
 - **`RoleAuthorizationMatrixTest`:** for each kitchen route, reads `$route->gatherMiddleware()` and finds any `role:x|y` entry. For each role in `['admin', 'manager', 'supervisor', 'cashier']` it calls the route with scenario-resolved parameters and a `{}` body.
   - It asserts `403` when the role is not listed.
   - Otherwise it asserts the status is **not** `403`, with an explicit exceptions array for business-rule 403s: `POST api/v1/users/{user}/deactivate` when `{user}` is the actor.
+  - **Do not use a PHPUnit data provider here.** PHPUnit 12 runs data providers before the Laravel application boots, so `Route::getRoutes()` (a facade) is unavailable inside a provider. Write one test method per role (`test_admin_route_access()`, `test_manager_route_access()`, `test_supervisor_route_access()`, `test_cashier_route_access()`). Each iterates the routes at runtime, collects mismatches as `"{METHOD} {uri}: expected 403, got {status}"`, and ends with one `assertSame([], $mismatches)`, so a failure lists every offending route at once. (PHPUnit 12 also removed docblock annotations: if any new test needs a provider, use `#[DataProvider('name')]` on a `public static` method that returns literal data only.)
   - Parameter resolution is by URI:
     - `{item}` under `pos/menu-items` or `references/menu-items` → `PosMenuItem`; under `inventory` → `InventoryItem`
     - `{student}`, `{order}`, `{payment}`, `{contact}`, `{parent}`, `{user}`, `{branch}`, `{feedback}`, `{announcement}`, `{preRegistration}`, `{branchMonthlyAmount}`, `{inventoryItem}`, `{key}` = `credit_limit`, `{id}` = a notification uuid of the actor, `{transaction}` = the deposit id
@@ -1061,7 +1064,7 @@ Agent: `laravel:laravel-simplifier` (installed via the Laravel plugin). Its defa
 2. Build the scope: `git diff --name-only <spec16-start-sha>..HEAD -- app routes bootstrap config`. `<spec16-start-sha>` is `3454977`; record it in the T-1 commit body. Only PHP files in that list are in scope; tests and fixtures are **out of scope**.
 3. Invoke the agent with this prompt, verbatim, with the file list appended:
 
-   > Review and simplify ONLY these files, which were changed by Spec 16: <file list>. Read `.kiro/specs/16-backend-code-quality/design.md` §3 (hazards H1–H16) and §14 (Laravel 13 standards, including the rejected list in §14.3) first; every hazard is a hard constraint. Do NOT: make classes `final`, add `declare(strict_types=1)`, use PHP 8.4+ syntax (`composer.json` requires `^8.3`), or convert `Carbon::create*()` month loops to `now()`/immutable dates (H16); create custom exception classes or an `app/Exceptions/` directory (spec Req 2.7); merge or "consolidate" validation rule sets, Form Requests or Resources across endpoints (H13); add, remove or change any `(float)`/`(int)`/`round()` cast (H1, H15); change any `abort()` into `response()->json()` or the reverse (H3); move guards out of `prepareForValidation()` (H4); switch between Eloquent `update()` and query-builder `update()` (H5); return a `JsonResource` directly from a controller (H6); replace `$request->only(...)` in the password-reset controllers (H7); tighten any permissive rule (H8); change any response key, message text, status code, activity-log name or property; remove docblocks that explain cross-branch (`withoutBranch`) reasons, or the comment on `WalletController::voidTopUp`'s `int|string` parameter. Do simplify: naming, nesting, dead code, redundant local variables, import order, nested ternaries into `match`, and duplicated private helpers *within* one class. For every change, state the file and a one-line reason. For every rule of yours you chose NOT to apply because of the constraints above, list it as "rejected: <hazard id>".
+   > Review and simplify ONLY these files, which were changed by Spec 16: <file list>. Read `.kiro/specs/16-backend-code-quality/design.md` §3 (hazards H1–H18) and §14 (Laravel 13 standards, including the rejected list in §14.3 and the attribute inventory in §14.5) first; every hazard is a hard constraint. Do NOT: make classes `final`, add `declare(strict_types=1)`, use PHP 8.4+ syntax (`composer.json` requires `^8.3`), or convert `Carbon::create*()` month loops to `now()`/immutable dates (H16); create custom exception classes or an `app/Exceptions/` directory (spec Req 2.7); merge or "consolidate" validation rule sets, Form Requests or Resources across endpoints (H13); add, remove or change any `(float)`/`(int)`/`round()` cast (H1, H15); change any `abort()` into `response()->json()` or the reverse (H3); move guards out of `prepareForValidation()` (H4); switch between Eloquent `update()` and query-builder `update()` (H5); return a `JsonResource` directly from a controller (H6); replace `$request->only(...)` in the password-reset controllers (H7); tighten any permissive rule (H8); change any response key, message text, status code, activity-log name or property; remove docblocks that explain cross-branch (`withoutBranch`) reasons, or the comment on `WalletController::voidTopUp`'s `int|string` parameter. Do simplify: naming, nesting, dead code, redundant local variables, import order, nested ternaries into `match`, and duplicated private helpers *within* one class. For every change, state the file and a one-line reason. For every rule of yours you chose NOT to apply because of the constraints above, list it as "rejected: <hazard id>".
 
 4. Run the full verification gate: both databases, zero fixture diffs, role matrix, Pint.
 5. Revert any single change that fails the gate; don't debug the simplifier's output. List the reverted items in the PR.
@@ -1211,3 +1214,56 @@ vendor/bin/sail bin pint --format agent                 # reports no changes (CI
 ```
 
 Any unexpected hit is fixed in the T-18 commit, behaviour-identically. If it cannot be fixed that way, list it as an exception with its reason.
+
+### 14.5 Complete Laravel 13.35 attribute inventory
+
+Source: every class under `vendor/laravel/framework/src/Illuminate/**/Attributes/` in the installed 13.35.0 (listed 2026-10-09). The article *"PHP Attributes in Laravel 13: A Comprehensive Guide"* (msaied.com) was cross-checked. It covers the Eloquent model attributes (`Fillable`, `Guarded`, `Unguarded`, `Hidden`, `Visible`, `Appends`, `Touches`, `Table`, `Connection`) and the queue attributes (`Tries`, `Timeout`, `Backoff`), states that attributes are optional and that properties remain supported, and is fully consistent with the table below. Each attribute's applicability was verified with `rg` against `app/`, `database/factories` and `tests/`.
+
+**Use only what this table says. Do not add any attribute marked N/A or Forbidden.**
+
+| Area | Attribute | Status in Spec 16 | Evidence / reason |
+|---|---|---|---|
+| Eloquent | `#[Table]` | **Adopt** (T-16) | 3 models declare `$table` |
+| Eloquent | `#[Fillable]` | **Adopt** (T-16) | 24 models declare `$fillable` |
+| Eloquent | `#[Hidden]` | **Adopt** (T-16) | `User`, `ParentUser` |
+| Eloquent | `#[WithoutTimestamps]` | **Adopt** (T-16) | `CreditTransaction`, `InventoryLog`, `WalletTopupVoid` |
+| Eloquent | `#[Scope]` | **Adopt** (T-12) | `InventoryItem` `scopeActive`/`scopeArchived`; new `InventoryLog::forActiveItemsInBranch` |
+| Eloquent | `#[UsePolicy]` | **Adopt** (T-2) | `Order`, `User`, `Student` |
+| Eloquent | `#[Guarded]`, `#[Unguarded]`, `#[Visible]`, `#[Appends]`, `#[Touches]`, `#[Connection]`, `#[DateFormat]`, `#[WithoutIncrementing]`, `#[RouteKey]`, `#[CollectedBy]`, `#[UseEloquentBuilder]`, `#[Refreshes]` | N/A | 0 models declare `$guarded`, `$visible`, `$appends`, `$touches`, `$connection`, `$dateFormat`, `$incrementing`, `$primaryKey`/`$keyType`, `getRouteKeyName()`, `newCollection()`, `newEloquentBuilder()` or refresh columns |
+| Eloquent | `#[ObservedBy]` | N/A (keep) | `SystemConfiguration::booted()` uses a `static::updated` closure (documented Laravel pattern). An observer would add a new class for one line |
+| Eloquent | `#[ScopedBy]`, `#[Boot]`, `#[Initialize]` | N/A (keep) | `HasBranch::bootHasBranch()` registers the scope **and** a `creating` hook; `ScopedBy` cannot express the hook, and the `boot{Trait}` naming convention remains supported |
+| Eloquent | `#[UseFactory]` | N/A | every model's factory resolves by convention (`Database\Factories\{Model}Factory`) |
+| Eloquent | `#[UseResource]`, `#[UseResourceCollection]` | Rejected (§14.3) | explicit `new XResource()` stays |
+| Factories | `#[UseModel]` | N/A | 0 factories declare `protected $model` |
+| Queue | `#[Tries]`, `#[Backoff]` | **Adopt** (T-14.3, Q7) | `WalletAlertJob` |
+| Queue | `#[Timeout]`, `#[MaxExceptions]`, `#[FailOnTimeout]`, `#[Queue]`, `#[Connection]`, `#[Delay]`, `#[DebounceFor]`, `#[UniqueFor]`, `#[DeleteWhenMissingModels]`, `#[WithoutRelations]`, `#[CountCrashesAsExceptions]` | N/A | no job, mailable or notification sets these properties today; adding any would change queue behaviour (not requested) |
+| Queue (contract) | `ShouldQueueAfterCommit` (interface, not an attribute) | **Adopt** (T-14, Q5) | 5 notifications + `ParentWelcomeMail` |
+| Console | `#[Signature]`, `#[Description]` | Already used | all 3 commands |
+| Console | `#[Aliases]`, `#[Help]`, `#[Hidden]`, `#[Usage]` | N/A | no command needs them |
+| Controllers | `#[Authorize]` | **Adopt** (T-2) | the 14 `$this->authorize()` calls |
+| Controllers | `#[Middleware]`, `#[WithoutMiddleware]` | Rejected | route files stay the source of truth for middleware (Req 6.1); B-02's exemptions use the route-file `->withoutMiddleware()` method instead |
+| Form Requests | `#[FailOnUnknownFields]`, `#[StopOnFirstFailure]`, `#[ErrorBag]`, `#[RedirectTo]`, `#[RedirectToRoute]` | **Forbidden** | hazard H17 |
+| Container | `#[CurrentUser]` | Allowed only in new Action signatures (Req 9.4) | not adopted wholesale |
+| Container | `#[Auth]`, `#[Authenticated]`, `#[Bind]`, `#[BindWhen]`, `#[Cache]`, `#[Config]`, `#[Context]`, `#[DB]`, `#[Database]`, `#[Give]`, `#[Log]`, `#[RequestAttribute]`, `#[RouteParameter]`, `#[Scoped]`, `#[Singleton]`, `#[Storage]`, `#[Tag]` | N/A | no manual container bindings exist (`AppServiceProvider` has none). Services and Actions resolve by autowiring, and replacing `Storage::disk('private')` facade calls with injected disks is churn with no behaviour gain |
+| Resources | `#[Collects]`, `#[PreserveKeys]` | N/A | no `ResourceCollection` subclass declares `$collects`/`$preserveKeys` |
+| Testing (Laravel) | `#[Seed]`, `#[Seeder]`, `#[SetUp]`, `#[TearDown]` | Not used | all 80 existing seeding calls are `$this->seed(PermissionSeeder::class)` in `setUp()`. `#[Seed]`/`#[Seeder]` seed during migration (`CanConfigureMigrationCommands`), not per test, so new tests follow the existing `setUp()` pattern for consistency |
+| Testing (Laravel) | `#[UnitTest]` | N/A | pure unit tests already extend `PHPUnit\Framework\TestCase` (e.g. `tests/Unit/CreditEnumsTest.php`) |
+| Testing (PHPUnit 12) | `#[DataProvider]`, `#[Test]`, `#[Group]`, … | Use only if needed | 0 docblock annotations exist (PHPUnit 12 removed them). Tests are named `test_*`, so `#[Test]` is not needed. Providers must be static and literal (§4.1.5) |
+
+**Unit test base classes in this spec:**
+- **Pure logic, no framework:** `ShapeExtractorTest`, `PaymentStatusTest`, the `WalletAlertJob` attribute reflection test. These extend `PHPUnit\Framework\TestCase`.
+- **Needs the container, config, Gate or models:** `ModelAttributesTest`, `PolicyResolutionTest`, the lazy-loading handler test, contract tests. These extend `Tests\TestCase`.
+
+### 14.6 Verified baseline before implementation (2026-10-09, HEAD `b8f82b1`)
+
+| Check | Command | Result |
+|---|---|---|
+| Framework version | `vendor/laravel/framework/src/Illuminate/Foundation/Application.php` | 13.35.0 |
+| Test suite, MySQL | `vendor/bin/sail artisan test --compact` | 951/951 passed |
+| Test suite, SQLite (CI driver) | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact` | 951/951 passed (no deprecations with `--display-deprecations`) |
+| Code style | `vendor/bin/sail bin pint --test` (read-only) | passed |
+| Dependency advisories | `vendor/bin/sail composer audit` | no advisories |
+| Deploy caching | `vendor/bin/sail artisan config:cache` + `route:cache`, then `optimize:clear` | both succeed (closures in `routes/api.php`/`web.php` serialise). Caches were cleared afterwards (H18) |
+| API routes | `vendor/bin/sail artisan route:list --path=api --except-vendor` | 165 |
+
+Every Track A commit must leave this table unchanged, except the route count after B-04 (163).

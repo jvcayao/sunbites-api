@@ -212,7 +212,7 @@ A Track A change and a Track B change are never combined in one PR.
 #### Acceptance Criteria
 
 1. The Laravel 13 / PHP idioms listed in design §14.1 (S1–S10) SHALL be applied at every listed site, inside the task named for that row, behaviour-identically.
-2. The idioms rejected in design §14.3 SHALL NOT be introduced: `final` classes, `declare(strict_types=1)`, PHP 8.4+ syntax while `composer.json` requires `php: ^8.3`, `whereLike()` replacing `lower(...) like`, and converting `Carbon::create*()` month loops to immutable dates (hazard H16).
+2. Only the attributes marked *Adopt* in design §14.5 (the complete Laravel 13.35 attribute inventory) SHALL be introduced. The Form Request attributes marked *Forbidden* (hazard H17) SHALL NOT be used. The idioms rejected in design §14.3 SHALL NOT be introduced either: `final` classes, `declare(strict_types=1)`, PHP 8.4+ syntax while `composer.json` requires `php: ^8.3`, `whereLike()` replacing `lower(...) like`, and converting `Carbon::create*()` month loops to immutable dates (hazard H16).
 3. WHEN all Track A and Track B commits and T-17 are done THEN task T-18 SHALL run the audit commands in design §14.4, and every command SHALL return its expected result (0 hits), or list an exception with its reason, in the T-18 commit body.
 4. Every backend task SHALL end by running Laravel Pint through Sail (`vendor/bin/sail bin pint --dirty --format agent`) as required by `.claude/rules/backend/laravel-pint.md`, and before the branch is pushed `vendor/bin/sail bin pint --format agent` SHALL report no changes (CI runs `pint --test` on the whole repo).
 
@@ -230,6 +230,7 @@ A Track A change and a Track B change are never combined in one PR.
 - **Error handling:** envelopes from `bootstrap/app.php` are unchanged, and `abort()` message text is unchanged.
 - **Observability:** Sentry + Flare integration unchanged.
 - **Tooling (non-negotiable):** Laravel Boost + `laravel-best-practices` on every PHP task, `testing-best-practices` on every test change, and a final `laravel-simplifier` pass over all backend changes (Req 12).
+- **Test environment:** never run config/route/event caching locally during this work (hazard H18).
 - **Existing tests:** never edited, except the edits named in `tasks.md` ground rules (T-12.3, T-17.1, B-04, B-05).
 - **Frontend integration:** every commit is checked against the FE integration matrix in design §13. After the single PR merges to `staging`, the full page checklist (design §13.3) is run on staging before promoting to `main`.
 - **Delivery (Q3, updated 2026-10-09):** all work is committed on the **current branch `bump-laravel-13-latest`** (no new branch); start commit `3454977`; one commit per task group and per approved Track B item; `type(scope): description` subjects with no AI attribution trailers; the user opens and merges the single PR, preferably **without squash** so each area stays revertible (design §6).
