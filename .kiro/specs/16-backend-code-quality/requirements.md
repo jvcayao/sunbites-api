@@ -2,25 +2,25 @@
 
 ## Introduction
 
-The Sunbites API (Laravel **13.33.0**, PHP 8.5) works and has a strong regression net (94 feature test files, ~950 tests; MySQL 8.4 locally, SQLite in CI). It also grew feature by feature across Specs 01–15, and the code shows it:
+The Sunbites API (Laravel **13.35.0**, PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on MySQL on 2026-10-09; MySQL 8.4 locally, SQLite in CI). It also grew feature by feature across Specs 01–15, and the code shows it:
 - 83 controller methods (48 files) validate inline.
 - About 200 `response()->json([...])` calls hand-build response arrays.
 - Business rules live in controllers (Checkout 308 lines, Reminders 360, Analytics 535).
 - String literals stand in for enums (`'paid'`/`'unpaid'`/`'voided'`).
-- Current Laravel 13 idioms (`#[Scope]`, `#[UsePolicy]`, `#[Authorize]`, `#[Tries]`, notification `afterCommit()`) are not used.
+- Current Laravel 13 idioms (`#[Scope]`, `#[UsePolicy]`, `#[Authorize]`, `#[Tries]`, `ShouldQueueAfterCommit`) are not used.
 
 This spec modernises the backend to Laravel 13 conventions and the project's `laravel-best-practices` rules **without changing any response the two frontends consume** (`~/sunbites-pos`, `~/sunbites-portal`).
 
 The audit also found **real defects**: cross-branch access, a stock race, a reCAPTCHA bypass, a school-year bug that spans backend and frontend, PII leaking through raw model serialisation, and blank UI fields. Fixing a defect changes behaviour by definition, so the work has two tracks:
 
 - **Track A (refactor):** must be provably behaviour-neutral. Every Track A PR is verified by one rule: *the contract fixtures did not change*.
-- **Track B (defect fixes):** opt-in per item, one PR each, each starting with a failing test and stating its frontend impact.
+- **Track B (defect fixes):** opt-in per item, one commit each (Q3: one commit per area, all pushed as one PR), each starting with a failing test and stating its frontend impact.
 
 A Track A change and a Track B change are never combined in one PR.
 
 **Depends on:** Specs 01–15 (all merged). Spec 14 (`CreditLedgerService`) and Spec 15 (`WalletTopupVoid`) are the reference style.
 
-**Verification basis:** every finding in [Appendix A](#appendix-a--audit-findings) was verified by reading the backend code and, where a frontend consumes the field, the matching page or type in `~/sunbites-pos` / `~/sunbites-portal` (verified 2026-09-26).
+**Verification basis:** every finding in [Appendix A](#appendix-a--audit-findings) was verified by reading the backend code and, where a frontend consumes the field, the matching page or type in `~/sunbites-pos` / `~/sunbites-portal` (verified 2026-09-26; re-verified 2026-10-09 after the Laravel 13.35 `composer update`, with a full FE call-site to route mapping, recorded in design §13).
 
 ### Steering alignment
 
@@ -41,7 +41,7 @@ A Track A change and a Track B change are never combined in one PR.
 3. WHEN a route validates input or has a documented error path THEN it SHALL also have fixtures for each error envelope in use today, including the non-standard ones: `{ "errors": {...} }` with **no** `message` (subscription end-before-start in `EnrollmentController::store`, `PaymentController::addRange`, `Public\PreRegistrationController::store`; `Portal\ProfileController::changePassword`), and `{ "message", "error": "account_not_activated" | "account_disabled" }` from portal login.
 4. The system SHALL have a route-coverage test that fails when any API route lacks a success fixture. Adding a route without a fixture breaks CI.
 5. The system SHALL have a role-authorization matrix test asserting, for every route inside a `role:` middleware group, that each of `admin`, `manager`, `supervisor`, `cashier` receives 403 exactly when its role is not listed.
-6. IF a Track A change alters any fixture or matrix expectation THEN it is a regression and SHALL NOT merge. Fixtures change only in Track B PRs, and each changed fixture is listed in the PR description with its frontend impact.
+6. IF a Track A change alters any fixture or matrix expectation THEN it is a regression and SHALL NOT merge. Fixtures change only in Track B commits, and each changed fixture is listed in that commit's body and in the PR description with its frontend impact.
 7. WHEN fixtures are recorded THEN each recorded shape SHALL be cross-checked against the consuming TypeScript interface in `~/sunbites-pos/lib/api/*.ts`, `~/sunbites-pos/types/*.ts`, `~/sunbites-portal/lib/api/*.ts` and `~/sunbites-portal/types/*.ts`. Every mismatch SHALL be logged in `.kiro/specs/16-backend-code-quality/contract-gaps.md` and not fixed in Track A.
 8. The system SHALL NOT assert JSON key order (`.claude/rules/testing.md`).
 
@@ -84,8 +84,8 @@ A Track A change and a Track B change are never combined in one PR.
 3. A `PaymentStatus` string-backed enum (`Paid = 'paid'`, `Unpaid = 'unpaid'`, `Voided = 'voided'`) SHALL cast `student_monthly_payments.status`, and every comparison site listed in design §4.5.2 SHALL be updated, including in-memory collection filters (`$payments->where('status', 'paid')`), which would otherwise silently match nothing.
 4. The literal `'enrolled'` in `EnrollmentService` and the `'subscription'`/`'non_subscription'`/`'completed'` literals in Eloquent (not raw SQL) queries in report controllers SHALL use the existing `EnrollmentStatus`, `StudentType` and `OrderStatus` enums.
 5. Policies SHALL be bound with `#[UsePolicy]` where a model→policy mapping exists (`Order`→`OrderPolicy`, `User`→`UserPolicy`, `Student`→`ParentStudentPolicy`). `Gate::policy(ReportPolicy::class, ReportPolicy::class)` and the unused `ReportPolicy`/`StudentPolicy` classes SHALL be removed. Neither is referenced by any `authorize()`/`can()` call (verified by grep).
-6. `Model::preventLazyLoading()` SHALL be enabled so that violations **throw only in `local` and `testing`** and are **logged, not thrown**, in any other non-production environment (e.g. staging). Every violation the test suite surfaces SHALL be fixed with eager loading in the same PR.
-7. Adopting `#[Fillable]`/`#[Hidden]`/`#[Table]` class attributes is **optional (Q4)** and, if approved, all-or-nothing across `app/Models/` in a dedicated final PR.
+6. `Model::preventLazyLoading()` SHALL be enabled so that violations **throw only in `testing`** and are **logged, not thrown**, in every other non-production environment (`local`, `staging`). `local` must not throw: developers run the POS and portal against the local API (`APP_ENV=local` in `.env`), so any code path the tests don't cover would otherwise break pages on their machines. Every violation the test suite surfaces SHALL be fixed with eager loading in the same PR.
+7. *(Q4 approved 2026-10-09)* Every model in `app/Models/` SHALL move `$table`, `$fillable`, `$hidden` and `$timestamps = false` to the Laravel 13 class attributes `#[Table]`, `#[Fillable]`, `#[Hidden]` and `#[WithoutTimestamps]`, all in one commit (T-16), per design §4.5.5. A model-attribute snapshot test SHALL pass before and after. The same commit adds the missing `@use HasFactory<…>` and relation generic docblocks.
 8. `Model::preventSilentlyDiscardingAttributes()` SHALL NOT be enabled. Several code paths rely on silent discarding today (e.g. `User::create($validated)` with `role`, `branch_ids`, `profile_photo`; `contacts()->createMany()` with `id`), and enabling it would turn working requests into 500s on staging.
 
 ### Requirement 5: API Resources for duplicated response shapes
@@ -132,11 +132,11 @@ A Track A change and a Track B change are never combined in one PR.
 
 #### Acceptance Criteria
 
-1. The five notification classes (`AnnouncementNotification`, `CreditChargedNotification`, `CreditSettledNotification`, `PaymentReminderNotification`, `PreRegistrationNotification`) SHALL call `$this->afterCommit()` in their constructors. The queue connection's `after_commit` stays `false` (Q5).
-2. The mailables queued inside transactions (`ParentWelcomeMail` via `ParentProvisioningService::provision`, called inside `EnrollmentController::store` and `PreRegistrationController::approve` transactions) SHALL be queued after commit via `->afterCommit()` on the mailable.
-3. `WalletAlertJob` SHALL declare `#[Tries(3)]` and `#[Backoff(10, 60)]`. This is a change from today's default of one attempt, so it is listed as a Track A exception requiring approval (Q7).
+1. The five notification classes (`AnnouncementNotification`, `CreditChargedNotification`, `CreditSettledNotification`, `PaymentReminderNotification`, `PreRegistrationNotification`) SHALL implement `Illuminate\Contracts\Queue\ShouldQueueAfterCommit` in place of `ShouldQueue` (it extends `ShouldQueue`; honoured by `SendQueuedNotifications`, verified in 13.35). The queue connection's `after_commit` stays `false` (Q5).
+2. `ParentWelcomeMail`, which is queued inside transactions via `ParentProvisioningService::provision` (called inside the `EnrollmentController::store` and `PreRegistrationController::approve` transactions), SHALL implement `ShouldQueueAfterCommit` in place of `ShouldQueue` (honoured by `SendQueuedMailable`, verified in 13.35). Its other two call sites (`StudentContactController::resendActivation`, `ParentController::resendActivation`) run outside transactions, so they still dispatch immediately.
+3. *(Q7 approved 2026-10-09)* `WalletAlertJob` SHALL declare `#[Tries(3)]` and `#[Backoff(10, 60)]` (3 attempts, retried after 10 s and then 60 s). This is a deliberate change from today's single attempt.
 4. Notification payloads (`toArray()`/`toDatabase()`), `via()` channels and broadcast channel names SHALL NOT change.
-5. Because tests run with `QUEUE_CONNECTION=sync`, tests SHALL assert after-commit behaviour with `Notification::fake()` plus an explicit rolled-back transaction case.
+5. After-commit behaviour SHALL be tested with real side effects (the `notifications` table, and `MessageSending` events via `Event::fake([MessageSending::class])`) for both a rolled-back and a committed transaction. `Queue::fake()`, `Notification::fake()` and `Mail::fake()` SHALL NOT be used for these tests, because the fakes record immediately and ignore after-commit (verified in 13.35, design §4.7).
 
 ### Requirement 9: Framework and project hygiene
 
@@ -145,17 +145,17 @@ A Track A change and a Track B change are never combined in one PR.
 #### Acceptance Criteria
 
 1. `composer.json` `name` SHALL become `sunbites/api` and `description` SHALL describe the API. The `dev` script SHALL drop the `npm run dev` process, and `ci:check` SHALL drop the `npm run lint:check`, `format:check` and `types:check` steps (steering D6). No `require`/`require-dev` change.
-2. `bootstrap/app.php` exception rendering SHALL stay as is. `renderable()` and `render()` are aliases in Laravel 13.33 (verified in `Illuminate\Foundation\Configuration\Exceptions`), so there is nothing to modernise.
+2. `bootstrap/app.php` exception rendering SHALL stay as is. `renderable()` and `render()` are aliases in Laravel 13.35 (re-verified on 2026-10-09 in `Illuminate\Foundation\Configuration\Exceptions`), so there is nothing to modernise.
 3. New cross-cutting defaults (Req 4.6) live in `AppServiceProvider::configureDefaults()`.
 4. `#[CurrentUser]` SHALL NOT be adopted wholesale; it MAY appear in new Action entry points only.
 
-### Requirement 10: Track B, behaviour-changing defect fixes *(opt-in, per item)*
+### Requirement 10: Track B, behaviour-changing defect fixes *(all 15 items, B-01–B-05 and B-07–B-16, approved 2026-10-09; B-06 merged into B-05)*
 
 **User Story:** As the product owner, I want each real defect listed separately with its verified frontend impact, so that I can approve, defer or reject each one.
 
 #### Acceptance Criteria
 
-1. Each Track B item SHALL ship in its own PR, SHALL start with a failing test that reproduces the defect, SHALL update only the fixtures it names, and SHALL state its frontend impact exactly as recorded in design §5.
+1. Each Track B item SHALL ship in its own commit, SHALL start with a failing test that reproduces the defect, SHALL update only the fixtures it names, and SHALL state its frontend impact exactly as recorded in design §5.
 2. **B-01 Cross-branch access.** A staff user acting on a record from another branch SHALL get 404 `{"message":"Not found."}`:
    - `Kitchen\ParentController` `show`, `disable`, `enable`, `destroy`, `restore`, `resendActivation` (parent must have a student in the active branch)
    - `InventoryController::unarchive` (drop `withoutBranch()`)
@@ -177,16 +177,19 @@ A Track A change and a Track B change are never combined in one PR.
 13. **B-13 Blank student name on the sales report.** The POS sales page renders `order.student.full_name`, but the raw `Student` serialisation has no `full_name`, so the column is blank. It is fixed by B-12's shape.
 14. **B-14 500 on bad status input.** `PATCH /students/{student}/status` calls `EnrollmentStatus::from($request->enrollment_status)` inside the rule definition, so a missing or invalid value returns 500 instead of 422. It SHALL use `tryFrom`.
 15. **B-15 Portal payment-history 403 message.** See Req 6.3.
+16. **B-16 Archived inventory unreachable in POS.** The POS inventory page (`references/inventory/page.tsx:894-895`) splits `GET /references/inventory` into active and archived sections and offers "Unarchive". But `InventoryController::index` returns only `InventoryItem::active()`, so the archived section is always empty and unarchive cannot be reached. `GET /api/v1/references/inventory` SHALL return active **and** archived items (ordered by `name`), and `GET /api/v1/pos/inventory` SHALL keep returning active items only. Verified safe: every consumer of `/references/inventory` already filters `is_archived` client-side where it needs active items (`components/pos/menu-mgmt-tab.tsx:442`, `reports/inventory/page.tsx:539`).
 
-### Requirement 11: Dependency and surface cleanup *(needs dependency approval, Q6)*
+### Requirement 11: Dependency and surface cleanup *(Q6 approved 2026-10-09, on condition that the API is not affected)*
 
 **User Story:** As a security reviewer, I want unused packages and routes removed, so that the attack surface matches what the product uses.
 
 #### Acceptance Criteria
 
-1. IF approved THEN `laravel/fortify` SHALL be removed, or its routes disabled (`Fortify::ignoreRoutes()`), after confirming staff password reset does not depend on it (it uses `Password` broker directly in `Kitchen\AuthController`) (steering D2).
-2. IF approved THEN `binafy/laravel-cart` SHALL be removed (steering D4).
-3. IF approved THEN the top-level `/broadcasting/auth` web route SHALL be removed by dropping `channels:` from `withRouting()` and requiring `routes/channels.php` directly (steering D3).
+1. `laravel/fortify` SHALL be removed (package, `config/fortify.php`, and the unused `TestCase::skipUnlessFortifyHas()` helper). Verified: staff password reset uses the `Password` broker directly in `Kitchen\AuthController`, and no API route depends on Fortify (steering D2; design §4.8).
+2. `binafy/laravel-cart` SHALL be removed (steering D4).
+3. The top-level `/broadcasting/auth` web route SHALL be removed by dropping `channels:` from `withRouting()` and loading `routes/channels.php` from `AppServiceProvider::boot()` (steering D3).
+4. Before any removal, `BroadcastChannelAuthTest` SHALL be added (none exists today) proving staff and parent private-channel authorization on the two `/api` auth routes.
+5. **The API SHALL NOT be affected:** `route:list --path=api --except-vendor --json` is identical before and after, the contract suite has zero fixture diffs, and the full suite passes on both databases (design §4.8).
 
 ### Requirement 12: Mandatory tooling and final simplification pass *(non-negotiable)*
 
@@ -198,9 +201,20 @@ A Track A change and a Track B change are never combined in one PR.
 2. WHEN a task uses any Laravel or first-party package API (Form Requests, attributes, Resources, Eloquent, queues, notifications, validation rules, middleware) THEN the implementer SHALL first query the Laravel Boost `search-docs` tool for that API, and SHALL use the other Boost tools as specified in design §12.
 3. WHEN a task writes or changes tests THEN the `testing-best-practices` skill SHALL be activated. WHEN it touches `app/Exports/` THEN `laravel-excel`. WHEN it touches roles, permissions or `role:` middleware THEN `laravel-permission-development`. WHEN it touches Fortify THEN `fortify-development`.
 4. IF the Laravel Boost MCP server is not connected (it runs through Sail: `vendor/bin/sail artisan boost:mcp`) THEN the implementer SHALL start Sail (`vendor/bin/sail up -d`), reconnect, and SHALL NOT continue the task until Boost is available.
-5. Every PR description SHALL contain a **Tooling log**: the skills activated, the rule files read, and each `search-docs` query with the doc section it relied on.
-6. WHEN every backend task in this spec (Track A and every approved Track B item) is merged THEN a final task SHALL run the `laravel:laravel-simplifier` agent over the complete Spec 16 backend diff, under the constraints in design §12.3. Its changes SHALL pass the full verification gate (both databases, zero contract-fixture diffs, role matrix) before merging.
+5. The PR description SHALL contain a **Tooling log** with one block per commit: the skills activated, the rule files read, and each `search-docs` query with the doc section it relied on.
+6. WHEN every backend commit in this spec (Track A, every approved Track B item, and the T-18 standards audit) is on `bump-laravel-13-latest` THEN a final task (T-19) SHALL run the `laravel:laravel-simplifier` agent over the complete Spec 16 backend diff (`<spec16-start-sha>..HEAD`), under the constraints in design §12.3, before the branch is pushed for the PR. Its changes SHALL pass the full verification gate (both databases, zero contract-fixture diffs, role matrix, Pint).
 7. The simplifier pass SHALL NOT change behaviour, response shapes, validation rule sets, messages, status codes, activity-log calls or hazard-protected code (design §3). Any simplifier suggestion that would do so SHALL be rejected and listed in the PR as "rejected: <hazard id>".
+
+### Requirement 13: Laravel 13 and PHP standards alignment *(final check)*
+
+**User Story:** As the spec owner, I want the backend to follow Laravel 13 conventions, the project's PHP code standards and Pint styling everywhere this spec touches, so that the codebase reads as one consistent Laravel 13 application.
+
+#### Acceptance Criteria
+
+1. The Laravel 13 / PHP idioms listed in design §14.1 (S1–S10) SHALL be applied at every listed site, inside the task named for that row, behaviour-identically.
+2. The idioms rejected in design §14.3 SHALL NOT be introduced: `final` classes, `declare(strict_types=1)`, PHP 8.4+ syntax while `composer.json` requires `php: ^8.3`, `whereLike()` replacing `lower(...) like`, and converting `Carbon::create*()` month loops to immutable dates (hazard H16).
+3. WHEN all Track A and Track B commits and T-17 are done THEN task T-18 SHALL run the audit commands in design §14.4, and every command SHALL return its expected result (0 hits), or list an exception with its reason, in the T-18 commit body.
+4. Every backend task SHALL end by running Laravel Pint through Sail (`vendor/bin/sail bin pint --dirty --format agent`) as required by `.claude/rules/backend/laravel-pint.md`, and before the branch is pushed `vendor/bin/sail bin pint --format agent` SHALL report no changes (CI runs `pint --test` on the whole repo).
 
 ---
 
@@ -216,15 +230,19 @@ A Track A change and a Track B change are never combined in one PR.
 - **Error handling:** envelopes from `bootstrap/app.php` are unchanged, and `abort()` message text is unchanged.
 - **Observability:** Sentry + Flare integration unchanged.
 - **Tooling (non-negotiable):** Laravel Boost + `laravel-best-practices` on every PHP task, `testing-best-practices` on every test change, and a final `laravel-simplifier` pass over all backend changes (Req 12).
-- **Existing tests:** never edited, except the three edits named in `tasks.md` ground rules (T-12.3, B-04, B-05).
-- **Testing:** every PR runs the full suite on MySQL (`vendor/bin/sail artisan test --compact`) **and** SQLite (`DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact`), plus `vendor/bin/sail bin pint --dirty --format agent`.
+- **Existing tests:** never edited, except the edits named in `tasks.md` ground rules (T-12.3, T-17.1, B-04, B-05).
+- **Frontend integration:** every commit is checked against the FE integration matrix in design §13. After the single PR merges to `staging`, the full page checklist (design §13.3) is run on staging before promoting to `main`.
+- **Delivery (Q3, updated 2026-10-09):** all work is committed on the **current branch `bump-laravel-13-latest`** (no new branch); start commit `3454977`; one commit per task group and per approved Track B item; `type(scope): description` subjects with no AI attribution trailers; the user opens and merges the single PR, preferably **without squash** so each area stays revertible (design §6).
+- **Code style:** Pint through Sail after every backend task (`.claude/rules/backend/laravel-pint.md`); PHP 8.3-compatible syntax only (`composer.json` `php: ^8.3`); hazard H16 (Carbon mutability) applies to every date-loop edit.
+- **Testing:** every commit runs the full suite on MySQL (`vendor/bin/sail artisan test --compact`) **and** SQLite inside the Sail container (`docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`), plus `vendor/bin/sail bin pint --dirty --format agent`.
 
 ## Out of Scope
 
 - Database schema changes.
 - Frontend changes. Track B items document FE impact; none requires a FE change except as noted in design §5.
 - New features, endpoints, route renames, API versioning.
-- `JsonApiResource`, DTO/Data packages, repository pattern, static analysis (Larastan) or any new dependency.
+- `JsonApiResource`, DTO/Data packages, repository pattern, static analysis (Larastan) or any new dependency. (Removals approved under Req 11 are in scope.)
+- Raising `composer.json` `php` to `^8.5`, or adopting PHP 8.4+ syntax (design §14.3).
 - `AnalyticsController` SQL beyond B-11. Its `isSqlite()` branches stay.
 - Steering discrepancy D1 (POS token in `sessionStorage`) is a frontend change and needs its own POS spec. D5, D7 and D8 are ops or product decisions.
 
@@ -256,4 +274,5 @@ A Track A change and a Track B change are never combined in one PR.
 | A-20 | Raw `User`/`Student` models in report rows leak PII; sales student name blank | `SalesReportController` L69, `BillingReportController`; POS sales/billing pages | B-12, B-13 |
 | A-21 | `EnrollmentStatus::from()` on raw input, 500 on bad value | `StudentController::updateStatus` | B-14 |
 | A-22 | Analytics reads credit limit from config, not System Settings | `AnalyticsController` L442 | B-11 |
-| A-23 | Guards that run before validation (ordering hazard for Form Requests) | 9 methods, design §4.2.2 | A (preserve) |
+| A-23 | Guards that run before validation (ordering hazard for Form Requests) | 18 methods, design §4.2.2 | A (preserve) |
+| A-24 | `/references/inventory` omits archived items the POS page expects; unarchive unreachable | `InventoryController::index`; POS `references/inventory/page.tsx:894` | B-16 |

@@ -7,26 +7,35 @@
   - **Before any test work:** activate `testing-best-practices`.
   - **Domain skills:** `laravel-excel` (exports), `laravel-permission-development` (roles), `fortify-development` (T-17.1).
   - **Boost:** confirm the Laravel Boost MCP is connected (`vendor/bin/sail up -d`); run `application-info` at PR start and `search-docs` before using any Laravel or package API. Use `database-schema`/`database-query` before model, enum or raw-SQL changes (design §12.2). **Do not proceed without Boost.**
-  - **Tooling log:** every PR description includes one listing skills, rule files read, and each `search-docs` query with the section used.
+  - **Tooling log:** the PR description includes one block per commit listing skills, rule files read, and each `search-docs` query with the section used.
+  - **Laravel Pint (non-negotiable, `.claude/rules/backend/laravel-pint.md`):** every backend task ends with `vendor/bin/sail bin pint --dirty --format agent` before it is reported done or committed. Before pushing the branch, `vendor/bin/sail bin pint --format agent` must report no changes (CI runs `pint --test`).
+  - **Laravel 13 standards:** each task also applies the design §14.1 rows (S1–S10) assigned to it, and never introduces anything in §14.3.
 
 - **Before starting any task:**
-  - Read `design.md` §3 (hazards H1–H15).
+  - Read `design.md` §3 (hazards H1–H16) and §14 (Laravel 13 standards).
   - Read the design section the task cites.
   - Read the current code of every file you will touch.
   - If the code differs from what the design describes, **stop and report**. Do not adapt silently.
-- **One task group = one PR** (branch `refactor/spec16-T{n}-{slug}` or `fix/spec16-B{nn}-{slug}`), except where a task says otherwise.
-- **Track A PRs must not modify any file under `tests/Fixtures/contracts/`.** Track B PRs modify only the fixtures listed in the task.
-- **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
+- **Delivery (Q3, design §6; updated 2026-10-09):** **do not create a new branch.** All commits go on the current branch, `bump-laravel-13-latest`. Confirm with `git branch --show-current` before every commit, and never commit on `main`.
+  - **One commit per task group** (T-1 … T-19) and **one commit per approved Track B item**, in the order of design §6.
+  - Subjects use `type(scope): description` (imperative, < 72 chars) per `.claude/agents/git-workflow.md`.
+  - **No `Co-Authored-By`, `Signed-off-by` or AI attribution** in commits or the PR.
+  - `<spec16-start-sha>` = **`3454977`** (HEAD of `bump-laravel-13-latest` on 2026-10-09, before any Spec 16 commit). Record it in the T-1 commit body.
+  - The first commit is the spec/steering/rules documents: `docs(spec16): add backend code quality spec, steering update and pint rule`.
+  - After T-19, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
+- **Track A commits must not modify any file under `tests/Fixtures/contracts/`.** Track B commits modify only the fixtures listed in the task.
+- **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), T-17.1 (`tests/TestCase.php` unused Fortify helper), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
 - **`make:request` generates `authorize(): bool { return false; }`** (verified in the framework stub). Every Form Request in this spec MUST change it to `return true;`, since authorization lives in route middleware and `#[Authorize]`. Leaving `false` makes the endpoint return 403 for everyone. The contract suite catches this, but check it anyway.
 - **Create files with Artisan**, then fill them in:
   - `vendor/bin/sail artisan make:request Kitchen/ListActivityLogsRequest --no-interaction`
   - `make:class`, `make:enum`, `make:middleware`, `make:resource`, `make:test --phpunit`
 - **Verification gate (every task):**
   1. `vendor/bin/sail artisan test --compact` (MySQL), all green
-  2. `DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact` (SQLite, as in CI), all green
-  3. `vendor/bin/sail bin pint --dirty --format agent`
-  4. Contract suite green with **zero** fixture diffs (Track A)
-  5. Re-read the diff against every hazard the task lists
+  2. `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact` (SQLite inside the Sail container, matching CI's driver), all green
+  3. **FE integration check:** re-read the design §13.2 rows for every endpoint the task touches, and list the §13.3 pages to smoke-test on staging in the PR description
+  4. `vendor/bin/sail bin pint --dirty --format agent`
+  5. Contract suite green with **zero** fixture diffs (Track A)
+  6. Re-read the diff against every hazard the task lists
 
 ---
 
@@ -56,7 +65,7 @@
     - For each route in `php artisan route:list --path=api --except-vendor` (165 on 2026-09-26), write the variants required by design §4.1.4.
     - Use `Http::fake` for reCAPTCHA, and `Mail::fake()`/`Notification::fake()`/`Storage::fake('private')`/`Storage::fake('public')` where the endpoint sends or stores.
     - Declare `mapPaths` for data-keyed maps. At minimum: `summary.grade_breakdown`, `summary.status_breakdown` (student report); `school_month_defaults` (enrollment index); `subscription_monthly_status.categories`, `subscription_daily_status` (lookup/portal); `payment_method_split` (spending summary); `settled_by_method` (credit report).
-    - Record on MySQL with `CONTRACT_RECORD=1 vendor/bin/sail artisan test --compact tests/Feature/Contract`, then create SQLite overrides only where shapes differ: `CONTRACT_RECORD=1 CONTRACT_DRIVER_OVERRIDE=1 DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact tests/Feature/Contract` (design §4.1.2, H15). Then run again **without** the flags on both drivers; both must be green with no diffs. List every `.sqlite.json` override in `contract-gaps.md`.
+    - Record on MySQL with `CONTRACT_RECORD=1 vendor/bin/sail artisan test --compact tests/Feature/Contract`, then create SQLite overrides only where shapes differ: `docker compose exec -T -u sail -e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1 -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact tests/Feature/Contract` (design §4.1.2, H15). Then run again **without** the flags on both drivers; both must be green with no diffs. List every `.sqlite.json` override in `contract-gaps.md`.
     - _Requirements: 1.1, 1.2, 1.3_
   - [ ] 1.5 Add the route coverage test
     - `tests/Feature/Contract/RouteCoverageTest.php` per design §4.1.5. It must pass after 1.4.
@@ -67,7 +76,7 @@
     - Uses a PHPUnit data provider built from `Route::getRoutes()` with one row per (route, role).
     - _Requirements: 1.5_
   - [ ] 1.7 Cross-check against the frontend types
-    - Create `.kiro/specs/16-backend-code-quality/contract-gaps.md` seeded with the four rows in design §4.1.6.
+    - Create `.kiro/specs/16-backend-code-quality/contract-gaps.md` seeded with the five rows in design §4.1.6, then extend it from design §13.1 (unused routes) and §13.2.
     - For every fixture, compare it with its FE type (`rg -n "apiClient\.(get|post|put|patch|delete)<" ~/sunbites-pos/lib/api ~/sunbites-portal/lib/api`) and add a row per mismatch. Do **not** fix mismatches here.
     - No test is needed (this is documentation); the PR description links the file.
     - _Requirements: 1.7_
@@ -155,7 +164,9 @@
       - every emailed contact provisioned
       - photo stored on the `private` disk
       - `students.enrolled` activity
-    - Plus an assertion that the end-before-start response body has **no** `message` key. `EnrollmentTest` is unchanged.
+    - Plus an assertion that the end-before-start response body has **no** `message` key.
+    - Plus (H16) enrolling a subscription student from June to March creates exactly 10 monthly payments and the request returns, which guards against an immutable-date infinite loop.
+    - `EnrollmentTest` is unchanged.
     - _Requirements: 2.1, 3.1, 3.2_
   - [ ] 5.2 `StudentController` requests
     - Create `ListStudentsRequest` (permissive, §4.2.3), `UpdateStudentRequest`, `UpdateStudentStatusRequest` (copy `from()` as is, H-note), `UpdateStudentTypeRequest`, `UploadStudentPhotoRequest` and `ListStudentOrdersRequest`.
@@ -167,6 +178,7 @@
       - `updateAmount` on a paid payment with a non-numeric amount → 422 `"Can only edit amount on unpaid payments."`
       - `void` on another student's payment with an empty body → 404
       - `void` on an unpaid payment with an empty body → 422 `"Only paid payments can be voided."`
+    - (H16) `addRange` June→March creates the expected rows and returns.
     - `PaymentControllerTest`, `VoidPaymentTest` and `PaymentRangeTest` unchanged.
     - _Requirements: 3.3_
   - [ ] 5.4 `StudentContactController` requests
@@ -282,8 +294,8 @@
     - Create `ListStudentActivityRequest`, `ShowSpendingSummaryRequest`, `UploadPortalStudentPhotoRequest` (`max:5120`), `ListPortalWalletRequest`, `SetWalletAlertRequest` and `ShowPortalMealPlanRequest`.
     - Tests: fixtures unchanged, plus a precedence test for each `#[Authorize]` + request pair (an unlinked parent with invalid input → 403).
     - _Requirements: 3.1, 3.4_
-  - [ ] 11.4 Portal pre-registration requests (conditional)
-    - **Only if B-04 is rejected:** create `CheckPreRegistrationRequest` and `StorePortalPreRegistrationRequest`. Otherwise mark this task N/A.
+  - [x] 11.4 Portal pre-registration requests: **N/A**
+    - B-04 was approved on 2026-10-09, so both portal pre-registration routes and controllers are removed. Do not create `CheckPreRegistrationRequest` or `StorePortalPreRegistrationRequest`. B-04's commit must come before T-11 (design §6).
     - _Requirements: 3.1_
 
 - [ ] 12. Model modernisation *(design §4.5; hazard H2)*
@@ -306,21 +318,26 @@
 - [ ] 13. Lazy-loading guard *(design §4.5.4; hazard H14)*
   - [ ] 13.1 Enable the guard and fix violations
     - Add the `configureDefaults()` code, run the full suite, and fix every `LazyLoadingViolationException` with eager loading at the query site. Never use model `$with`.
-    - Tests: the full suite is green; fixtures unchanged; plus a unit test that the violation handler logs rather than throws when the environment is `staging` (`app()->detectEnvironment(fn () => 'staging')`, `Log::spy()`).
+    - Tests: the full suite is green; fixtures unchanged; plus unit tests that the violation handler logs rather than throws when the environment is `local` **and** when it is `staging` (`app()->detectEnvironment(fn () => 'local')`, `Log::spy()`), and that it throws in `testing`.
     - _Requirements: 4.6_
 
 - [ ] 14. Notifications after commit *(design §4.7)*
-  - [ ] 14.1 `afterCommit()` in notification constructors
-    - Add `$this->afterCommit();` to the 5 notification constructors.
-    - Tests: `tests/Feature/Kitchen/NotificationAfterCommitTest.php`: inside `DB::transaction(fn () => … throw …)` calling `CreditLedgerService::charge`, assert with `Queue::fake()` that no `SendQueuedNotifications` job was pushed; on success, assert it was pushed. Existing notification tests unchanged.
+  - [ ] 14.1 `ShouldQueueAfterCommit` on the five notifications
+    - Change the 5 notification classes from `ShouldQueue` to `ShouldQueueAfterCommit` (design §4.7). No constructor change.
+    - Tests: `tests/Feature/Kitchen/NotificationAfterCommitTest.php` uses **no fakes** (design §4.7; `QueueFake` ignores after-commit):
+      - **Rollback:** call `CreditLedgerService::charge` for a student with a linked parent inside `DB::transaction(...)` that then throws (catch it). Assert `DB::table('notifications')->where('notifiable_id', $parent->id)->count() === 0`.
+      - **Commit:** the same without the throw. Assert the count is `1`.
+      - Existing notification tests are unchanged.
     - _Requirements: 8.1, 8.4, 8.5_
-  - [ ] 14.2 `afterCommit()` on the welcome mail
-    - Queue `ParentWelcomeMail` with `->afterCommit()` in `ParentProvisioningService` and `EnableParentAction`.
-    - Tests: a rolled-back enrollment queues no welcome mail (`Mail::fake()` + `assertNothingQueued()` after rollback).
+  - [ ] 14.2 `ShouldQueueAfterCommit` on the welcome mail
+    - Change `ParentWelcomeMail` from `ShouldQueue` to `ShouldQueueAfterCommit` (design §4.7). No call-site change.
+    - Tests (no `Mail::fake()`): `Event::fake([MessageSending::class])`.
+      - **Rollback:** call `ParentProvisioningService::provision()` for a new email inside a transaction that throws; assert `Event::assertNotDispatched(MessageSending::class)`.
+      - **Commit:** the same without the throw; assert it was dispatched once.
     - _Requirements: 8.2_
-  - [ ] 14.3 `WalletAlertJob` retries (gated)
-    - **Gated on Q7 approval:** add `#[Tries(3)]` and `#[Backoff(10, 60)]` to `WalletAlertJob`.
-    - Test: reflection asserts the attributes.
+  - [ ] 14.3 `WalletAlertJob` retries *(Q7 approved)*
+    - Add `#[Tries(3)]` and `#[Backoff(10, 60)]` (`Illuminate\Queue\Attributes\Tries`, `…\Backoff`) to `WalletAlertJob`.
+    - Test: resolve the attributes via reflection and assert `3` and `[10, 60]`; `WalletAlertTest` unchanged.
     - _Requirements: 8.3_
 
 - [ ] 15. Project hygiene *(Req 9.1)*
@@ -329,41 +346,57 @@
     - Tests: none (no behaviour); CI green.
     - _Requirements: 9.1_
 
-- [ ] 16. Optional: Laravel 13 model class attributes *(Q4; Req 4.7)*
-  - [ ] 16.1 Convert all models (only if Q4 is approved)
-    - Convert `$table`/`$fillable`/`$hidden` to `#[Table]`/`#[Fillable]`/`#[Hidden]` on **all** models in `app/Models/` in one PR. Attributes merge with properties (design §1.2), so remove the properties.
-    - Tests: a unit test per model asserting `getFillable()`, `getHidden()` and `getTable()` are unchanged (snapshot the arrays before the change); fixtures unchanged.
+- [ ] 16. Laravel 13 model PHP attributes *(Q4 approved; design §4.5.5; Req 4.7)*
+  - [ ] 16.1 Snapshot test first
+    - Create `tests/Unit/ModelAttributesTest.php`. For every model in `app/Models/`, assert `getTable()`, `getFillable()` (exact array and order), `getHidden()`, `usesTimestamps()`, `getKeyName()` and `getCasts()` equal literals copied from the current code.
+    - It must pass on the unconverted code before 16.2 starts.
     - _Requirements: 4.7_
+  - [ ] 16.2 Convert every model
+    - Move `$table` → `#[Table('…')]`, `$fillable` → `#[Fillable([...])]` (same order), `$hidden` → `#[Hidden([...])]` and `public $timestamps = false` → `#[WithoutTimestamps]` (imports from `Illuminate\Database\Eloquent\Attributes\`), exactly per the design §4.5.5 table.
+    - Keep `UPDATED_AT`/`CREATED_AT` constants, `$recordEvents`, `casts()`, `HasBranch` and `getDefaultGuardName()` as they are.
+    - Add the 6 missing `/** @use HasFactory<XFactory> */` docblocks and a generic `@return` docblock on all 52 relation methods.
+    - Tests: `ModelAttributesTest` is unchanged and still passes; full suite green; fixtures unchanged.
+    - _Requirements: 4.7, 13.1_
 
-- [ ] 17. Gated: dependency and surface cleanup *(Req 11, Q6)*
-  - [ ] 17.1 Fortify
-    - **If approved:** first run `rg -n "Fortify|fortify" app config routes tests`. Remove `laravel/fortify` or call `Fortify::ignoreRoutes()` per the approved option.
-    - Tests: `route:list` shows no `login`/`two-factor` web routes; staff password reset tests pass; the `skipUnlessFortifyHas` helper in `tests/TestCase.php` is reviewed together with its callers.
-    - _Requirements: 11.1_
-  - [ ] 17.2 `binafy/laravel-cart`
-    - **If approved:** remove `binafy/laravel-cart` via `vendor/bin/sail composer remove`, after `rg -n "binafy|Cart" app config database` confirms there is no usage.
-    - Tests: suite green.
-    - _Requirements: 11.2_
-  - [ ] 17.3 Top-level `/broadcasting/auth` route
-    - **If approved:** drop `channels:` from `withRouting()` and `require` `routes/channels.php` from `routes/api.php` or the provider.
-    - Tests: route coverage (165 routes); both scoped `broadcasting/auth` endpoints still authorize (existing channel tests); the top-level route is gone.
-    - _Requirements: 11.3_
+- [ ] 17. Dependency and surface cleanup *(Q6 approved on condition "must not affect the API"; design §4.8; Req 11)*
+  - [ ] 17.1 Broadcast auth tests, then removals
+    - Record `vendor/bin/sail artisan route:list --path=api --except-vendor --json > /tmp/api-routes-before.json`.
+    - Add `tests/Feature/Foundation/BroadcastChannelAuthTest.php` (design §4.8 step 1) and make it pass on the current code.
+    - Run `vendor/bin/sail composer remove laravel/fortify binafy/laravel-cart`.
+    - Delete `config/fortify.php`; remove `skipUnlessFortifyHas()` and its import from `tests/TestCase.php` (permitted test edit; 0 callers).
+    - Drop `channels:` from `withRouting()` in `bootstrap/app.php` and add `require base_path('routes/channels.php');` (with a docblock) to `AppServiceProvider::boot()`.
+    - Run `vendor/bin/sail artisan boost:update`, and review and keep only the Fortify-related skill and guideline removals.
+    - Tests:
+      - `BroadcastChannelAuthTest` still passes
+      - `route:list --path=api --except-vendor --json` is byte-identical to `/tmp/api-routes-before.json` (`diff` shows nothing)
+      - `route:list --only-vendor` has no Fortify routes and no top-level `broadcasting/auth`
+      - contract suite has zero diffs; full suite green on both databases
+    - _Requirements: 11.1–11.5_
+
+- [ ] 18. Laravel 13 standards audit *(design §14.4; Req 13.3)*
+  - [ ] 18.1 Run the audit and fix leftovers
+    - Run every command in design §14.4.
+    - Each must return its expected result. Fix any leftover behaviour-identically in this commit, or record it as an exception with its reason.
+    - Paste the command output into the commit body.
+    - Tests: full verification gate (both databases, zero fixture diffs, role matrix, `vendor/bin/sail bin pint --format agent` reporting no changes).
+    - _Requirements: 13.1, 13.2, 13.3, 13.4_
 
 ---
 
-- [ ] 18. Final `laravel-simplifier` pass *(non-negotiable; design §12.3; Req 12.6, 12.7)*
-  - [ ] 18.1 Run the simplifier over the complete backend diff
-    - Starts only after **every** Track A task and every approved Track B item has merged.
-    - Build the file list from `git diff --name-only <spec16-start-sha>..main -- app routes bootstrap config` (record `<spec16-start-sha>` in the T-1 PR description when T-1 starts).
+- [ ] 19. Final `laravel-simplifier` pass *(non-negotiable; design §12.3; Req 12.6, 12.7)*
+  - [ ] 19.1 Run the simplifier over the complete backend diff
+    - Starts only after **every** Track A commit, every approved Track B commit and T-18 are on `bump-laravel-13-latest`.
+    - Build the file list from `git diff --name-only <spec16-start-sha>..HEAD -- app routes bootstrap config`. `<spec16-start-sha>` is `3454977`, recorded in the T-1 commit body.
     - Invoke the `laravel:laravel-simplifier` agent with the verbatim fenced prompt in design §12.3 plus the file list.
-    - Tests: none new. Run the full verification gate: MySQL + SQLite suites green, **zero** contract-fixture diffs, role matrix green, Pint.
+    - Tests: none new. Run the full verification gate: MySQL + SQLite suites green, **zero** contract-fixture diffs, role matrix green, Pint (`--dirty --format agent`, then `vendor/bin/sail bin pint --format agent` reporting no changes).
     - Revert (don't fix) any individual simplifier change that fails the gate.
-    - The PR lists applied changes, rejected suggestions (`rejected: H#`) and reverted changes.
+    - Commit as `refactor(spec16): apply laravel-simplifier pass`. The commit body lists applied changes, rejected suggestions (`rejected: H#`) and reverted changes.
+    - Then stop and tell the user the work is complete. Do not push unless asked (design §6).
     - _Requirements: 12.6, 12.7_
 
 ---
 
-## Track B (each item needs explicit approval; one PR each; failing test first)
+## Track B (all 15 items approved 2026-10-09; one commit each; failing test first)
 
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -419,6 +452,11 @@
   - Failing test: `PATCH /students/{student}/status` with `{}` returns 422, not 500.
   - Fixture: new `422-missing-status`.
   - _Requirements: 10.14_
+- [ ] B-16. Archived inventory visible in POS references *(design §5.14; after T-7)*
+  - Failing test: `GET /api/v1/references/inventory` includes an archived item with `is_archived: true`; `GET /api/v1/pos/inventory` still excludes it.
+  - Fixtures: none (row shape unchanged; only the set of rows grows). If the `ok` fixture's scenario has an archived item, its list shape stays identical.
+  - Staging smoke test: References → Inventory shows the Archived section with the archived item, and Unarchive moves it back.
+  - _Requirements: 10.16_
 - [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
@@ -441,7 +479,7 @@
 | 4.3 | T-12.3, 12.4 |
 | 4.5 | T-2.3 |
 | 4.6 | T-13.1 |
-| 4.7 | T-16.1 |
+| 4.7 | T-16.1, 16.2 |
 | 4.8 | nothing to implement (prohibition); reviewer checks that no `preventSilentlyDiscardingAttributes` appears |
 | 5.1–5.5 | T-4.3, 7.2, 7.3, 9.4 (+ H6 checks) |
 | 6.1 | nothing to implement (prohibition); matrix test T-1.6 |
@@ -454,9 +492,13 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.15 | B-01 … B-15 |
-| 11.1–11.3 | T-17.1–17.3 |
-| 12.1–12.5 | ground rules (every task) + the Tooling log in every PR |
-| 12.6, 12.7 | T-18.1 |
+| 10.2–10.16 | B-01 … B-16 |
+| 11.1–11.5 | T-17.1 |
+| 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
+| 12.6, 12.7 | T-19.1 |
+| 13.1 | the §14.1 rows inside T-3, T-4, T-5, T-6, T-7, T-8, T-10, T-12, T-14, T-16 + audit T-18.1 |
+| 13.2 | ground rules + T-18.1 audit (`final`/`strict_types` grep) + T-19 prompt |
+| 13.3 | T-18.1 |
+| 13.4 | ground rules (Pint per task) + T-18.1/T-19.1 full `pint --format agent` with no changes |
 
 No acceptance criterion is without a task. Req 4.8, 6.1 and 9.2–9.4 are prohibitions or "keep as is", verified in review.

@@ -6,11 +6,11 @@ inclusion: always
 
 ## Stack
 
-Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-09-25.
+Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-10-09 (after the `composer update` in commits `ba2b420`/`2de27ac`).
 
 | Layer | Technology | Version |
 |---|---|---|
-| API backend | Laravel | 13.33 |
+| API backend | Laravel | 13.35 |
 | PHP | PHP | 8.5 (`composer.json` constraint `^8.3`) |
 | POS & admin frontend | Next.js (App Router) | 16.2.6 |
 | Parent portal frontend | Next.js (App Router) | 16.2.6 |
@@ -32,12 +32,12 @@ Versions below are the **installed** versions (`composer.lock`, `package.json`, 
 | `spatie/laravel-activitylog` | 5.1 | Audit trail for key model events and kitchen actions |
 | `maatwebsite/excel` (+ `phpoffice/phpspreadsheet` 5.10) | 4.x-dev | Excel report exports |
 | `laravel/reverb` | 1.12 | WebSocket server for private-channel notifications |
-| `resend/resend-laravel` | 1.5 | `resend` mail transport is configured in `config/mail.php`; the mailer is chosen per environment (`.env.example` uses `smtp`) |
+| `resend/resend-laravel` | 1.6 | `resend` mail transport is configured in `config/mail.php`; the mailer is chosen per environment (`.env.example` uses `smtp`) |
 | `league/flysystem-aws-s3-v3` | 3.x | `private` and `public` disks are S3 (photos) |
-| `sentry/sentry-laravel` / `spatie/laravel-flare` | 4.28 / 3.6 | Error monitoring (`Integration::handles` in `bootstrap/app.php`) |
-| `laravel/fortify` | 1.40 | Installed; see Known Discrepancies (not used by either frontend) |
+| `sentry/sentry-laravel` / `spatie/laravel-flare` | 4.29 / 3.6 | Error monitoring (`Integration::handles` in `bootstrap/app.php`) |
+| `laravel/fortify` | 1.41 | Installed; see Known Discrepancies (not used by either frontend) |
 | `binafy/laravel-cart` | 2.1 | Installed; not referenced anywhere in `app/`, `config/` or `database/` |
-| `laravel/boost` (dev) | 2.10 | MCP tools + agent guidelines |
+| `laravel/boost` (dev) | 2.10.3 | MCP tools + agent guidelines |
 | `laravel/pint` (dev) | 1.32 | Formatter (`preset: laravel`); run `vendor/bin/sail bin pint --dirty --format agent` after PHP changes |
 | `phpunit/phpunit` (dev) | 12.5 | Test runner |
 
@@ -150,7 +150,8 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 - `RefreshDatabase` on every Feature test; `actingAs($user, 'sanctum')` / `actingAs($parent, 'parents')`
 - Never mock Eloquent or the database layer
 - Tests must pass on **both** MySQL (local Sail) and SQLite (CI). Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
-- Run: `vendor/bin/sail artisan test --compact tests/Feature/Foo.php`
+- Run (MySQL): `vendor/bin/sail artisan test --compact tests/Feature/Foo.php`
+- Run (SQLite, as in CI, inside the Sail container): `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`
 
 ### Testing (frontend)
 - Import from `__tests__/test-utils.tsx`; role/label queries first; MSW at the network boundary

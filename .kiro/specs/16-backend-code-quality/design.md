@@ -7,21 +7,22 @@
 The refactor has two tracks:
 
 - **Track A (refactor):** behaviour-neutral. It is proven neutral by contract fixtures (§4.1) that are recorded *before* any refactor and must not change.
-- **Track B (defect fixes):** each item is approved separately, lands in its own PR with a failing test first, and is allowed to change only the fixtures it names (§5).
+- **Track B (defect fixes):** each item is approved separately, lands in its own commit with a failing test first, and is allowed to change only the fixtures it names (§5).
 
 ### 1.1 Decisions
 
 | # | Decision | Status |
 |---|---|---|
 | Q1 | Migrate all inline validation to Form Requests | **Approved** (steering amended 2026-09-25) |
-| Q2 | Track B lives in this spec, tracked per item | *Assumed* (recommended option; confirm) |
-| Q3 | Delivery: one PR per domain, contract freeze first (§6) | *Assumed* (recommended option; confirm) |
-| Q4 | `#[Fillable]`/`#[Hidden]`/`#[Table]` model attributes | *Assumed:* **deferred** to optional final PR T-16 |
-| Q5 | After-commit via `afterCommit()` per notification/mailable, not `after_commit => true` globally | *Assumed* (recommended option; confirm) |
-| Q6 | Dependency removals (Req 11) | *Assumed:* **not approved**; tasks T-17.x are gated |
-| Q7 | `WalletAlertJob` retries (Req 8.3), a behaviour change | *Assumed:* **not approved**; T-14.3 is gated |
+| Q2 | Track B lives in this spec, tracked and approved per item | **Approved** 2026-10-09 |
+| Q3 | Delivery: **one commit per area** on a single feature branch, pushed as **one PR** (§6, §9) | **Approved** 2026-10-09 |
+| Q4 | Laravel 13 model PHP attributes (`#[Table]`, `#[Fillable]`, `#[Hidden]`, `#[WithoutTimestamps]`) on all models | **Approved** 2026-10-09; task T-16 (§4.5.5) |
+| Q5 | After-commit via the `ShouldQueueAfterCommit` interface on the 5 notifications and `ParentWelcomeMail`, not `after_commit => true` globally | **Approved** 2026-10-09 |
+| Q6 | Remove `laravel/fortify`, `binafy/laravel-cart` and the top-level `/broadcasting/auth` route (Req 11) | **Approved** 2026-10-09, **on condition that no `/api` behaviour changes**; proven per §4.8 |
+| Q7 | `WalletAlertJob` retries: `#[Tries(3)]`, `#[Backoff(10, 60)]` (Req 8.3) | **Approved** 2026-10-09 |
+| Track B | All 15 defect fixes (B-01–B-05, B-07–B-16; B-06 merged into B-05) | **Approved** 2026-10-09 |
 
-### 1.2 Verified framework facts (installed `laravel/framework` v13.33.0)
+### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
 
 | Fact | Verified in |
 |---|---|
@@ -30,6 +31,9 @@ The refactor has two tracks:
 | `#[Tries(int)]`, `#[Backoff(int ...)]` exist | `Illuminate/Queue/Attributes/*` |
 | `Exceptions::render()` and `renderable()` both call `$handler->renderable()`; they are aliases | `Illuminate/Foundation/Configuration/Exceptions.php` L49-67 |
 | `FormRequest::validateResolved()` runs `prepareForValidation()` → `authorize()` → validation → `passedValidation()` | framework `ValidatesWhenResolvedTrait` |
+| `ShouldQueueAfterCommit` extends `ShouldQueue` and is honoured by both `SendQueuedNotifications` (L105) and `SendQueuedMailable` (L67) | `Illuminate/Contracts/Queue/ShouldQueueAfterCommit.php`, `Notifications/SendQueuedNotifications.php`, `Mail/SendQueuedMailable.php` |
+| In tests, `RefreshDatabase`/`DatabaseTransactions` install `Illuminate\Foundation\Testing\DatabaseTransactionsManager`, which skips the test's wrapping transaction, so after-commit callbacks run when the application's own transaction commits | `Foundation/Testing/DatabaseTransactionsManager.php` |
+| `make:request` stub generates `authorize()` returning `false` | `Foundation/Console/stubs/request.stub` L15 |
 | A `JsonResource` returned directly from a controller is wrapped in `{"data": …}`. When serialised via `response()->json($resource)` or nested in an array it is **not** wrapped. | `Illuminate/Http/Resources/Json/JsonResource` (`toResponse` vs `jsonSerialize`) |
 
 ## 2. Architecture
@@ -72,7 +76,8 @@ Each hazard names the concrete sites. A task is not done until its diff has been
 | H12 | **Status codes.** Keep 200 vs 201 vs 204 exactly (e.g. `StudentContactController::destroy` → 204 `null`, `StaffNotificationController::destroy` → 204, `Portal\NotificationController::destroy` → 200 with message, `BranchMonthlyAmountController::store` → 201 or 200 depending on `wasRecentlyCreated`). | Fixtures record status. | all |
 | H13 | **Different limits that look like duplicates.** Kitchen student photo `max:2048` vs portal student photo `max:5120`; `per_page` caps of 50 vs 100; defaults of 15/20/25/50. | Never unify rule sets across endpoints. | §4.2 |
 | H15 | **Driver-dependent aggregate types.** MySQL returns `SUM()`/`AVG()` over DECIMAL columns as **strings**; SQLite returns floats. Any response value that is an uncast aggregate therefore has a different JSON shape per driver. | Never remove an existing `(float)`/`(int)`/`round()` around an aggregate. Contract fixtures are recorded on MySQL (production engine); where SQLite differs, a `.sqlite.json` override is recorded and logged (§4.1.2). | report and dashboard controllers |
-| H14 | **Lazy-loading prevention.** Enabling it throws on existing lazy loads (e.g. `OrderResource` reads `student->wallet` where only `student` is eager-loaded in `TransactionController::index`). | T-13 must fix every violation the full suite surfaces, and must throw only in `local`/`testing`. | §4.5.4 |
+| H16 | **Carbon mutability.** `now()`/`today()` return `CarbonImmutable` here (`Date::use(CarbonImmutable::class)` in `AppServiceProvider`), but `Carbon\Carbon::create*()` returns a **mutable** instance. The month loops `while ($current->lte($end)) { … $current->addMonth(); }` in `EnrollmentService::seedMonthlyPayments` and `PaymentController::addRange` rely on mutation. With an immutable instance `addMonth()` returns a new object, `$current` never advances, and **the request loops forever**. | Never replace `Carbon::create*()`/`Carbon::createFromDate()` with `now()`, `Date::…` or `CarbonImmutable` in these loops. If a loop is touched, write `$current = $current->addMonth();`, which is correct for both mutable and immutable. T-5.1 and T-5.3 add a test that seeds June→March (10 rows) and returns. | `EnrollmentService`, `PaymentController::addRange` |
+| H14 | **Lazy-loading prevention.** Enabling it throws on existing lazy loads (e.g. `OrderResource` reads `student->wallet` where only `student` is eager-loaded in `TransactionController::index`). | T-13 must fix every violation the full suite surfaces, and must throw **only in `testing`**. `local` and `staging` log instead, because developers run both frontends against `APP_ENV=local`. | §4.5.4 |
 
 ## 4. Track A components
 
@@ -196,12 +201,13 @@ Pre-verified entries to seed the file with:
 | `GET api/v1/reports/sales` | `data[].student.full_name` | absent (raw `Student` has no `full_name`) | `SalesOrder.student.full_name: string` (`sunbites-pos/lib/api/reports.ts:89`) | Student column blank (`reports/sales/page.tsx:391`) | B-13 |
 | `POST api/v1/pos/checkout` (+ void, transactions, student orders) | `order.cashier.name` | always `null` | `OrderCashier.name: string` (`types/order.ts:95`) | Receipt cashier blank (`components/pos/receipt-modal.tsx:72`) | B-07 |
 | `GET api/v1/reports/sales`, `GET api/v1/reports/billing` | `cashier` / `recorder` / `student` | full models incl. `daily_rate`, `phone`, `birthday`, `qr_code` | FE reads only names/ids | PII over-exposure | B-12 |
+| `GET api/v1/references/inventory` | archived rows | never returned (`InventoryItem::active()`) | `references/inventory/page.tsx:894-895` expects them for the Archived section | Unarchive unreachable | B-16 |
 | many | decimal fields | `"string:decimal2"` | typed `number` | none today (UI parses) | none: document only |
 
 ### 4.2 Form Requests (Req 3)
 
 Base conventions for every new request:
-- `final class X extends FormRequest`, and `authorize(): bool { return true; }`, because authorization lives in routes and `#[Authorize]`.
+- `class X extends FormRequest` (not `final`: no class in `app/` is final, and `laravel-best-practices` puts consistency first), and `authorize(): bool { return true; }`, because authorization lives in routes and `#[Authorize]`.
 - `rules(): array` with `@return array<string, mixed>`.
 - Messages are copied verbatim.
 - Route models are read with `$this->route('student')` and typed with `/** @var Student $student */`.
@@ -353,12 +359,12 @@ Directory: `app/Http/Requests/Kitchen/` unless noted. "=" means copy the rules v
 
 ### 4.3 Actions and Services (Req 2)
 
-All new classes: `final class`, constructor property promotion, typed returns, docblock with purpose and cross-branch notes. Each Action has one public `execute()`. Controllers inject Actions into the method, following the `SubscriptionDowngradeController::execute` precedent.
+All new classes: plain `class` (not `final`, matching the 0 final classes in `app/`), constructor property promotion with `private readonly`, typed returns, docblock with purpose and cross-branch notes. Each Action has one public `execute()`. Controllers inject Actions into the method, following the `SubscriptionDowngradeController::execute` precedent.
 
 #### 4.3.1 `App\Services\InventoryStockService`
 
 ```php
-final class InventoryStockService
+class InventoryStockService
 {
     /**
      * Deduct stock for a completed checkout. Must be called inside the checkout transaction.
@@ -396,7 +402,7 @@ The callers keep their `activity('inventory')` calls and response building. Only
 #### 4.3.2 `App\Actions\Pos\CheckoutAction`
 
 ```php
-final class CheckoutAction
+class CheckoutAction
 {
     public function __construct(
         private CreditLedgerService $creditLedger,
@@ -613,7 +619,9 @@ In `AppServiceProvider::configureDefaults()`:
 ```php
 Model::preventLazyLoading(! $this->app->isProduction());
 
-if (! $this->app->environment(['local', 'testing'])) {
+// Throw only in the test suite. `local` (developers running the POS/portal against the
+// local API) and `staging` log instead, so an untested lazy load never breaks a page.
+if (! $this->app->environment('testing')) {
     Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
         Log::warning('Lazy loading violation', ['model' => $model::class, 'relation' => $relation]);
     });
@@ -623,6 +631,28 @@ if (! $this->app->environment(['local', 'testing'])) {
 Run the full suite, then fix each violation with `with()`/`loadMissing()` at the query site. Never add `$with` to models, which would change serialisation. Known one: `TransactionController::index` must load `student.wallet` (`OrderResource` reads `student->wallet`).
 
 Adding eager loads does not change output, because the same data is read. Fixtures prove it.
+
+#### 4.5.5 Laravel 13 model PHP attributes (T-16, Q4 approved)
+
+Verified in 13.35 (`Model::initializeModelAttributes`, `GuardsAttributes::initializeGuardsAttributes`, `HidesAttributes`, `HasTimestamps::initializeHasTimestamps`): the attributes are resolved per instance at initialisation and **merged** with any property. Moving a value from a property to an attribute is therefore behaviour-identical.
+
+| Today | Becomes | Models |
+|---|---|---|
+| `protected $table = 'x';` | `#[Table('x')]` | `Feedback` (`feedbacks`), `ParentUser` (`parents`), `MealPlannerWeekVisibility` (`meal_planner_week_visibility`) |
+| `protected $fillable = [...]` | `#[Fillable([...])]` (same order) | every model that declares `$fillable` |
+| `protected $hidden = [...]` | `#[Hidden([...])]` | `User`, `ParentUser` |
+| `public $timestamps = false;` | `#[WithoutTimestamps]` | `CreditTransaction`, `InventoryLog`, `WalletTopupVoid` |
+| missing `/** @use HasFactory<XFactory> */` | add it | `Announcement`, `Branch`, `CreditTransaction`, `PreRegistration`, `PreRegistrationContact`, `WalletTopupVoid` (6, from `rg`) |
+| relation methods with a bare return type (52) | add the generic docblock, e.g. `/** @return BelongsTo<Branch, $this> */`, `/** @return HasMany<Order, $this> */`, `/** @return BelongsToMany<ParentUser, $this> */` | all models |
+
+**Stays as is (no attribute equivalent, or package API):**
+- `public const UPDATED_AT = null;` (`Feedback`), `public const CREATED_AT = null;` (`MealPlannerWeekVisibility`)
+- `protected $recordEvents` (spatie/activitylog API) on `Order`, `Student`
+- `casts()` methods
+- `HasBranch` trait boot logic (`#[ScopedBy]` cannot express the `creating` hook)
+- `getDefaultGuardName()` on `User`
+
+**Required test** (`tests/Unit/ModelAttributesTest.php`): write it **before** converting. For every model in `app/Models/`, assert `getTable()`, `getFillable()` (exact array, same order), `getHidden()`, `usesTimestamps()`, `getKeyName()` and `getCasts()` equal a literal snapshot taken from the current code. The test must pass before and after the conversion.
 
 ### 4.6 Query de-duplication and performance (Req 7)
 
@@ -654,11 +684,45 @@ Adding eager loads does not change output, because the same data is read. Fixtur
 
 ### 4.7 Notifications (Req 8)
 
-- Each of the five notification constructors ends with `$this->afterCommit();`.
-- `ParentProvisioningService::provision()` and `EnableParentAction::execute()` queue `ParentWelcomeMail` with `(new ParentWelcomeMail($parent, $token))->afterCommit()`.
+- Each of the five notification classes changes `implements ShouldBroadcast, ShouldQueue` to `implements ShouldBroadcast, ShouldQueueAfterCommit` (`use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;`, removing the now-unused `ShouldQueue` import). No constructor change.
+- `ParentWelcomeMail` changes `implements ShouldQueue` to `implements ShouldQueueAfterCommit`. That covers all four call sites (`ParentProvisioningService::provision`, `EnableParentAction::execute`, `StudentContactController::resendActivation`, `ParentController::resendActivation`) without touching them. Outside a transaction it dispatches immediately, as today.
+- The interface is used instead of calling `afterCommit()`, because it does not depend on the `Queueable` trait staying on the class (a later cleanup, including T-19, could remove a trait that looks unused).
 - `PreRegistrationApprovedMail`/`RejectedMail`/`ReceivedMail` and the wallet-alert, feedback-reply and reset mails are queued outside transactions, so they need no change.
 
-Tests use `RefreshDatabase`/`LazilyRefreshDatabase`, which run after-commit callbacks when the application transaction commits (Laravel's test-transaction-aware mode). `Notification::fake()` records at `notify()` time. So existing tests keep passing, and the new test asserts the rollback case with a real `sync` dispatch and `Queue::fake()`.
+Tests use `RefreshDatabase`/`LazilyRefreshDatabase`, which run after-commit callbacks when the application transaction commits (Laravel's test-transaction-aware mode, §1.2). `Notification::fake()` and `Mail::fake()` record at call time, so existing tests keep passing unchanged.
+
+**The new after-commit tests must not use `Queue::fake()`, `Notification::fake()` or `Mail::fake()`.** Verified in 13.35: `QueueFake` has no after-commit handling and records pushes immediately, so a rollback test using fakes would fail even when the code is correct. Only the real `SyncQueue` (`QUEUE_CONNECTION=sync` in `phpunit.xml`) defers via `db.transactions` (`Queue/SyncQueue.php` L197). Use real side effects instead:
+- **Notifications:** assert on the `notifications` table (database channel) after `DB::transaction(function () { $ledger->charge(...); throw new RuntimeException; })` is caught. Expect no new row. In the committed case, expect one.
+- **Mail:** `Event::fake([\Illuminate\Mail\Events\MessageSending::class])`, which fakes only that event so mail still flows through the `array` mailer. Then `Event::assertNotDispatched(MessageSending::class)` after a rolled-back enrollment, and `assertDispatched` after a committed one.
+
+### 4.8 Dependency and surface cleanup (T-17, Q6 approved on condition "must not affect the API")
+
+**Evidence gathered 2026-10-09:**
+
+| Item | Usage today | API impact |
+|---|---|---|
+| `laravel/fortify` 1.41 | No class in `app/`, `routes/`, `bootstrap/`, `database/` references it. Only `config/fortify.php` and the unused helper `Tests\TestCase::skipUnlessFortifyHas()` (0 callers, plus its `use Laravel\Fortify\Features;` import). `User` has no `TwoFactorAuthenticatable` trait. Staff password reset is implemented in `Kitchen\AuthController` with the `Password` broker, and the reset link points at the POS (`StaffResetPasswordMail` → `config('app.pos_url')`). | Fortify registers **web** routes only (`/login`, `/logout`, `/forgot-password`, `/reset-password`, `/user/*`, `/two-factor-challenge`, `/email/verify/*`), none under `/api`, none called by either FE (§13.1) |
+| `binafy/laravel-cart` 2.1 | 0 references. Its migrations are publish-only (`publishesMigrations`); no `carts`/`cart_items` tables exist (checked via Boost `database-query`) | none |
+| top-level `GET/POST /broadcasting/auth` | Registered by `withRouting(channels: …)` → `withBroadcasting()` → `Broadcast::routes()` (`Foundation/Configuration/ApplicationBuilder.php` L128-139). Both FEs authenticate Echo against `/api/v1/broadcasting/auth` and `/api/v1/portal/broadcasting/auth` (`components/providers/echo-provider.tsx:37`), which are explicit routes in the kitchen/portal route files | none, but `routes/channels.php` **must still be loaded**, because the channel callbacks live there |
+
+**Steps (one commit, `chore(deps): remove fortify, laravel-cart and default broadcast route`):**
+1. **Add tests first** (none exist today; `rg "broadcasting/auth|Broadcast::" tests` returns nothing). `tests/Feature/Foundation/BroadcastChannelAuthTest.php`:
+   - set `config(['broadcasting.default' => 'reverb', 'broadcasting.connections.reverb.key' => 'k', 'broadcasting.connections.reverb.secret' => 's', 'broadcasting.connections.reverb.app_id' => 'a'])`
+   - a staff user (real token, Bearer header) posting `socket_id=1.1&channel_name=private-staff.{own id}` to `/api/v1/broadcasting/auth` → 200 with an `auth` key; `private-staff.{other id}` → 403
+   - the same for a parent on `/api/v1/portal/broadcasting/auth` with `private-parents.{id}`
+
+   These must pass **before** step 4 and again after it.
+2. `vendor/bin/sail composer remove laravel/fortify binafy/laravel-cart`.
+3. Delete `config/fortify.php`; delete `skipUnlessFortifyHas()` and its `use Laravel\Fortify\Features;` import from `tests/TestCase.php` (permitted test edit; 0 callers). Keep the 2FA-columns migration (no schema changes in this spec).
+4. In `bootstrap/app.php`, remove the `channels: __DIR__.'/../routes/channels.php',` argument. In `AppServiceProvider::boot()` add `require base_path('routes/channels.php');` with a docblock explaining that the channel callbacks are loaded without registering Laravel's default top-level `/broadcasting/auth` route, because the API registers its own authenticated auth routes.
+5. Run `vendor/bin/sail artisan boost:update` (it also runs from composer's `post-update-cmd`) so the `fortify-development` skill and any Fortify guidelines are dropped from `.claude/skills`/`CLAUDE.md`/`AGENTS.md`. Review that diff; keep only the Fortify-related removals.
+
+**Proof that the API is unaffected** (all required in the commit):
+- `vendor/bin/sail artisan route:list --path=api --except-vendor --json` is byte-identical before and after (165 routes, or 163 if B-04 already landed)
+- the contract suite has zero fixture diffs
+- the full suite passes on MySQL and SQLite
+- `BroadcastChannelAuthTest` passes
+- `route:list --only-vendor` no longer lists the Fortify routes or the top-level `broadcasting/auth`
 
 ## 5. Track B designs
 
@@ -840,6 +904,7 @@ The `lower(...) like ?` searches (`ParentController`, `FeedbackController`, `Pre
 - **Verified FE reads:**
   - Sales: `cashier.first_name`/`last_name`, `student.full_name`, `items`, and order columns (`reports/sales/page.tsx`, `SalesOrder` in `lib/api/reports.ts:85`).
   - Billing: `student.full_name`/`grade_level`/`section`/`student_number`, `recorder.first_name`/`last_name`, and payment columns (`reports/billing/page.tsx`).
+- **Extra evidence (2026-10-09):** `User` has `two_factor_secret`, `two_factor_recovery_codes` and `two_factor_confirmed_at` columns (Fortify migration) that are **not** in `$hidden`, so the raw `cashier`/`recorder` serialisation also emits them (null today). The reduced shapes remove them.
 - **Fixtures:** the sales and billing `ok` fixtures change (keys removed from the nested `student`/`cashier`/`recorder`, `full_name` added to sales `student`).
 - **FE impact:** the sales student column now shows names. No field the FE reads is removed.
 
@@ -857,7 +922,33 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **Fixture:** the `403` variant body changes the `message` text.
 - **FE impact:** none. `payment-history-tab.tsx:31` shows a fixed "Failed to load payment history." on any error.
 
-## 6. Delivery plan (PR sequence)
+### 5.14 B-16: Archived inventory in POS references
+
+- **Before:** `GET /api/v1/references/inventory` and `GET /api/v1/pos/inventory` both route to `InventoryController::index`, which returns `InventoryItem::active()` only.
+- **After:** add `InventoryController::indexForManagement()`, routed from `GET /references/inventory` in `routes/kitchen-api.php` (same middleware group). It returns `InventoryItem::query()->with('menuItems')->orderBy('name')->get()`, which is branch-scoped and includes archived items, serialised with the same `InventoryItemResource` collection as `index`. `GET /pos/inventory` keeps `index` (active only).
+- **Contract:** the row shape is identical; only archived rows are added. `RouteCoverageTest` is unaffected (same route, different action). Update the matrix test if it keys on the action.
+- **FE impact (verified 2026-10-09):**
+  - `app/(kitchen)/references/inventory/page.tsx:894-895` starts showing the Archived section that was always empty, so Unarchive (L923-931) becomes reachable.
+  - `components/pos/menu-mgmt-tab.tsx:442` and `app/(kitchen)/reports/inventory/page.tsx:539` already filter `!is_archived`, so they are unaffected.
+  - `components/pos/inventory-tab.tsx:300` uses `/pos/inventory`, so it is unaffected.
+- Do B-01's unarchive fix (drop `withoutBranch()`) first or in the same PR, because B-16 makes the unarchive endpoint reachable from the UI.
+
+## 6. Delivery plan (Q3: one commit per area, one PR)
+
+All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
+- **Branch:** `bump-laravel-13-latest`; start commit **`3454977`** (`<spec16-start-sha>`). Never commit on `main`.
+- **First commit:** the spec, steering update and Pint rule (`docs(spec16): …`), then T-1 onward.
+- **One commit per task group** (T-1 … T-19) and **one commit per approved Track B item**. Commit subjects follow `type(scope): description` (imperative, < 72 chars), for example:
+  - `test(contract): freeze API response shapes for all 165 routes` (T-1)
+  - `refactor(pos): extract checkout, void and stock services` (T-3)
+  - `chore(deps): remove fortify and laravel-cart` (T-17)
+  - `fix(reports): B-12 stop exposing staff PII in sales and billing rows`
+- **No `Co-Authored-By`, `Signed-off-by` or any AI attribution** in commits or the PR (project rule in `git-workflow.md`; it overrides any default attribution).
+- **The PR:** after the last commit (T-19), the AI stops. **The user pushes `bump-laravel-13-latest`, opens the single PR** to `staging`, reviews and merges. The AI never pushes unless asked, and never creates or merges PRs.
+- **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
+- **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
+
+Commit order on the branch:
 
 ```mermaid
 graph TD
@@ -873,16 +964,17 @@ graph TD
   T2 --> T11[T-11 Portal]
   T3 & T4 & T5 & T6 & T7 & T8 & T9 & T10 & T11 --> T12[T-12 Models + PaymentStatus enum]
   T12 --> T13[T-13 Lazy-loading guard]
-  T13 --> T14[T-14 afterCommit]
+  T13 --> T14[T-14 ShouldQueueAfterCommit]
   T14 --> T15[T-15 composer hygiene]
-  T15 -.optional.-> T16[T-16 model attributes]
-  T15 -.gated.-> T17[T-17 dependency cleanup]
-  T15 & T16 & T17 --> T18[T-18 laravel-simplifier final pass<br/>after ALL backend tasks incl. approved Track B]
+  T15 --> T16[T-16 model PHP attributes]
+  T16 --> T17[T-17 dependency cleanup]
+  T17 --> T18[T-18 Laravel 13 standards audit]
+  T18 --> T19[T-19 laravel-simplifier final pass<br/>after ALL backend commits incl. approved Track B]
 ```
 
 Track B items run after the Track A task they depend on (listed per item in `tasks.md`), in any order.
 
-If approved, B-04 should land before T-11 (Portal), so the portal pre-registration Form Requests are never written (T-11.4 becomes N/A).
+Track B commits are placed after the Track A commit they depend on (listed per item in `tasks.md`). If approved, B-04 should come before T-11 (Portal), so the portal pre-registration Form Requests are never written (T-11.4 becomes N/A).
 
 ## 7. Integration points
 
@@ -901,10 +993,10 @@ If approved, B-04 should land before T-11 (Portal), so the portal pre-registrati
 ## 9. Migration and rollout
 
 - There are no schema or data migrations.
-- Each PR is independently revertible.
-- Deploy each PR to staging (`staging.yml` → Laravel Cloud) and click through the affected POS/portal pages before production.
+- Each **commit** is independently revertible (one commit per area, §6). Keep it that way by merging the PR without squashing.
+- After the single PR merges to `staging` (auto-deploy via `staging.yml` → Laravel Cloud), run the complete §13.3 checklist before promoting `staging` → `main`.
 - B-02 additionally needs the login → branch → dashboard smoke test.
-- **Rollback:** `git revert` of the PR. Fixtures revert with it.
+- **Rollback:** before merge, `git revert <commit>` on the branch. After merge, revert the specific area's commit on `staging` (requires a non-squash merge), or revert the merge commit for everything. Fixtures revert with their commit.
 
 ## 10. Error handling
 
@@ -929,7 +1021,7 @@ If approved, B-04 should land before T-11 (Portal), so the portal pre-registrati
 - **Query-count tests** (§4.6).
 - **After-commit test** (§4.7).
 - **Track B:** a failing test first, per §5.
-- Every PR runs the full suite on **MySQL** (`vendor/bin/sail artisan test --compact`) and **SQLite** (`DB_CONNECTION=sqlite DB_DATABASE=:memory: php artisan test --compact`), plus `vendor/bin/sail bin pint --dirty --format agent`.
+- Every commit runs the full suite on **MySQL** (`vendor/bin/sail artisan test --compact`) and **SQLite inside the Sail container** (`docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`; verified on 2026-10-09: `config:show database.default` reports `sqlite` with these flags, `mysql` without), plus `vendor/bin/sail bin pint --dirty --format agent`.
 - Existing tests are never edited except the single line in §4.5.2 and the deletions in B-04.
 
 ## 12. Mandatory tooling and final simplification (Req 12, non-negotiable)
@@ -952,25 +1044,170 @@ Boost runs through Sail (`.mcp.json`: `vendor/bin/sail artisan boost:mcp`). Star
 
 | Tool | Mandatory use |
 |---|---|
-| `application-info` | Once per PR, at the start: confirm Laravel 13.33.x and the package versions this design assumes (§1.2) |
-| `search-docs` | **Before** writing code that uses any framework or package API: Form Request hooks (`prepareForValidation`, `passedValidation`), `#[Authorize]`, `#[Scope]`, `#[UsePolicy]`, `#[Tries]`/`#[Backoff]`, `JsonResource` serialisation, enum casts, `afterCommit()`, `preventLazyLoading`/`handleLazyLoadingViolationUsing`, `lockForUpdate`, Sanctum tokens, Spatie roles, maatwebsite exports. Scope with `packages` and use several broad queries (Boost guidelines) |
+| `application-info` | Once per task group (commit), at the start: confirm Laravel 13.35.x (or a later 13.x; if later, re-verify every row of §1.2 against `vendor/` before coding) and the package versions this design assumes |
+| `search-docs` | **Before** writing code that uses any framework or package API: Form Request hooks (`prepareForValidation`, `passedValidation`), `#[Authorize]`, `#[Scope]`, `#[UsePolicy]`, `#[Tries]`/`#[Backoff]`, `JsonResource` serialisation, enum casts, `ShouldQueueAfterCommit`, `preventLazyLoading`/`handleLazyLoadingViolationUsing`, `lockForUpdate`, Sanctum tokens, Spatie roles, maatwebsite exports. Scope with `packages` and use several broad queries (Boost guidelines) |
 | `database-schema` | Before any change to models, casts or enums (T-12), and before writing raw or JSON queries (§4.6, B-05, B-10), to confirm column names and types (e.g. `notifications.data` type, `student_monthly_payments.status`, `year`) |
 | `database-query` (read-only) | To confirm real value sets before introducing enums (e.g. `SELECT DISTINCT status FROM student_monthly_payments` returns only `paid`/`unpaid`/`voided`), and to verify B-05 year conventions on local data |
 | `last-error`, `read-log-entries` | When a test or request fails unexpectedly, before changing code |
 | `get-absolute-url` | Before sharing any local URL (e.g. for the B-02 staging smoke-test notes) |
 
-A `search-docs` result that contradicts §1.2 means stop and report it, as with any design drift. Record every query and the section relied on in the PR's **Tooling log** (Req 12.5).
+A `search-docs` result that contradicts §1.2 means stop and report it, as with any design drift. Record every query and the section relied on in the **Tooling log** (Req 12.5): one short block per commit in the PR description, headed by the commit subject.
 
-### 12.3 Final `laravel-simplifier` pass (task T-18)
+### 12.3 Final `laravel-simplifier` pass (task T-19)
 
 Agent: `laravel:laravel-simplifier` (installed via the Laravel plugin). Its default behaviour conflicts with this spec in three places, so it runs **once**, after all backend tasks are merged, with the fenced prompt below. It is not run after each task.
 
-1. Create branch `refactor/spec16-T18-simplifier` from `main` after the last Spec 16 PR merges.
-2. Build the scope: `git diff --name-only <spec16-start-sha>..main -- app routes bootstrap config` (the `<spec16-start-sha>` is recorded in T-1's PR). Only PHP files in that list are in scope; tests and fixtures are **out of scope**.
+1. Run on `bump-laravel-13-latest`, after the T-18 commit and after every approved Track B commit.
+2. Build the scope: `git diff --name-only <spec16-start-sha>..HEAD -- app routes bootstrap config`. `<spec16-start-sha>` is `3454977`; record it in the T-1 commit body. Only PHP files in that list are in scope; tests and fixtures are **out of scope**.
 3. Invoke the agent with this prompt, verbatim, with the file list appended:
 
-   > Review and simplify ONLY these files, which were changed by Spec 16: <file list>. Read `.kiro/specs/16-backend-code-quality/design.md` §3 (hazards H1–H15) first; every hazard is a hard constraint. Do NOT: create custom exception classes or an `app/Exceptions/` directory (spec Req 2.7); merge or "consolidate" validation rule sets, Form Requests or Resources across endpoints (H13); add, remove or change any `(float)`/`(int)`/`round()` cast (H1, H15); change any `abort()` into `response()->json()` or the reverse (H3); move guards out of `prepareForValidation()` (H4); switch between Eloquent `update()` and query-builder `update()` (H5); return a `JsonResource` directly from a controller (H6); replace `$request->only(...)` in the password-reset controllers (H7); tighten any permissive rule (H8); change any response key, message text, status code, activity-log name or property; remove docblocks that explain cross-branch (`withoutBranch`) reasons, or the comment on `WalletController::voidTopUp`'s `int|string` parameter. Do simplify: naming, nesting, dead code, redundant local variables, import order, nested ternaries into `match`, and duplicated private helpers *within* one class. For every change, state the file and a one-line reason. For every rule of yours you chose NOT to apply because of the constraints above, list it as "rejected: <hazard id>".
+   > Review and simplify ONLY these files, which were changed by Spec 16: <file list>. Read `.kiro/specs/16-backend-code-quality/design.md` §3 (hazards H1–H16) and §14 (Laravel 13 standards, including the rejected list in §14.3) first; every hazard is a hard constraint. Do NOT: make classes `final`, add `declare(strict_types=1)`, use PHP 8.4+ syntax (`composer.json` requires `^8.3`), or convert `Carbon::create*()` month loops to `now()`/immutable dates (H16); create custom exception classes or an `app/Exceptions/` directory (spec Req 2.7); merge or "consolidate" validation rule sets, Form Requests or Resources across endpoints (H13); add, remove or change any `(float)`/`(int)`/`round()` cast (H1, H15); change any `abort()` into `response()->json()` or the reverse (H3); move guards out of `prepareForValidation()` (H4); switch between Eloquent `update()` and query-builder `update()` (H5); return a `JsonResource` directly from a controller (H6); replace `$request->only(...)` in the password-reset controllers (H7); tighten any permissive rule (H8); change any response key, message text, status code, activity-log name or property; remove docblocks that explain cross-branch (`withoutBranch`) reasons, or the comment on `WalletController::voidTopUp`'s `int|string` parameter. Do simplify: naming, nesting, dead code, redundant local variables, import order, nested ternaries into `match`, and duplicated private helpers *within* one class. For every change, state the file and a one-line reason. For every rule of yours you chose NOT to apply because of the constraints above, list it as "rejected: <hazard id>".
 
 4. Run the full verification gate: both databases, zero fixture diffs, role matrix, Pint.
 5. Revert any single change that fails the gate; don't debug the simplifier's output. List the reverted items in the PR.
-6. The PR description contains the agent's change list, the rejected list, and the gate results.
+6. Commit as `refactor(spec16): apply laravel-simplifier pass`. The commit body and PR description list the agent's applied changes, the rejected list and the gate results.
+
+## 13. Frontend integration (verified 2026-10-09 against `~/sunbites-pos` and `~/sunbites-portal`)
+
+### 13.1 Method
+
+1. Every `apiClient.*` and `fetch(` call in both apps (excluding tests) was mapped to a backend route.
+   - **Calls to a missing backend route:** none.
+   - **Backend routes no FE page calls:**
+     - `GET portal/students/{student}/ledger` (Spec 14; the portal never calls it)
+     - `POST users/{user}/photo`, `POST users/{user}/branches`, `DELETE users/{user}/branches/{branch}` (the POS sends `branch_ids` and photos through `POST/PUT users`)
+     - `POST auth/password/email` (the POS has no forgot-password page)
+     - `POST portal/pre-registrations` and `POST portal/pre-registrations/check` (B-04)
+     - `GET api/health`
+
+     None of these is removed by this spec except B-04. They are listed so nobody "fixes" them by accident.
+   - **Calls with a computed URL:**
+     - student photos: `fetch(student.photo_url, { headers })` with `Authorization` and `X-Branch-Id`, at `students/[id]/page.tsx:2560` and `students/page.tsx:431/627/1138`
+     - portal photos: `lib/api/portal.ts:43/75/93`
+     - report exports: `lib/api/reports.ts:16`, `apiClient.download` → `client.ts:84`, which sends `X-Branch-Id`
+     - kiosk: `lib/api/kiosk.ts:6` (`/public/kiosk/lookup`)
+2. For every spec change, the consuming page and the exact field it reads were opened and checked (§13.2).
+3. The Laravel `composer update` (13.33.0 → 13.35.0, `brick/math` 0.20 → 1.0 used by the wallet) was checked by running the full backend suite: **951/951 passing on MySQL on 2026-10-09**. No API code changed in those commits.
+
+### 13.2 Change → frontend consumer matrix
+
+**Track A (no shape changes; enforced by contract fixtures, §4.1):**
+
+| Spec change | Endpoints | FE consumers (file:line) | Field/behaviour the FE depends on | Result |
+|---|---|---|---|---|
+| Form Requests (rules verbatim) | 83 methods (§4.2.1) | all `lib/api/*.ts` | `ApiError` parsing of `{message, errors}` in `lib/api/client.ts` (both apps) | Same envelope (`ValidationException` → `bootstrap/app.php`). Safe |
+| Permissive magic-input rules (§4.2.3) | `GET /students`, `GET /users`, `GET /references/meal-planner`, `GET /branch-monthly-amounts`, `GET /reminders/eligible-parents` | POS `students/page.tsx:1385-1393` (`type, page, search, grade, status, month, year, payment_status`, plus `deleted`), `references/users/page.tsx:152-157` (`search, role, status, page`), `lib/api/meal-planner.ts:12-14` (`month` lowercase, `week`), `lib/api/students.ts:180-181` (`year`), `reminders/page.tsx:176-181` (`search, status, school_month, school_year`) | Every value is accepted by `['nullable']`; `page` is read by the paginator, not `validated()` | Safe |
+| Pre-validation guards (§4.2.2) | 18 methods | POS void, payments, contacts, pre-reg, feedback; portal feedback | Error `message` text shown in toasts | Same message wins (precedence tests). Safe |
+| `#[Authorize]` (14 calls) | user mgmt, void, portal student routes | POS users pages, transactions void; portal wallet/activity/photo/spending | 403 → `{"message":"Forbidden."}` | Same body. Safe |
+| Resources (§4.4) | notifications ×2, inventory items/logs, menu items, ingredients, credit settle/waive | POS `notification-bell.tsx`, `references/inventory/page.tsx`, `menu-mgmt-tab.tsx`, `inventory-tab.tsx`, credit dialogs; portal `notification-bell.tsx`, `notifications/page.tsx` | keys and types incl. `data`, `read_at`, `created_at`, `status`, `inventory_status` | Copied 1:1, serialised without a `data` wrapper (H6). Safe |
+| `PaymentStatus` enum cast | `/students/{student}/payments*`, `/students`, `/reports/billing`, `/reports/students`, `/reports/subscription`, reminders, portal payment-history | POS `MonthlyPayment.status` (`'paid'\|'unpaid'\|'voided'`), billing page `row.status`; portal `payment-history-tab.tsx`, `payment-history-timeline.tsx` | the status string | A backed enum JSON-encodes to the same string. Safe |
+| `AuthorizesRequests`, `#[UsePolicy]`, scopes, accessors | n/a | n/a | n/a | No response change. Safe |
+| N+1 fixes (§4.6) | `/announcements`, `/announcements/{a}`, `/reminders/send`, credit charge | POS `announcements/page.tsx`, `announcements/[id]/page.tsx` (`read_count`, `recipients[].name`/`read_at`), `reminders/page.tsx` (`sent`, `skipped`, `skipped_names`) | values | Same values (query-count and fixture tests). Safe |
+| Lazy-loading guard (§4.5.4) | all | all pages on **local** and **staging** | n/a | Logs only outside `testing`, so no page can break. Safe |
+| `ShouldQueueAfterCommit` (§4.7) | credit charge/settle/waive, announcements, reminders, pre-reg, enrollment welcome mail | POS `notification-bell.tsx`, portal `notification-bell.tsx`, Echo `components/providers/echo-provider.tsx` (both) | real-time events arrive | Events are sent after commit instead of possibly before, so there is no visible change except never seeing a notification for a rolled-back write. Safe |
+| `composer.json` hygiene | n/a | n/a | n/a | Safe |
+
+**Track B (deliberate behaviour changes):**
+
+| Item | Endpoints | FE consumers (file:line) | Result for the user |
+|---|---|---|---|
+| B-01 | `references/parents/{parent}*`, `references/inventory/{item}/unarchive`, `dashboard/staff-status` | POS `references/parents/page.tsx:221` (the only route into the detail page, from the branch-scoped list); `references/inventory/page.tsx:923` (unarchive); dashboard roster → `lib/api/reports.ts:338-341` (`user_id` from the branch roster) | No visible change: every FE path already uses same-branch ids. Only crafted cross-branch requests now get 404/422 |
+| B-02 | all kitchen routes except the allowlist (§5.2) | POS `(kitchen)/layout.tsx:31-32` and `(pos)/layout.tsx:28-29` redirect to `/branch` without `activeBranch`; `lib/api/client.ts:36` and `:84` send `X-Branch-Id`; photo fetches send it; `(auth)/branch/page.tsx:24-42` calls only `GET /branches` and `POST /auth/branch` (allowlisted); Echo calls `POST /broadcasting/auth` (allowlisted) | No visible change on normal flows. **Edge:** if an admin deactivates the branch they are currently in, later calls return 422 "No active branch selected. Please set a branch first." instead of today's mix of 500s and unscoped data; the toast tells them what to do. Staging smoke test required |
+| B-03 | `pos/checkout`, `pos/transactions/{order}/void`, `pos/inventory/{item}/adjust` | POS checkout, void dialog, inventory tab | Stock values become correct. No shape change |
+| B-04 | removes `portal/pre-registrations`, `portal/pre-registrations/check` | none: portal uses `lib/api/pre-registration.ts:8` (`/public/pre-registrations`) only | None |
+| B-05 | `reminders/*`, `reports/billing(+export)`, `reports/subscription` | POS `reports/billing/page.tsx:85-87,154,163-171` (sends school-year start), `reports/subscription/page.tsx:71-74,126,135`, `reminders/page.tsx:58-66,180`; portal `components/notification-item.tsx:128-130`, `components/notification-bell.tsx:150-157`, `notifications/page.tsx:187-194` (render `school_month school_year` and `due_date`); portal `payment-history-timeline.tsx:24-29` already treats `year` as calendar | January–March rows appear where the page asked for them. Reminder due dates are correct (e.g. `2027-01-31`, not `2028-01-31`). Row `year` values are unchanged (calendar), and `subscription_monthly_status.year` is not read by the POS (`subscription/page.tsx:315` reads only `.categories`). No FE change |
+| B-07 | order responses | POS `components/pos/receipt-modal.tsx:69-72`; type `types/order.ts:93-96` | The receipt shows the cashier's name (blank today) |
+| B-08 | `portal/auth/login` | portal `(auth)/login/page.tsx:45` special-cases only `account_not_activated`, which is kept | A disabled parent with a wrong password sees "Invalid credentials." instead of the disabled message. Activation flow unchanged |
+| B-09 | pre-registration update/store | POS pre-reg detail; portal pre-register | No shape change |
+| B-10 | search endpoints (§5.9) | every search box | `%` and `_` in a search box match literally |
+| B-11 | `reports/analytics` | POS `components/analytics/section-credits.tsx` | The near-limit count respects System Settings |
+| B-12/B-13 | `reports/sales`, `reports/billing` | POS `reports/sales/page.tsx:387,391` and `SalesOrder` `lib/api/reports.ts:85-95`; `reports/billing/page.tsx` reads `row.student.{full_name, grade_level, section, student_number}`, `row.recorder.{first_name, last_name}`, `row.{id, amount, recorded_at, school_month, status, year}` | The sales student column shows names (blank today). No field the FE reads is removed |
+| B-14 | `students/{student}/status` | POS `students/[id]/page.tsx:821-822`, `students/page.tsx:329-330` always send `enrollment_status` | None (only malformed requests change from 500 to 422) |
+| B-15 | `portal/students/{student}/payment-history` 403 | portal `payment-history-tab.tsx:31` shows a fixed message | None |
+| B-16 | `references/inventory` | §5.14 | The Archived section and Unarchive start working |
+
+### 13.3 Staging smoke checklist per task (run before promoting to production)
+
+Log in to staging POS (`staging-pos.sunbites.com.ph`) and portal (`portal-staging.sunbites.com.ph`). After the single PR is merged into `staging` (auto-deployed), click through **every** row below (the PR contains all tasks) and confirm each page loads and the listed action works. Record the result as a PR comment before promoting to `main`. While developing, the same rows can be checked locally (POS `localhost:3000`, portal `localhost:3001` against Sail) per task.
+
+| Task | POS pages | Portal pages |
+|---|---|---|
+| T-2 | References → Users (deactivate/reactivate, reset password); POS → Transactions → Void | Students → wallet, activity, spending, photo |
+| T-3 | POS checkout (cash, wallet, wallet+credit, subscription, discount as manager), receipt; Transactions list + void; inline reload | n/a |
+| T-4 | Student → wallet top-up, void top-up, settle credit, waive credit (admin); Reports → Wallet history | Student → wallet |
+| T-5 | Enrollment (subscription + non-subscription); Students list (filters, deleted tab); Student detail (edit, photo, status, type, payments record/toggle/void/amount/range, contacts) | n/a |
+| T-6 | Login, branch select, reset password page; References → Users (create/edit); Branches; System Settings; Subscription Config; branch monthly amounts | n/a |
+| T-7 | References → Inventory (create/edit/adjust/archive/history/logs); Menu management (items, ingredients); Meal planner (edit/reset/visibility) | Meal plan |
+| T-8 | Pre-registrations list/detail/edit/approve/reject/reactivate | Public pre-register form |
+| T-9 | Reminders (list, filters, send, parent detail); Announcements (list/create/detail); notification bell; Dashboard staff status; References → Feedback reply; References → Parents | Notifications page and bell; Feedback |
+| T-10 | Reports: sales, students, billing, subscription, wallet, credits, daily summary, inventory, activity, analytics, plus each export | n/a |
+| T-11 | n/a | Login (incl. unactivated parent prompt), forgot/reset password, dashboard, students (all tabs), wallet alert, feedback, profile (edit, photo, password), meal plan, notifications |
+| T-12 to T-15 | Student payments tab; Billing report + export; Reports → Inventory | Payment history |
+| T-16 to T-19 | The union of all rows above (cross-cutting changes) | The union of all rows above |
+| B-items | The pages in their §13.2 row | The pages in their §13.2 row |
+
+## 14. Laravel 13 and PHP standards alignment (final check, 2026-10-09)
+
+A full scan of `app/` against Laravel 13.35 idioms, the project's `laravel-best-practices` skill (`rules/style.md`, `eloquent.md`, `validation.md`, `architecture.md`), the Boost PHP guidelines in `CLAUDE.md`, and Pint (`preset: laravel`, enforced in CI with `pint --test`).
+
+### 14.1 Adopted (Track A, behaviour-identical; applied inside the listed task's commit)
+
+| # | Laravel 13 / PHP standard | Sites today (verified with `rg`) | Change | Task | Why it is behaviour-identical |
+|---|---|---|---|---|---|
+| S1 | `Rule::enum()` instead of `new Enum()` | 9: `MealPlannerController` L60, L63, L97, L125; `InventoryReportController` L24; `InventoryController` L83, L192; `PosMenuItemController` L32, L46 | `Rule::enum(X::class)` in the new Form Requests | T-7, T-10 | `Rule::enum()` returns `new Enum($type)` |
+| S2 | `Rule::in()` for config-driven lists | 5 × `'in:'.implode(',', config('sunbites.grade_levels'))`: `Kitchen\PreRegistrationController` L130, `StudentController` L110, `EnrollmentController` L61, `Public\PreRegistrationController` L54, `Portal\PreRegistrationController` L27 (removed by B-04) | `Rule::in(config('sunbites.grade_levels'))` | T-5, T-8 | Same membership check and message; `Rule::in` quotes values, and none contain commas. Literal string rules such as `'in:cash,gcash'` stay strings |
+| S3 | `whereAny()` for "match any column" searches | 6 grouped OR chains: `StudentController::index` L34-37, `StudentLookupController::lookupBySearch` L63-66, `TransactionController::index` L48-51 (inside `whereHas`), `SubscriptionReportController` L38-41, `UserManagementController::index` L27-30, `WalletHistoryController::topups` L107-108 (top-level `User::where…orWhere`) | `->whereAny(['first_name', 'last_name', 'student_number'], 'like', $pattern)` (the columns of that site) with the **same** `$pattern` string, including `StudentController`'s existing backslash escaping | T-3.5, T-5.2, T-6.2, T-4.4, T-10.3 | `whereAny` wraps the columns in one nested `(… OR …)` group (verified in `Query\Builder::whereAny`, 13.35), the same grouping Eloquent applies to these chains today. `StudentReportController::applySearch` (has `orWhereRaw(CONCAT…)`) and `CreditReportController` (`DB::raw` CONCAT) stay as they are |
+| S4 | `private readonly` promoted dependencies | 8 non-readonly vs 20 readonly: `CheckoutController` L29, `WalletController` L17, `TransactionController` L25, `CreditController` L16, `Kitchen\StudentLedgerController` L18-19, `Portal\StudentLedgerController` L27-28 | add `readonly` | T-3, T-4 | Container injection is unchanged |
+| S5 | Typed class constants (PHP 8.3; `composer.json` requires `^8.3`) | `MealPlannerController::DEFAULT_WEEK` | `private const array DEFAULT_WEEK = [...]` | T-7.4 | Type annotation only. `Feedback::UPDATED_AT` and `MealPlannerWeekVisibility::CREATED_AT` override framework constants and stay untyped |
+| S6 | Inject the user instead of the `auth()` helper in controllers | `Kitchen\PreRegistrationController` L224, L231, L236 (move to `ApprovePreRegistrationAction` as `$approver`), L273, L304 (`reject`/`reactivate` → `$request->user()`) | as stated | T-8 | Same authenticated user. `AuthEventSubscriber`'s `request()->ip()` stays (event subscribers receive no request) |
+| S7 | Import classes instead of inline FQCN | `Kitchen\AuthController` L125 `\Illuminate\Validation\Rules\Password::defaults()` | `use Illuminate\Validation\Rules\Password as PasswordRule;` (avoids clashing with the `Password` facade already imported) | T-6.1 | Same class |
+| S8 | Laravel 13 attributes | model attributes (§4.5.5), `#[Scope]`, `#[UsePolicy]`, `#[Authorize]`, `#[Tries]`/`#[Backoff]`, `ShouldQueueAfterCommit` | as designed | T-2, T-12, T-14, T-16 | see each section |
+| S9 | `casts()` method and `Attribute::make()` everywhere | 1 `$casts` property, 1 legacy accessor | §4.5.3 | T-12 | Same casts and accessor |
+| S10 | Generic docblocks for static analysis | 6 models missing `@use HasFactory<…>`, 52 relations without `@return Relation<Model, $this>` | §4.5.5 | T-16 | Docblocks only |
+
+### 14.2 Already aligned (verified; no change)
+
+- **Commands:** artisan commands use `#[Signature]`/`#[Description]`.
+- **Mail:** every mailable uses `Envelope`/`Content`; none uses legacy `build()`.
+- **Dates and request input:** `now()` is used instead of `Carbon::now()` (0 occurrences); typed request accessors (`$request->integer()`, `->boolean()`) are used.
+- **Bootstrap and scheduling:** `bootstrap/app.php` uses the Laravel 11+ `Application::configure()` structure; scheduling uses the `Schedule` facade in `routes/console.php`.
+- **Configuration defaults:** `Date::use(CarbonImmutable::class)`, `DB::prohibitDestructiveCommands()` and `Password::defaults()` are set in `AppServiceProvider`.
+- **Enums:** string-backed with TitleCase cases.
+- **Style:** Pint passes in CI.
+
+### 14.3 Considered and rejected (with reason)
+
+| Idea | Why not |
+|---|---|
+| `whereLike()` instead of `whereRaw('lower(col) like ?')` | Equivalence depends on column collation (local tables are `utf8mb4_unicode_ci`, but production collation is not verified), and B-10 rewrites these searches with literal escaping anyway |
+| `final` classes | 0 final classes in `app/`; the skill's first rule is consistency |
+| `declare(strict_types=1)` | Not Laravel convention; changes scalar coercion at call sites (behaviour risk) |
+| PHP 8.4/8.5 syntax (property hooks, asymmetric visibility, `\|>` pipe, `new X()->m()`, `array_find`) | `composer.json` requires `php: ^8.3`; using 8.4+ syntax would fatally error on an 8.3 runtime. It needs a constraint bump to `^8.5` (CI and Sail already run 8.5; Laravel Cloud runtime not verified), which is a separate approval |
+| Controller `#[Middleware]` for roles, `#[CurrentUser]` everywhere, `JsonApiResource` | §2 rules / Req 6.1, 9.4, 5.5 |
+| `toResource()` / `#[UseResource]` | Convention-based resolution adds indirection to 4 call sites with no benefit; explicit `new XResource()` stays |
+| Invokable single-action controllers, `Route::controller()` groups | Changes route definitions (route files are the audited source of truth) for no behaviour gain |
+| `Number::format()`/`currency()` in `KioskLookupController` | Would change the kiosk's formatted strings |
+| Converting `Carbon::create*()` to `now()`/`Date::` | H16 (mutability; infinite loop risk) |
+
+### 14.4 Final audit (task T-18)
+
+After T-17, run each command below. The expected result is **0 hits** unless an allowed exception is listed. Paste the output into the T-18 commit body.
+
+```bash
+rg -n 'new Enum\(' app                                   # 0
+rg -n "'in:'\.implode" app                               # 0
+rg -n '\$this->authorize\(' app                          # 0
+rg -n 'protected \$casts\b|function get[A-Z]\w*Attribute\(|function scope[A-Z]' app/Models   # 0
+rg -n 'protected \$(table|fillable|hidden)\b|public \$timestamps' app/Models                   # 0
+rg -n -P 'private (?!readonly)[A-Z]\w+ \$' app/Http app/Actions app/Services                    # 0
+rg -n 'auth\(\)->' app/Http                               # 0
+rg -n '\\Illuminate\\' app | rg -v ':use '                 # 0 inline FQCNs
+rg -n '\$request->validate\(' app                         # 0
+rg -n '\$request->all\(\)' app                            # 0
+rg -n 'use AuthorizesRequests' app/Http/Controllers | rg -v 'Controllers/Controller.php'   # 0
+rg -n 'final class|declare\(strict_types' app             # 0 (rejected, §14.3)
+for f in app/Models/*.php; do grep -q HasFactory "$f" && ! grep -q '@use HasFactory<' "$f" && echo "$f"; done   # no output
+vendor/bin/sail bin pint --format agent                 # reports no changes (CI runs pint --test)
+```
+
+Any unexpected hit is fixed in the T-18 commit, behaviour-identically. If it cannot be fixed that way, list it as an exception with its reason.
