@@ -37,8 +37,10 @@ Then:
   - If Boost will not connect: stop (Req 12.4). Never continue without it.
 - **Before your first step only**, run the baseline (design §14.6) and confirm both report **951 passed**:
   ```bash
-  vendor/bin/sail artisan test --compact
-  docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact
+  # MySQL gate (design §11.1): copy the command exactly
+  docker compose exec -T -u sail -e DB_CONNECTION=mysql -e DB_HOST=mysql -e DB_DATABASE=testing -e DB_USERNAME="$(grep -E '^DB_USERNAME=' .env | cut -d= -f2-)" -e DB_PASSWORD="$(grep -E '^DB_PASSWORD=' .env | cut -d= -f2-)" laravel.test php vendor/bin/phpunit
+  # SQLite gate (design §11.1)
+  docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit
   ```
   If either fails before you change anything, stop and report. Do not fix pre-existing failures.
 
@@ -115,8 +117,9 @@ Re-read #7 (§3 hazards) and #8 (ground rules) at the start of **every** step.
 ### 5.3 After writing code (the verification gate, in this order)
 1. Run the narrow tests for what you touched, and fix your own code until they pass. Never weaken a test to make it pass.
 2. `vendor/bin/sail bin pint --dirty --format agent`.
-3. Full suite on MySQL: `vendor/bin/sail artisan test --compact`.
-4. Full suite on SQLite: `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`.
+3. Full suite with the **MySQL gate** (design §11.1, exact command).
+4. Full suite with the **SQLite gate** (design §11.1, exact command).
+   **Never** use `vendor/bin/sail artisan test` as a gate: it silently runs SQLite (design §11.1).
 5. Fixture check (from T-2 onward): `git status --porcelain tests/Fixtures/contracts`.
    - **Track A: this must print nothing.**
    - **Track B:** only the fixtures the task lists may appear.
@@ -201,7 +204,7 @@ Notes on the order:
 
 **Track A (T-1 … T-19):**
 - Zero behaviour change. Zero fixture diffs after T-1. Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-04 (deletions), B-05 (`BillingReportTest` seeds).
-- T-1 creates fixtures in **record mode**, MySQL first, then SQLite overrides only where shapes differ (design §4.1.2). Recording happens **only** in T-1.
+- T-1 creates fixtures in **record mode**: MySQL gate first, then SQLite overrides only where shapes differ (design §4.1.2). Contract tests use `app.debug = false`. Recording happens **only** in T-1.
 
 **Track B (B-xx):**
 1. Write the failing test **first**. Run it and paste the failing output in your report.
@@ -270,8 +273,10 @@ Next step per §6: <id> (waiting for "proceed")
 |---|---|
 | Repo | `~/sunbites-api` (Laravel 13.35.0, PHP 8.5, Sail) |
 | Branch / start SHA | `bump-laravel-13-latest` / `3454977` |
-| MySQL tests | `vendor/bin/sail artisan test --compact [path] [--filter=name]` |
-| SQLite tests (CI driver) | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact [path]` |
+| MySQL gate | design §11.1 (direct `vendor/bin/phpunit` with `-e DB_CONNECTION=mysql -e DB_DATABASE=testing` and credentials read from `.env`) + `[path] [--filter=name]` |
+| SQLite gate | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit [path] [--filter=name]` |
+| `vendor/bin/sail artisan test` | **Not a gate**: runs SQLite via the gitignored `.env.testing` |
+| Contract debug mode | `app.debug = false`, set in `ContractTestCase::setUp()` |
 | Pint | `vendor/bin/sail bin pint --dirty --format agent` |
 | Routes | `vendor/bin/sail artisan route:list --path=api --except-vendor` (165; 163 after B-04) |
 | Test auth pattern | `Sanctum::actingAs($user, ['staff'])` + `withHeaders(['X-Branch-Id' => $branch->id])`; parents: `Sanctum::actingAs($parent, ['parent'], 'parents')`; seed `PermissionSeeder` in `setUp()` (see `tests/Feature/PosCheckoutTest.php`) |

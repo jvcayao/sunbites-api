@@ -64,7 +64,7 @@ Each hazard names the concrete sites. A task is not done until its diff has been
 |---|---|---|---|
 | H1 | **Numeric serialisation.** `decimal:2` casts serialise as **strings** (`"150.00"`); `(float)` casts serialise as **numbers** (`150` or `150.5`). The FE TypeScript often says `number` for fields that are actually strings and parses with `Number()`. | Never add or remove a `(float)` cast or change a cast. Copy each field's expression exactly. | `OrderResource` (`total`, `subtotal`, …: strings), `StudentResource.total_spent`/`credit_balance` (strings), most report controllers (floats) |
 | H2 | **Enum vs string comparison.** After `status` is cast to `PaymentStatus`, `$p->status === 'paid'` is always false and in-memory `$collection->where('status', 'paid')` matches nothing. PHP compares enum to string as not equal. Query-builder `->where('status', 'paid')` still works. | Update every site in §4.5.2. Grep afterwards (T-12.4). | §4.5.2 |
-| H3 | **`abort()` vs `response()->json()`.** `abort(422, 'x')` renders `{"message":"x"}` in production but adds `exception`/`file`/`line`/`trace` when `APP_DEBUG=true`. `response()->json(['message' => 'x'], 422)` never does. | Keep each guard's original mechanism. When a `return response()->json(...)` guard moves out of a controller, throw `new HttpResponseException(response()->json(<same>, <same>))`. | §4.2.2, §4.3 |
+| H3 | **`abort()` vs `response()->json()`.** `abort(422, 'x')` renders `{"message":"x"}` in production but adds `exception`/`file`/`line`/`trace` when `APP_DEBUG=true`. `response()->json(['message' => 'x'], 422)` never does. Contract fixtures are recorded with `app.debug = false` (production shape, §4.1.2), so **fixtures cannot catch a swap. This hazard is enforced by code review only.** | Keep each guard's original mechanism. When a `return response()->json(...)` guard moves out of a controller, throw `new HttpResponseException(response()->json(<same>, <same>))`. | §4.2.2, §4.3 |
 | H4 | **Error precedence.** Form Requests validate before the controller body. Guards that ran *before* `validate()` would now run after, so a different error would win. | Move each pre-validation guard into `prepareForValidation()`, or move it to `#[Authorize]` if it is an authorize call (§4.2.2). | 18 methods, §4.2.2 |
 | H5 | **Activity log side effects.** Eloquent `$model->update()`/`save()` on a `LogsActivity` model (`Student`, `Order`, `User`, `InventoryItem`, `PosMenuItem`) writes an activity row. Query-builder `Model::where()->update()` does not. | Never switch between the two. Keep manual `activity()` calls with identical log name, description and property keys, in the same order. | Checkout stock write (query builder, no log), void restock (Eloquent, logs), adjust (Eloquent, logs), `PosMenuItemController::toggleAvailability` (`Activity::withoutLogging`) |
 | H6 | **Resource wrapping.** A `JsonResource` returned directly gets a `data` wrapper. | Only ever `response()->json($resource)` or nest it in an array. Never `return new XResource(...)`. | §4.4 |
@@ -138,18 +138,20 @@ protected function assertFileContract(TestResponse $response, string $routeKey, 
 
 - Fixture path: `tests/Fixtures/contracts/{slug}@{variant}.json`, where `slug = strtolower(method).'__'.trim(preg_replace('/[^a-z0-9{}]+/i', '_', uri), '_')`. Example: `get__api_v1_students_{student}@ok.json`.
 - Fixture content: `{"status": 200, "body": <shape>}`, pretty-printed with `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES`.
-- **Driver overrides:** the primary fixture is recorded on **MySQL** (`vendor/bin/sail artisan test`). When run on SQLite, the trait first looks for `{slug}@{variant}.sqlite.json` and uses it if present. The override is created only when the SQLite shape differs (H15), and every override gets a row in `contract-gaps.md` (column `proposed Track B item` = `driver divergence`). Record order: MySQL first, then SQLite with `CONTRACT_RECORD=1 CONTRACT_DRIVER_OVERRIDE=1`, which writes an override **only** when the shape differs from the MySQL fixture.
+- **Debug mode:** contract tests run with `config(['app.debug' => false])`, set in `Tests\Feature\Contract\ContractTestCase::setUp()` (below). Fixtures therefore record the **production-shaped** body (`APP_DEBUG=false` in production and in CI's `.env.example`; the local `.env.testing` has `APP_DEBUG=true`). Without this, every `abort()` variant would record `exception`/`file`/`line`/`trace` locally but not in CI.
+- **Base class:** every contract test extends `Tests\Feature\Contract\ContractTestCase` (new, `abstract class ContractTestCase extends Tests\TestCase`, `use LazilyRefreshDatabase; use AssertsApiContract;`), whose `setUp()` calls `parent::setUp()`, then `config(['app.debug' => false])`, then `$this->scenario = ContractScenario::build($this)`. The role matrix and route coverage tests also extend it, but override scenario building as §4.1.5 describes.
+- **Driver overrides:** the primary fixture is recorded on **MySQL**, using the MySQL gate command in §11.1. **Not** `vendor/bin/sail artisan test`, which runs SQLite. When run on SQLite, the trait first looks for `{slug}@{variant}.sqlite.json` and uses it if present. The override is created only when the SQLite shape differs (H15), and every override gets a row in `contract-gaps.md` (column `proposed Track B item` = `driver divergence`). Record order: MySQL first (the MySQL gate with `-e CONTRACT_RECORD=1` added before `laravel.test`), then SQLite (the SQLite gate with `-e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1`), which writes an override **only** when the shape differs from the MySQL fixture.
 - **Record mode:** when `env('CONTRACT_RECORD') === '1'`, write the fixture and `markTestIncomplete('recorded')`. Otherwise a missing fixture fails with `"No contract fixture for {slug}@{variant}; run with CONTRACT_RECORD=1 in the contract-freeze PR only."`. A mismatch fails with `assertSame($expected, $actual)` so PHPUnit prints a diff.
 
 #### 4.1.3 Deterministic scenario (`ContractScenario`)
 
-`ContractScenario::build(TestCase $test, string $now = '2026-10-15 09:30:00'): self` creates, in one call, using existing factories and states. It takes the running test case because it needs `$test->travelTo()`, `$test->seed()` and `$test->postJson()`, which are public test-case methods. It cannot be a static factory-only helper:
+`ContractScenario::build(TestCase $test, string $now = '2026-10-15 09:30:00'): self` creates, in one call, using existing factories and states. Attribute overrides on an existing factory are allowed where no state exists; adding new factory states is **not** allowed in T-1. It takes the running test case because it needs `$test->travelTo()`, `$test->seed()` and `$test->postJson()`, which are public test-case methods. It cannot be a static factory-only helper:
 
 - **Clock:** time is frozen with `$test->travelTo(Carbon::parse($now))`. The default is school year 2026, month October; pass `'2027-01-20 09:30:00'` for the January scenarios used by B-05.
 - **Branches:** A (`slug` `ant`, active) and B (active).
 - **Staff:** one user per role, `admin`, `manager`, `supervisor`, `cashier` (`$this->seed(PermissionSeeder::class)`), all attached to branch A. Plus one manager attached only to branch B.
 - **Students in branch A:**
-  - a subscription student with a wallet (deposit ₱500 performed by the cashier), `credit_balance` 50.00 via `CreditLedgerService::charge`, and payments: June 2026 paid, October 2026 unpaid, January 2027 unpaid, one voided payment
+  - a subscription student with a wallet (deposit ₱500 performed by the cashier), `credit_balance` 50.00 via `CreditLedgerService::charge`, and payments: June 2026 paid, October 2026 unpaid, January 2027 unpaid, and one **voided** payment (November 2026) created as `StudentMonthlyPayment::factory()->paid()->create(['student_id' => …, 'school_month' => 'november', 'year' => 2026, 'status' => 'voided', 'voided_at' => now(), 'voided_by' => $manager->id, 'void_reason' => 'Contract scenario'])`. Use attribute overrides, not the void endpoint, so the scenario does not depend on endpoint guards
   - a non-subscription student
   - a soft-deleted student
 - **Student in branch B:** one, for isolation checks.
@@ -188,7 +190,7 @@ Fill optional fields in the scenario wherever possible (e.g. `section`, `allergi
   - Parameter resolution is by URI:
     - `{item}` under `pos/menu-items` or `references/menu-items` → `PosMenuItem`; under `inventory` → `InventoryItem`
     - `{student}`, `{order}`, `{payment}`, `{contact}`, `{parent}`, `{user}`, `{branch}`, `{feedback}`, `{announcement}`, `{preRegistration}`, `{branchMonthlyAmount}`, `{inventoryItem}`, `{key}` = `credit_limit`, `{id}` = a notification uuid of the actor, `{transaction}` = the deposit id
-  - Also asserts every portal route (and `POST api/v1/portal/broadcasting/auth`) returns 401 with no token and 401 with a **staff** token, and every kitchen route inside `auth:sanctum` returns 401 with a **parent** token. These use **real** tokens (`$user->createToken('t', ['staff'])->plainTextToken` sent as `Authorization: Bearer …`), not `Sanctum::actingAs`, because the property under test is Sanctum's `hasValidProvider()` check (verified in `vendor/laravel/sanctum/src/Guard.php` L130/L145).
+  - Also asserts that every route whose gathered middleware includes `auth:parents` (this includes `POST api/v1/portal/broadcasting/auth`) returns 401 with no token and 401 with a **staff** token, and that every route whose gathered middleware includes `auth:sanctum` returns 401 with no token and 401 with a **parent** token. **Public routes are excluded**: portal `auth/login`, `auth/password/email`, `auth/password/reset`, `pre-registrations*` (until B-04), kitchen `auth/login`, `auth/password/*`, `/public/*` and `api/health`. Select routes by middleware, never by URI prefix. These use **real** tokens (`$user->createToken('t', ['staff'])->plainTextToken` sent as `Authorization: Bearer …`), not `Sanctum::actingAs`, because the property under test is Sanctum's `hasValidProvider()` check (verified in `vendor/laravel/sanctum/src/Guard.php` L130/L145).
   - Performance: the matrix does **not** use the full `ContractScenario`. It uses a minimal fixture built once per data-provider row: one branch, one user per role, and one instance of each bound model. Otherwise it would build the full scenario roughly 560 times.
 
 #### 4.1.6 Frontend cross-check (Req 1.7)
@@ -1007,6 +1009,32 @@ Track B commits are placed after the Track A commit they depend on (listed per i
 - New code paths throw only `HttpResponseException` (for ported `response()->json` guards), `abort()` (for ported `abort` guards), `ModelNotFoundException` (B-01), or `ValidationException` via Form Requests.
 - No new exception classes and no `app/Exceptions/` directory.
 
+### 11.1 Test gate commands (authoritative; verified 2026-10-09)
+
+Use **exactly** these two commands for every full-suite or narrow run in this spec. Append a path and/or `--filter=name` for narrow runs.
+
+**MySQL gate** (production engine; Sail's MySQL `testing` schema, created by Sail's `create-testing-database.sh`):
+
+```bash
+docker compose exec -T -u sail -e DB_CONNECTION=mysql -e DB_HOST=mysql -e DB_DATABASE=testing -e DB_USERNAME="$(grep -E '^DB_USERNAME=' .env | cut -d= -f2-)" -e DB_PASSWORD="$(grep -E '^DB_PASSWORD=' .env | cut -d= -f2-)" laravel.test php vendor/bin/phpunit
+```
+
+**SQLite gate** (CI's driver; in-memory):
+
+```bash
+docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit
+```
+
+Verified on 2026-10-09:
+- **MySQL gate:** 951/951 OK. The `testing` schema gained 47 tables, and the dev `laravel` database was untouched.
+- **SQLite gate:** 951/951 OK. The gitignored `testing` file in the repo root was not touched, which proves the in-memory database was used.
+
+**Do not use `vendor/bin/sail artisan test` as a gate.** It does **not** run on MySQL. Collision's `TestCommand::clearEnv()` (`vendor/nunomaduro/collision/src/Adapters/Laravel/Commands/TestCommand.php` L340) clears every variable named in `.env`, including `-e DB_*` overrides. The process then loads the local, gitignored `.env.testing` (`DB_CONNECTION=sqlite`, `APP_DEBUG=true`), so it runs on SQLite against the gitignored `testing` file in the repo root. Calling PHPUnit directly avoids `clearEnv()`. Dotenv is immutable, so the `-e` values win over `.env.testing`.
+
+**Credentials:** the MySQL gate reads `DB_USERNAME`/`DB_PASSWORD` from `.env` at run time. Never print them, never write them into files or commits, and never edit `.env`.
+
+**Never** point tests at the `laravel` (dev) database (H18).
+
 ## 11. Testing strategy
 
 - **Contract suite** (§4.1): shapes, coverage, role matrix, portal 401s.
@@ -1024,7 +1052,7 @@ Track B commits are placed after the Track A commit they depend on (listed per i
 - **Query-count tests** (§4.6).
 - **After-commit test** (§4.7).
 - **Track B:** a failing test first, per §5.
-- Every commit runs the full suite on **MySQL** (`vendor/bin/sail artisan test --compact`) and **SQLite inside the Sail container** (`docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`; verified on 2026-10-09: `config:show database.default` reports `sqlite` with these flags, `mysql` without), plus `vendor/bin/sail bin pint --dirty --format agent`.
+- Every commit runs the full suite with **both** gate commands in §11.1 (MySQL and SQLite), plus `vendor/bin/sail bin pint --dirty --format agent`.
 - Existing tests are never edited except the single line in §4.5.2 and the deletions in B-04.
 
 ## 12. Mandatory tooling and final simplification (Req 12, non-negotiable)
@@ -1259,8 +1287,9 @@ Source: every class under `vendor/laravel/framework/src/Illuminate/**/Attributes
 | Check | Command | Result |
 |---|---|---|
 | Framework version | `vendor/laravel/framework/src/Illuminate/Foundation/Application.php` | 13.35.0 |
-| Test suite, MySQL | `vendor/bin/sail artisan test --compact` | 951/951 passed |
-| Test suite, SQLite (CI driver) | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact` | 951/951 passed (no deprecations with `--display-deprecations`) |
+| Test suite, MySQL | MySQL gate (§11.1) | 951/951 OK (`testing` schema; first genuine MySQL run, 2026-10-09) |
+| Test suite, SQLite (CI driver) | SQLite gate (§11.1) | 951/951 OK (in-memory) |
+| Test suite, `vendor/bin/sail artisan test` | *not a gate*: runs SQLite on the gitignored `testing` file via `.env.testing` | 951/951 passed (no deprecations with `--display-deprecations`) |
 | Code style | `vendor/bin/sail bin pint --test` (read-only) | passed |
 | Dependency advisories | `vendor/bin/sail composer audit` | no advisories |
 | Deploy caching | `vendor/bin/sail artisan config:cache` + `route:cache`, then `optimize:clear` | both succeed (closures in `routes/api.php`/`web.php` serialise). Caches were cleared afterwards (H18) |

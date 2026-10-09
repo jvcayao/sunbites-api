@@ -34,8 +34,8 @@
   - `vendor/bin/sail artisan make:request Kitchen/ListActivityLogsRequest --no-interaction`
   - `make:class`, `make:enum`, `make:middleware`, `make:resource`, `make:test --phpunit`
 - **Verification gate (every task):**
-  1. `vendor/bin/sail artisan test --compact` (MySQL), all green
-  2. `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact` (SQLite inside the Sail container, matching CI's driver), all green
+  1. **MySQL gate** (design §11.1, exact command), all green
+  2. **SQLite gate** (design §11.1, exact command), all green. **`vendor/bin/sail artisan test` is not a gate**: it runs SQLite, not MySQL
   3. **FE integration check:** re-read the design §13.2 rows for every endpoint the task touches, and list the §13.3 pages to smoke-test on staging in the PR description
   4. `vendor/bin/sail bin pint --dirty --format agent`
   5. Contract suite green with **zero** fixture diffs (Track A)
@@ -60,7 +60,7 @@
     - Unit test: the slug for `GET api/v1/students/{student}` is `get__api_v1_students_{student}`; record mode writes a file; compare mode fails on a changed shape.
     - _Requirements: 1.1, 1.2, 1.6_
   - [ ] 1.3 Create the deterministic scenario
-    - Create `tests/Support/Contract/ContractScenario.php` building every record in design §4.1.3 with existing factories and states only (`Student::factory()->subscription()`, `StudentMonthlyPayment::factory()->paid()`, `Order::factory()->credit()`, `->voided()`, `PreRegistration::factory()->pending()/approved()/expired()`, `ParentUserFactory::unactivated()`, …). Freeze time with `travelTo('2026-10-15 09:30:00')`.
+    - Create `tests/Support/Contract/ContractScenario.php` building every record in design §4.1.3 with existing factories and states only (attribute overrides allowed where no state exists, e.g. the voided payment; no new factory states) (`Student::factory()->subscription()`, `StudentMonthlyPayment::factory()->paid()`, `Order::factory()->credit()`, `->voided()`, `PreRegistration::factory()->pending()/approved()/expired()`, `ParentUserFactory::unactivated()`, …). Freeze time with `travelTo('2026-10-15 09:30:00')`.
     - Expose typed public properties (`$branchA`, `$branchB`, `$admin`, `$manager`, `$supervisor`, `$cashier`, `$subscriptionStudent`, …) and helpers `asStaff(User $u)` and `asParent(ParentUser $p)` following the `tests/Feature/PosCheckoutTest.php` pattern.
     - Test (`tests/Feature/Contract/ContractScenarioTest.php`): builds twice in separate tests with identical counts per table; branch B data is not visible with the branch A header.
     - _Requirements: 1.1_
@@ -69,14 +69,16 @@
     - For each route in `php artisan route:list --path=api --except-vendor` (165 on 2026-09-26), write the variants required by design §4.1.4.
     - Use `Http::fake` for reCAPTCHA, and `Mail::fake()`/`Notification::fake()`/`Storage::fake('private')`/`Storage::fake('public')` where the endpoint sends or stores.
     - Declare `mapPaths` for data-keyed maps. At minimum: `summary.grade_breakdown`, `summary.status_breakdown` (student report); `school_month_defaults` (enrollment index); `subscription_monthly_status.categories`, `subscription_daily_status` (lookup/portal); `payment_method_split` (spending summary); `settled_by_method` (credit report).
-    - Record on MySQL with `CONTRACT_RECORD=1 vendor/bin/sail artisan test --compact tests/Feature/Contract`, then create SQLite overrides only where shapes differ: `docker compose exec -T -u sail -e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1 -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact tests/Feature/Contract` (design §4.1.2, H15). Then run again **without** the flags on both drivers; both must be green with no diffs. List every `.sqlite.json` override in `contract-gaps.md`.
+    - Every contract test extends `Tests\Feature\Contract\ContractTestCase` (design §4.1.2), which sets `config(['app.debug' => false])`.
+    - Record on **MySQL** with the MySQL gate (design §11.1), adding `-e CONTRACT_RECORD=1` before `laravel.test` and `tests/Feature/Contract` at the end.
+    - Then create SQLite overrides only where shapes differ, with the SQLite gate plus `-e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1` and `tests/Feature/Contract` (design §4.1.2, H15). Then run again **without** the flags on both drivers; both must be green with no diffs. List every `.sqlite.json` override in `contract-gaps.md`.
     - _Requirements: 1.1, 1.2, 1.3_
   - [ ] 1.5 Add the route coverage test
     - `tests/Feature/Contract/RouteCoverageTest.php` per design §4.1.5. It must pass after 1.4.
     - Also add a test that asserts the route count is 165, with a comment explaining the number, so an added or removed route is a visible, deliberate change.
     - _Requirements: 1.4_
   - [ ] 1.6 Add the role authorization matrix
-    - `tests/Feature/Contract/RoleAuthorizationMatrixTest.php` per design §4.1.5: parameter resolver by URI, the exceptions array, portal 401 without token and with a staff token.
+    - `tests/Feature/Contract/RoleAuthorizationMatrixTest.php` per design §4.1.5: parameter resolver by URI, the exceptions array, and the 401 checks selected **by middleware** (`auth:parents` / `auth:sanctum`), excluding public routes.
     - **No data provider:** PHPUnit 12 runs providers before Laravel boots, so `Route::getRoutes()` would fail there. Write one test method per role that iterates the routes at runtime and asserts once on the collected mismatches (design §4.1.5).
     - _Requirements: 1.5_
   - [ ] 1.7 Cross-check against the frontend types

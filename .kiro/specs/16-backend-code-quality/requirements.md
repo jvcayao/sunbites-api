@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Sunbites API (Laravel **13.35.0**, PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on MySQL on 2026-10-09; MySQL 8.4 locally, SQLite in CI). It also grew feature by feature across Specs 01–15, and the code shows it:
+The Sunbites API (Laravel **13.35.0**, PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on 2026-10-09 on MySQL 8.4 (Sail `testing` schema) and on SQLite (CI's driver), using the gate commands in design §11.1. It also grew feature by feature across Specs 01–15, and the code shows it:
 - 83 controller methods (48 files) validate inline.
 - About 200 `response()->json([...])` calls hand-build response arrays.
 - Business rules live in controllers (Checkout 308 lines, Reminders 360, Analytics 535).
@@ -225,7 +225,7 @@ A Track A change and a Track B change are never combined in one PR.
 - **Wallet integrity:** balances change only via `deposit`/`withdraw`. The Spec 15 `DB::table('transactions')` meta update moves into `VoidWalletTopUpAction` unchanged.
 - **Credit ledger invariant:** `CreditLedgerService` stays the only writer of `credit_transactions` and `students.credit_balance`. `CreditLedgerInvariantTest` stays green.
 - **Activity log:** log names, descriptions and property keys are data consumed by the POS Activity Log screen. Moving code SHALL NOT add or remove model `save()`/`update()` calls on models using `LogsActivity` (`Student`, `Order`, `User`, `InventoryItem`, `PosMenuItem`). Switching between Eloquent `update()` and query-builder `update()`/`increment()` changes which activity rows are written.
-- **Database portability:** every query must behave the same on MySQL 8.4 and SQLite. Tests run on both (local Sail vs CI).
+- **Database portability:** every query must behave the same on MySQL 8.4 and SQLite. Tests must pass on both, using the two gate commands in design §11.1 (CI runs SQLite only; `vendor/bin/sail artisan test` also runs SQLite).
 - **Performance:** Track A must not add queries per request. Req 7 reduces them.
 - **Error handling:** envelopes from `bootstrap/app.php` are unchanged, and `abort()` message text is unchanged.
 - **Observability:** Sentry + Flare integration unchanged.
@@ -235,7 +235,7 @@ A Track A change and a Track B change are never combined in one PR.
 - **Frontend integration:** every commit is checked against the FE integration matrix in design §13. After the single PR merges to `staging`, the full page checklist (design §13.3) is run on staging before promoting to `main`.
 - **Delivery (Q3, updated 2026-10-09):** all work is committed on the **current branch `bump-laravel-13-latest`** (no new branch); start commit `3454977`; one commit per task group and per approved Track B item; `type(scope): description` subjects with no AI attribution trailers; the user opens and merges the single PR, preferably **without squash** so each area stays revertible (design §6).
 - **Code style:** Pint through Sail after every backend task (`.claude/rules/backend/laravel-pint.md`); PHP 8.3-compatible syntax only (`composer.json` `php: ^8.3`); hazard H16 (Carbon mutability) applies to every date-loop edit.
-- **Testing:** every commit runs the full suite on MySQL (`vendor/bin/sail artisan test --compact`) **and** SQLite inside the Sail container (`docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`), plus `vendor/bin/sail bin pint --dirty --format agent`.
+- **Testing:** every commit runs the full suite with the **MySQL gate** and the **SQLite gate** (design §11.1), plus `vendor/bin/sail bin pint --dirty --format agent`. Contract fixtures are recorded with `app.debug = false` (design §4.1.2).
 
 ## Out of Scope
 
