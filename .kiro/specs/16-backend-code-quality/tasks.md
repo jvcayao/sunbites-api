@@ -2,6 +2,8 @@
 
 ## Ground rules (apply to every task)
 
+- **Implementers start with [`HANDOFF.md`](./HANDOFF.md)**: the step-by-step protocol, the authoritative commit order (§6), stop conditions and report formats.
+
 - **Non-negotiable tooling (Req 12, design §12):**
   - **Before any PHP work:** activate `laravel-best-practices` and read its mapped rule files (design §12.1).
   - **Before any test work:** activate `testing-best-practices`.
@@ -404,7 +406,7 @@
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
   - Fixtures: add `404-other-branch` variants only.
   - _Requirements: 10.2_
-- [ ] B-02. Branch header required *(design §5.2; after T-6)*
+- [ ] B-02. Branch header required *(design §5.2; after T-6 at minimum. Actual slot: after T-7, T-9, B-01 and B-16, per `HANDOFF.md` §6)*
   - Create `EnsureActiveBranch` via `make:middleware`, register the alias, apply it to the group with the exact allowlist, and remove the dead `MealPlannerController` checks.
   - Failing tests: a branch-scoped list without a header returns 422 with the exact message; each allowlisted route works without a header; the matrix test still passes.
   - Fixtures: new `422-no-branch` variants.
