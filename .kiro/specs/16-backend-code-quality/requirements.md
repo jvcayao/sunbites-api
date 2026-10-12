@@ -149,7 +149,7 @@ A Track A change and a Track B change are never combined in one PR.
 3. New cross-cutting defaults (Req 4.6) live in `AppServiceProvider::configureDefaults()`.
 4. `#[CurrentUser]` SHALL NOT be adopted wholesale; it MAY appear in new Action entry points only.
 
-### Requirement 10: Track B, behaviour-changing defect fixes *(all 15 items, B-01–B-05 and B-07–B-16, approved 2026-10-09; B-06 merged into B-05)*
+### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17 and B-18 approved 2026-10-12; B-06 merged into B-05)*
 
 **User Story:** As the product owner, I want each real defect listed separately with its verified frontend impact, so that I can approve, defer or reject each one.
 
@@ -178,8 +178,8 @@ A Track A change and a Track B change are never combined in one PR.
 14. **B-14 500 on bad status input.** `PATCH /students/{student}/status` calls `EnrollmentStatus::from($request->enrollment_status)` inside the rule definition, so a missing or invalid value returns 500 instead of 422. It SHALL use `tryFrom`.
 15. **B-15 Portal payment-history 403 message.** See Req 6.3.
 16. **B-16 Archived inventory unreachable in POS.** The POS inventory page (`references/inventory/page.tsx:894-895`) splits `GET /references/inventory` into active and archived sections and offers "Unarchive". But `InventoryController::index` returns only `InventoryItem::active()`, so the archived section is always empty and unarchive cannot be reached. `GET /api/v1/references/inventory` SHALL return active **and** archived items (ordered by `name`), and `GET /api/v1/pos/inventory` SHALL keep returning active items only. Verified safe: every consumer of `/references/inventory` already filters `is_archived` client-side where it needs active items (`components/pos/menu-mgmt-tab.tsx:442`, `reports/inventory/page.tsx:539`).
-17. **B-17 *(proposed, awaiting approval)*: cross-branch branch monthly amounts.** Updating or deleting another branch's `BranchMonthlyAmount` by id SHALL return 404 (design §5.15).
-18. **B-18 *(proposed, awaiting approval)*: cross-branch feedback.** Replying to or marking read another branch's `Feedback` by id SHALL return 404 (design §5.16).
+17. **B-17 *(approved 2026-10-12)*: cross-branch branch monthly amounts.** Updating or deleting another branch's `BranchMonthlyAmount` by id SHALL return 404 (design §5.15).
+18. **B-18 *(approved 2026-10-12)*: cross-branch feedback.** Replying to or marking read another branch's `Feedback` by id SHALL return 404 (design §5.16).
 
 ### Requirement 11: Dependency and surface cleanup *(Q6 approved 2026-10-09, on condition that the API is not affected)*
 
@@ -217,6 +217,18 @@ A Track A change and a Track B change are never combined in one PR.
 2. Only the attributes marked *Adopt* in design §14.5 (the complete Laravel 13.35 attribute inventory) SHALL be introduced. The Form Request attributes marked *Forbidden* (hazard H17) SHALL NOT be used. The idioms rejected in design §14.3 SHALL NOT be introduced either: `final` classes, `declare(strict_types=1)`, PHP 8.4+ syntax while `composer.json` requires `php: ^8.3`, `whereLike()` replacing `lower(...) like`, and converting `Carbon::create*()` month loops to immutable dates (hazard H16).
 3. WHEN all Track A and Track B commits and T-17 are done THEN task T-18 SHALL run the audit commands in design §14.4, and every command SHALL return its expected result (0 hits), or list an exception with its reason, in the T-18 commit body.
 4. Every backend task SHALL end by running Laravel Pint through Sail (`vendor/bin/sail bin pint --dirty --format agent`) as required by `.claude/rules/backend/laravel-pint.md`, and before the branch is pushed `vendor/bin/sail bin pint --format agent` SHALL report no changes (CI runs `pint --test` on the whole repo).
+
+### Requirement 14: MySQL test job in CI *(approved 2026-10-12)*
+
+**User Story:** As the product owner, I want every pull request tested on MySQL as well as SQLite, so that a bug that only appears on the production database engine cannot be merged.
+
+#### Acceptance Criteria
+
+1. `.github/workflows/ci.yml` SHALL gain a second job, `test-mysql`, that runs the full PHPUnit suite against a temporary MySQL 8.4 service container, alongside the existing SQLite `test` job (which SHALL stay unchanged).
+2. The job SHALL call `vendor/bin/phpunit` directly with `DB_CONNECTION=mysql` and the service's connection settings, never `php artisan test` (design §11.1 explains why).
+3. The job SHALL use only throwaway, CI-local credentials for the service container. It SHALL NOT use any repository secret, and SHALL NOT connect to any staging or production resource.
+4. `staging.yml` and `production.yml` SHALL NOT change in this spec.
+5. The job SHALL be added in the commit directly after T-1 (task C-1), so every later Spec 16 commit is checked on both engines when the PR runs.
 
 ---
 

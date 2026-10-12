@@ -149,9 +149,9 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 ### Testing (backend)
 - `RefreshDatabase` on every Feature test; `actingAs($user, 'sanctum')` / `actingAs($parent, 'parents')`
 - Never mock Eloquent or the database layer
-- Tests must pass on **both** MySQL (local Sail) and SQLite (CI). Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
-- Run (MySQL): `vendor/bin/sail artisan test --compact tests/Feature/Foo.php`
-- Run (SQLite, as in CI, inside the Sail container): `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php artisan test --compact`
+- Tests must pass on **both** MySQL (production engine) and SQLite (CI's existing job). Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
+- `vendor/bin/sail artisan test` runs **SQLite** locally: Collision clears the `.env` variables, so the gitignored local `.env.testing` (`DB_CONNECTION=sqlite`) wins and the gitignored `testing` file in the repo root is used
+- Explicit MySQL and SQLite gates (call `vendor/bin/phpunit` directly; MySQL uses Sail's `testing` schema): see `.kiro/specs/16-backend-code-quality/design.md` §11.1
 
 ### Testing (frontend)
 - Import from `__tests__/test-utils.tsx`; role/label queries first; MSW at the network boundary
@@ -186,7 +186,7 @@ Deploy: GitHub Actions `staging.yml` / `production.yml` run `cloud deploy "Sunbi
 | D2 | Fortify is installed and registers session-based web routes (`/login`, `/logout`, `/forgot-password`, `/reset-password`, two-factor, email verification) that neither frontend uses; staff password reset is implemented in `Kitchen\AuthController` | `route:list --only-vendor`; `config/fortify.php` |
 | D3 | `withRouting(channels: ...)` also registers a top-level `GET/POST /broadcasting/auth` web route alongside the two scoped API ones | `route:list --only-vendor` |
 | D4 | `binafy/laravel-cart` is a dependency with no usage | grep of `app/`, `config/`, `database/` |
-| D5 | Local tests run on MySQL 8.4, CI tests on SQLite, so driver-specific behaviour is only caught locally | `compose.yaml`, `.github/workflows/ci.yml`, `.env.example` |
+| D5 | All existing test runs (local `artisan test` and CI) use SQLite; MySQL is only exercised by the explicit MySQL gate (`testing` schema). Spec 16 task C-1 adds a MySQL 8.4 job to `ci.yml` | `.env.testing` (local, gitignored), `phpunit.xml`, `.github/workflows/ci.yml`, Collision `TestCommand::clearEnv()` |
 | D6 | `composer.json` `name` is still `laravel/react-starter-kit`; `dev`/`ci:check` scripts still call npm/Vite | `composer.json` |
 | D7 | POS staging domain is `staging-pos.sunbites.com.ph` in the POS docs, but the API CORS allow-list hard-codes `pos-staging.sunbites.com.ph`. Staging POS works only if `CORS_ALLOWED_ORIGINS` covers it; the deployed env was not checked | `config/cors.php`, `~/sunbites-pos/infrastructure/README.md` |
 | D8 | `payment_reminder_days` is seeded as a system configuration but is not read anywhere in `app/` | `database/seeders`, grep of `app/` |

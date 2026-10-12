@@ -21,7 +21,7 @@
   - Read the current code of every file you will touch.
   - If the code differs from what the design describes, **stop and report**. Do not adapt silently.
 - **Delivery (Q3, design §6; updated 2026-10-09):** **do not create a new branch.** All commits go on the current branch, `bump-laravel-13-latest`. Confirm with `git branch --show-current` before every commit, and never commit on `main`.
-  - **One commit per task group** (T-1 … T-19) and **one commit per approved Track B item**, in the order of design §6.
+  - **One commit per task group** (T-1 … T-19, C-1) and **one commit per approved Track B item**, in the order of design §6.
   - Subjects use `type(scope): description` (imperative, < 72 chars) per `.claude/agents/git-workflow.md`.
   - **No `Co-Authored-By`, `Signed-off-by` or AI attribution** in commits or the PR.
   - `<spec16-start-sha>` = **`3454977`** (HEAD of `bump-laravel-13-latest` on 2026-10-09, before any Spec 16 commit). Record it in the T-1 commit body.
@@ -86,6 +86,13 @@
     - For every fixture, compare it with its FE type (`rg -n "apiClient\.(get|post|put|patch|delete)<" ~/sunbites-pos/lib/api ~/sunbites-portal/lib/api`) and add a row per mismatch. Do **not** fix mismatches here.
     - No test is needed (this is documentation); the PR description links the file.
     - _Requirements: 1.7_
+
+- [ ] C-1. MySQL test job in CI *(approved 2026-10-12; design §15; Req 14)*
+  - [ ] C-1.1 Add the `test-mysql` job
+    - Add the job exactly as written in design §15 to `.github/workflows/ci.yml`, after the existing `test` job. Do not change the `test` job, `staging.yml` or `production.yml`.
+    - Tests: the design §15 verification steps 1–3 (YAML parses; only additions in the diff; the MySQL gate passes including `tests/Feature/Contract`). Step 4 (the real GitHub run) is the user's, on the PR.
+    - Commit: `chore(ci): add MySQL 8.4 test job to CI workflow`.
+    - _Requirements: 14.1–14.5_
 
 - [ ] 2. Base authorization and policy wiring *(design §4.2.1 list of 14 calls, §4.5.3; Req 4.5, 6.2, 6.4)*
   - [ ] 2.1 Move `AuthorizesRequests` to the base controller
@@ -402,7 +409,7 @@
 
 ---
 
-## Track B (all 15 items approved 2026-10-09; one commit each; failing test first)
+## Track B (all 17 items approved: B-01–B-16 on 2026-10-09, B-17/B-18 on 2026-10-12; one commit each; failing test first)
 
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -463,10 +470,10 @@
   - Fixtures: none (row shape unchanged; only the set of rows grows). If the `ok` fixture's scenario has an archived item, its list shape stays identical.
   - Staging smoke test: References → Inventory shows the Archived section with the archived item, and Unarchive moves it back.
   - _Requirements: 10.16_
-- [ ] B-17. *(PROPOSED, awaiting user approval; do not implement)* Cross-branch branch monthly amounts *(design §5.15)*
+- [ ] B-17. Cross-branch branch monthly amounts *(approved 2026-10-12; design §5.15; after T-6 and B-01)*
   - Failing test: a branch-A supervisor `PUT`/`DELETE` on a branch-B `BranchMonthlyAmount` gets 404.
   - _Requirements: 10.17_
-- [ ] B-18. *(PROPOSED, awaiting user approval; do not implement)* Cross-branch feedback *(design §5.16)*
+- [ ] B-18. Cross-branch feedback *(approved 2026-10-12; design §5.16; after T-9 and B-01)*
   - Failing test: a branch-A supervisor reply/mark-read on branch-B feedback gets 404, and no `FeedbackReplyMail` is queued.
   - _Requirements: 10.18_
 - [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
@@ -504,7 +511,8 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.16 | B-01 … B-16 |
+| 10.2–10.18 | B-01 … B-18 |
+| 14.1–14.5 | C-1.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
 | 12.6, 12.7 | T-19.1 |

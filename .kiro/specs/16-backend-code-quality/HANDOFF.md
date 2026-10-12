@@ -144,40 +144,43 @@ Start SHA: **`3454977`**. Already committed by the spec owner: `b8f82b1`, `f873a
 | # | Step | Commit subject (use exactly; < 72 chars) |
 |---|---|---|
 | 1 | T-1 | `test(contract): freeze API response shapes for all 165 routes` |
-| 2 | T-2 | `refactor(auth): adopt Authorize attributes and UsePolicy` |
-| 3 | B-15 | `fix(portal): B-15 use student policy for payment history` |
-| 4 | T-3 | `refactor(pos): extract checkout, void and stock services` |
-| 5 | B-07 | `fix(pos): B-07 show cashier name on receipts` |
-| 6 | T-4 | `refactor(wallet): extract top-up void and credit resources` |
-| 7 | T-5 | `refactor(students): form requests and enrollment action` |
-| 8 | B-14 | `fix(students): B-14 return 422 for invalid status input` |
-| 9 | T-6 | `refactor(staff): form requests for auth, users and config` |
-| 10 | T-7 | `refactor(inventory): resources, scopes and form requests` |
-| 11 | B-03 | `fix(inventory): B-03 lock stock rows to prevent lost updates` |
-| 12 | T-8 | `refactor(pre-reg): approve action and form requests` |
-| 13 | B-09 | `fix(pre-reg): B-09 make pre-registration writes atomic` |
-| 14 | T-9 | `refactor(reminders): reminder service and N+1 fixes` |
-| 15 | B-01 | `fix(security): B-01 block cross-branch record access` |
-| 16 | B-16 | `fix(inventory): B-16 return archived items to references` |
-| 17 | B-02 | `fix(security): B-02 require an active branch header` |
-| 18 | T-10 | `refactor(reports): form requests and shared filters` |
-| 19 | B-05 | `fix(billing): B-05 treat year params as school year` |
-| 20 | B-10 | `fix(search): B-10 match search wildcards literally` |
-| 21 | B-11 | `fix(analytics): B-11 read credit limit from settings` |
-| 22 | B-12 + B-13 | `fix(reports): B-12 stop exposing staff PII in report rows` |
-| 23 | B-04 | `fix(portal): B-04 remove unused pre-registration routes` |
-| 24 | T-11 | `refactor(portal): form requests and authorize attributes` |
-| 25 | B-08 | `fix(portal): B-08 hide disabled state on wrong password` |
-| 26 | T-12 | `refactor(models): payment status enum, scopes and casts` |
-| 27 | T-13 | `refactor(core): log lazy-loading violations outside tests` |
-| 28 | T-14 | `refactor(queue): dispatch notifications after commit` |
-| 29 | T-15 | `chore(composer): correct package metadata and scripts` |
-| 30 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
-| 31 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
-| 32 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
-| 33 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
+| 2 | C-1 | `chore(ci): add MySQL 8.4 test job to CI workflow` |
+| 3 | T-2 | `refactor(auth): adopt Authorize attributes and UsePolicy` |
+| 4 | B-15 | `fix(portal): B-15 use student policy for payment history` |
+| 5 | T-3 | `refactor(pos): extract checkout, void and stock services` |
+| 6 | B-07 | `fix(pos): B-07 show cashier name on receipts` |
+| 7 | T-4 | `refactor(wallet): extract top-up void and credit resources` |
+| 8 | T-5 | `refactor(students): form requests and enrollment action` |
+| 9 | B-14 | `fix(students): B-14 return 422 for invalid status input` |
+| 10 | T-6 | `refactor(staff): form requests for auth, users and config` |
+| 11 | T-7 | `refactor(inventory): resources, scopes and form requests` |
+| 12 | B-03 | `fix(inventory): B-03 lock stock rows to prevent lost updates` |
+| 13 | T-8 | `refactor(pre-reg): approve action and form requests` |
+| 14 | B-09 | `fix(pre-reg): B-09 make pre-registration writes atomic` |
+| 15 | T-9 | `refactor(reminders): reminder service and N+1 fixes` |
+| 16 | B-01 | `fix(security): B-01 block cross-branch record access` |
+| 17 | B-17 | `fix(security): B-17 block cross-branch monthly amount edits` |
+| 18 | B-18 | `fix(security): B-18 block cross-branch feedback replies` |
+| 19 | B-16 | `fix(inventory): B-16 return archived items to references` |
+| 20 | B-02 | `fix(security): B-02 require an active branch header` |
+| 21 | T-10 | `refactor(reports): form requests and shared filters` |
+| 22 | B-05 | `fix(billing): B-05 treat year params as school year` |
+| 23 | B-10 | `fix(search): B-10 match search wildcards literally` |
+| 24 | B-11 | `fix(analytics): B-11 read credit limit from settings` |
+| 25 | B-12 + B-13 | `fix(reports): B-12 stop exposing staff PII in report rows` |
+| 26 | B-04 | `fix(portal): B-04 remove unused pre-registration routes` |
+| 27 | T-11 | `refactor(portal): form requests and authorize attributes` |
+| 28 | B-08 | `fix(portal): B-08 hide disabled state on wrong password` |
+| 29 | T-12 | `refactor(models): payment status enum, scopes and casts` |
+| 30 | T-13 | `refactor(core): log lazy-loading violations outside tests` |
+| 31 | T-14 | `refactor(queue): dispatch notifications after commit` |
+| 32 | T-15 | `chore(composer): correct package metadata and scripts` |
+| 33 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
+| 34 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
+| 35 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
+| 36 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 
-**B-17 and B-18 are proposed but NOT approved.** Do not implement them unless the user approves them and the spec owner adds them to this table.
+**C-1 edits `.github/workflows/ci.yml`.** That is the only workflow file you may change, and only as design §15 states. **B-17 and B-18 were approved on 2026-10-12** and are in the table above.
 
 Notes on the order:
 - **B-02 runs after T-7 and T-9 on purpose.** It removes branch checks in `MealPlannerController` that T-7's design still describes. `tasks.md` says "after T-6", which is a minimum, not the slot.
@@ -198,13 +201,13 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 33, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 36, stop. The user pushes and opens the PR.
 
 ---
 
 ## 7. Track-specific rules
 
-**Track A (T-1 … T-19):**
+**Track A (T-1 … T-19, plus C-1):**
 - Zero behaviour change. Zero fixture diffs after T-1. Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-04 (deletions), B-05 (`BillingReportTest` seeds).
 - T-1 creates fixtures in **record mode**: MySQL gate first, then SQLite overrides only where shapes differ (design §4.1.2). Contract tests use `app.debug = false`. Recording happens **only** in T-1.
 

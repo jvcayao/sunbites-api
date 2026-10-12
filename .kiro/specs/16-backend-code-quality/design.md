@@ -20,7 +20,9 @@ The refactor has two tracks:
 | Q5 | After-commit via the `ShouldQueueAfterCommit` interface on the 5 notifications and `ParentWelcomeMail`, not `after_commit => true` globally | **Approved** 2026-10-09 |
 | Q6 | Remove `laravel/fortify`, `binafy/laravel-cart` and the top-level `/broadcasting/auth` route (Req 11) | **Approved** 2026-10-09, **on condition that no `/api` behaviour changes**; proven per §4.8 |
 | Q7 | `WalletAlertJob` retries: `#[Tries(3)]`, `#[Backoff(10, 60)]` (Req 8.3) | **Approved** 2026-10-09 |
-| Track B | All 15 defect fixes (B-01–B-05, B-07–B-16; B-06 merged into B-05) | **Approved** 2026-10-09 |
+| Track B | Defect fixes B-01–B-05, B-07–B-16 (B-06 merged into B-05) | **Approved** 2026-10-09 |
+| Track B | B-17, B-18 (cross-branch monthly amounts and feedback, found during T-1) | **Approved** 2026-10-12 |
+| CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
 
@@ -174,7 +176,7 @@ protected function assertFileContract(TestResponse $response, string $routeKey, 
   - a non-subscription student
   - a soft-deleted student
 - **Branch B records (for every `404`/other-branch variant):** one of each route-bound type in branch B: student, order, inventory item, menu item, announcement, feedback, pre-registration, branch monthly amount, monthly payment (of the branch-B student), student contact (of the branch-B student), and a parent linked **only** to the branch-B student.
-  - **Record what happens today.** Several are not branch-protected today and will return 200: parents (B-01), branch monthly amounts and feedback (proposed B-17/B-18). That is expected; those Track B items change those fixtures later.
+  - **Record what happens today.** Several are not branch-protected today and will return 200: parents (B-01), branch monthly amounts (B-17) and feedback (B-18). That is expected; those Track B items change those fixtures later.
 - **Contacts and parents:** `StudentContact` rows (primary and secondary, one with an email), and a `ParentUser` linked to the subscription student (`wallet_alert_threshold` 100) plus one unactivated parent.
 - **Menu and inventory:** `PosMenuItem` (subscription-eligible, meal) mapped to an `InventoryItem` (quantity 100, `quantity_used` 1), one archived `InventoryItem`, a `WeeklyMealPlan` for June week 1, and one `InventoryLog` of type `manual` (so the inventory report's `discrepancy` list is not empty).
 - **Orders:** cash walk-in, wallet order, credit order (`OrderFactory::credit()`), and a voided order (`voided()`), all with items and `InventoryLog` sale rows. For the wallet and credit orders, also move the wallet with `$student->withdraw($centavos)` **with no meta**, exactly as `CheckoutController` does.
@@ -969,14 +971,14 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - `components/pos/inventory-tab.tsx:300` uses `/pos/inventory`, so it is unaffected.
 - Do B-01's unarchive fix (drop `withoutBranch()`) first or in the same PR, because B-16 makes the unarchive endpoint reachable from the UI.
 
-### 5.15 B-17 *(proposed 2026-10-12, awaiting approval; do not implement until approved)*: Cross-branch branch monthly amounts
+### 5.15 B-17 *(approved 2026-10-12)*: Cross-branch branch monthly amounts
 
 - **Defect:** `BranchMonthlyAmount` has no `HasBranch` trait, and `BranchMonthlyAmountController::update`/`destroy` (route group `role:admin|manager|supervisor`) do not check the branch. Staff in branch A can change or delete branch B's monthly fee overrides by id.
 - **Fix:** in `update` and `destroy`, throw `(new ModelNotFoundException)->setModel(BranchMonthlyAmount::class)` unless `$branchMonthlyAmount->branch_id === app('active_branch')->id`. This renders 404 `{"message":"Not found."}`.
 - **Fixtures:** the `404-other-branch` variants change from 200 to 404.
 - **FE impact:** none. The POS edits only rows from `GET /branch-monthly-amounts`, which is filtered by the active branch.
 
-### 5.16 B-18 *(proposed 2026-10-12, awaiting approval; do not implement until approved)*: Cross-branch feedback reply and mark-read
+### 5.16 B-18 *(approved 2026-10-12)*: Cross-branch feedback reply and mark-read
 
 - **Defect:** `Feedback` has no `HasBranch` trait, and `Kitchen\FeedbackController::reply`/`markRead` do not check the branch. Staff in branch A can reply to (and email) a parent who sent feedback to branch B, or mark it read.
 - **Fix:** in `reply` and `markRead`, the same `ModelNotFoundException` guard on `$feedback->branch_id === app('active_branch')->id`. For `reply`, run it in `ReplyFeedbackRequest::prepareForValidation()` **before** sanitising, so 404 wins over 422 (H4).
@@ -988,7 +990,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
 - **Branch:** `bump-laravel-13-latest`; start commit **`3454977`** (`<spec16-start-sha>`). Never commit on `main`.
 - **First commit:** the spec, steering update and Pint rule (`docs(spec16): …`), then T-1 onward.
-- **One commit per task group** (T-1 … T-19) and **one commit per approved Track B item**. Commit subjects follow `type(scope): description` (imperative, < 72 chars), for example:
+- **One commit per task group** (T-1 … T-19, C-1) and **one commit per approved Track B item**. Commit subjects follow `type(scope): description` (imperative, < 72 chars), for example:
   - `test(contract): freeze API response shapes for all 165 routes` (T-1)
   - `refactor(pos): extract checkout, void and stock services` (T-3)
   - `chore(deps): remove fortify and laravel-cart` (T-17)
@@ -998,7 +1000,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (33 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (36 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD
@@ -1341,3 +1343,74 @@ Source: every class under `vendor/laravel/framework/src/Illuminate/**/Attributes
 | API routes | `vendor/bin/sail artisan route:list --path=api --except-vendor` | 165 |
 
 Every Track A commit must leave this table unchanged, except the route count after B-04 (163).
+
+## 15. MySQL test job in CI (task C-1, Req 14)
+
+**Why:** every existing test run (local `artisan test` and CI) uses SQLite, but production runs MySQL 8.4. Driver-specific regressions (H15 aggregate types, JSON functions, collation) are invisible to CI today.
+
+**Change:** add the job below to `.github/workflows/ci.yml` under `jobs:`, **after** the existing `test` job, which stays byte-identical. The two jobs run in parallel on every PR to `staging` or `main`.
+
+```yaml
+  test-mysql:
+    name: Run Tests (MySQL 8.4)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@2.32.0
+        with:
+          php-version: '8.5'
+          extensions: mbstring, pdo, pdo_mysql
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
+
+      - name: Copy env
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      # Call PHPUnit directly: `php artisan test` (Collision) clears variables
+      # named in .env, which would silently switch the run back to SQLite.
+      - name: Run tests on MySQL
+        run: vendor/bin/phpunit
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: testing
+          DB_USERNAME: root
+          DB_PASSWORD: password
+```
+
+**Why each line is safe and correct:**
+- **`services.mysql`:** GitHub starts a throwaway MySQL 8.4 container for this job only and deletes it when the job ends. `password` exists only inside that container; it is not a secret and not used anywhere else.
+- **`cp .env.example .env`:** gives `APP_DEBUG=false` and `DB_CONNECTION=sqlite`. The job's `env:` values override `.env` because Dotenv is immutable. There is no `.env.testing` in CI.
+- **`vendor/bin/phpunit`:** `php artisan test` would clear the `DB_*` variables (Collision `clearEnv()`, §11.1) and silently run SQLite.
+- **No Pint step:** the existing `test` job already runs `pint --test`.
+- **No secrets, no deploy:** `staging.yml` and `production.yml` are unchanged. Their deploy jobs still use only the Laravel Cloud token.
+
+**Verification in the C-1 commit:**
+1. The job's YAML parses: `ruby -ryaml -e 'YAML.load_file(".github/workflows/ci.yml"); puts "ok"'` prints `ok`.
+2. The existing `test` job is unchanged: `git diff HEAD~1 -- .github/workflows/ci.yml` shows only added lines after the `test` job.
+3. The job's command is equivalent to the local MySQL gate (§11.1), and the MySQL gate passes, including the T-1 contract suite.
+4. The implementer **cannot** run GitHub Actions. The first real run happens when the user opens the PR. The user confirms both jobs are green on the PR page.
