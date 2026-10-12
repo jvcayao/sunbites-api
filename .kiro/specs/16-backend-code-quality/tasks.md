@@ -476,6 +476,10 @@
 - [ ] B-18. Cross-branch feedback *(approved 2026-10-12; design §5.16; after T-9 and B-01)*
   - Failing test: a branch-A supervisor reply/mark-read on branch-B feedback gets 404, and no `FeedbackReplyMail` is queued.
   - _Requirements: 10.18_
+- [ ] B-19. *(PROPOSED, awaiting user approval; do not implement)* Inventory export crash *(design §5.17; slot: right after C-1)*
+  - Failing test first: a real download (no `Excel::fake()`) returns 200, the filename pattern, and a 2-sheet workbook (design §5.17).
+  - Fixture: `get__api_v1_reports_inventory_export@ok.json` (500 → 200).
+  - _Requirements: 10.19_
 - [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.

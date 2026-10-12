@@ -180,6 +180,8 @@ Start SHA: **`3454977`**. Already committed by the spec owner: `b8f82b1`, `f873a
 | 35 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
 | 36 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 
+**B-19 (inventory export crash) is proposed and NOT yet approved.** If the user approves it, the spec owner inserts it as step 3 (right after C-1). Until then, skip it.
+
 **C-1 edits `.github/workflows/ci.yml`.** That is the only workflow file you may change, and only as design §15 states. **B-17 and B-18 were approved on 2026-10-12** and are in the table above.
 
 Notes on the order:

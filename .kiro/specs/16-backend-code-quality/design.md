@@ -220,13 +220,17 @@ If you find another shape branch while writing a test, add the variant and list 
 4. `other-branch` is **status-neutral** (rule above). Never name it `404-…`.
 5. Plain `404` is only for an explicit not-found guard on an in-branch request (missing photo, unknown notification id, unknown `{key}`). It is optional elsewhere.
 6. Names are lowercase kebab-case after the `@`, e.g. `get__api_v1_students_{student}@other-branch.json`.
+7. **If a route's default request fails today** (known case: `GET api/v1/reports/inventory/export` returns 500, B-19), record what it returns as `@ok` anyway, add a `contract-gaps.md` row, and leave the fix to its Track B item, which changes that fixture. Do not skip, rename or "fix" it in T-1.
 
 #### 4.1.5 Coverage and authorization guards
 
 - **`RouteCoverageTest`:** iterates `Route::getRoutes()`, keeps URIs starting with `api/` whose action class is in the `App\` namespace or is a closure (the `api/health` closure is included; the two framework-owned `Illuminate\Broadcasting\BroadcastController@authenticate` routes are **explicitly excluded**, and their auth behaviour is covered by the 401 checks below and the existing channel tests), builds `"{METHOD} {uri}"` from the first non-HEAD method, converts it to a slug, and asserts `tests/Fixtures/contracts/{slug}@ok.json` exists. Failure message: `"Route {key} has no contract fixture."`.
 - **`RoleAuthorizationMatrixTest`:** for each kitchen route, reads `$route->gatherMiddleware()` and finds any `role:x|y` entry. For each role in `['admin', 'manager', 'supervisor', 'cashier']` it calls the route with scenario-resolved parameters and a `{}` body.
   - It asserts `403` when the role is not listed.
-  - Otherwise it asserts the status is **not** `403`, with an explicit exceptions array for business-rule 403s: `POST api/v1/users/{user}/deactivate` when `{user}` is the actor.
+  - Otherwise it asserts the status is **not** `403`, with an explicit exceptions array for business-rule 403s. **Exactly these two entries, each with its reason as a comment:**
+    - `'POST api/v1/users/{user}/deactivate' => ['admin']`: `{user}` resolves to the actor, and `UserPolicy::deactivate` denies self-deactivation.
+    - `'POST api/v1/users/{user}/photo' => ['manager']`: the route is in `role:admin|manager`, but `UserPolicy::update` requires `users.manage`, which only the `admin` role has (`PermissionSeeder`). The endpoint is unused by both FEs (§13.1), so this is recorded as a finding, not a Track B item.
+    - Any further mismatch is a STOP, not a new exception.
   - **Do not use a PHPUnit data provider here.** PHPUnit 12 runs data providers before the Laravel application boots, so `Route::getRoutes()` (a facade) is unavailable inside a provider. Write one test method per role (`test_admin_route_access()`, `test_manager_route_access()`, `test_supervisor_route_access()`, `test_cashier_route_access()`). Each iterates the routes at runtime, collects mismatches as `"{METHOD} {uri}: expected 403, got {status}"`, and ends with one `assertSame([], $mismatches)`, so a failure lists every offending route at once. (PHPUnit 12 also removed docblock annotations: if any new test needs a provider, use `#[DataProvider('name')]` on a `public static` method that returns literal data only.)
   - Parameter resolution is by URI:
     - `{item}` under `pos/menu-items` or `references/menu-items` → `PosMenuItem`; under `inventory` → `InventoryItem`
@@ -992,6 +996,18 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **Fix:** in `reply` and `markRead`, the same `ModelNotFoundException` guard on `$feedback->branch_id === app('active_branch')->id`. For `reply`, run it in `ReplyFeedbackRequest::prepareForValidation()` **before** sanitising, so 404 wins over 422 (H4).
 - **Fixtures:** the `other-branch` variants recorded in T-1 change from 200 to 404.
 - **FE impact:** none. The POS feedback page lists only the active branch's feedback (`FeedbackController::index` filters by `branch_id`).
+
+### 5.17 B-19 *(proposed 2026-10-12, awaiting approval)*: Inventory report export crashes (500)
+
+- **Defect:** `GET /api/v1/reports/inventory/export` returns 500 for every request. In the installed `maatwebsite/excel` 4.x-dev (`0509858`), `Excel::download()` requires `Maatwebsite\Excel\Concerns\Export` (`vendor/maatwebsite/excel/src/Excel.php` `download(Export $export, …)`). `App\Exports\InventoryReportExport` implements only `WithMultipleSheets`, which does not extend `Export`. Every other export implements `FromCollection`, which does.
+- **When it broke:** the package moved from `a9a16f1` (commit `0faee70`, Spec 15) to `0509858` in the Laravel 13.32 bump (`4353663`) on this branch. Production was last deployed on 2026-08-05, before that bump, so production most likely still works. **The branch would break it on deploy.** No existing test downloads a successful export.
+- **Fix:** `class InventoryReportExport implements Export, WithMultipleSheets` (add `use Maatwebsite\Excel\Concerns\Export;`). `Export` is an empty marker interface, and `Writer::export()` already iterates `sheets()` for `WithMultipleSheets` (`Writer.php` L46-55).
+- **Test** (failing first; real download, **no `Excel::fake()`**, because the fake does not apply the `Export` type check):
+  - as a manager with the branch header, `GET /api/v1/reports/inventory/export` returns 200
+  - `Content-Disposition` contains `inventory-report-{slug}-`
+  - `PhpOffice\PhpSpreadsheet\IOFactory::load($response->baseResponse->getFile()->getPathname())->getSheetCount()` is `2`
+- **Fixtures:** `get__api_v1_reports_inventory_export@ok.json` changes from the recorded 500 to 200 with the xlsx content type.
+- **FE impact:** positive. The POS Inventory report's Export button (`app/(kitchen)/reports/inventory/page.tsx:275`, `exportReport("reports/inventory")`) works again.
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
