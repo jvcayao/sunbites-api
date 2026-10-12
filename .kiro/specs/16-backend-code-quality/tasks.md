@@ -488,7 +488,7 @@
 - [ ] B-18. Cross-branch feedback *(approved 2026-10-12; design §5.16; after T-9 and B-01)*
   - Failing test: a branch-A supervisor reply/mark-read on branch-B feedback gets 404, and no `FeedbackReplyMail` is queued.
   - _Requirements: 10.18_
-- [ ] B-19. *(approved 2026-10-12)* Inventory export crash *(design §5.17; HANDOFF §6 step 3, right after C-1)*
+- [x] B-19. *(approved 2026-10-12)* Inventory export crash *(design §5.17; HANDOFF §6 step 3, right after C-1)*
   - Failing test first: a real download (no `Excel::fake()`) returns 200, the filename pattern, and a 2-sheet workbook (design §5.17).
   - Fixture: `get__api_v1_reports_inventory_export@ok.json` (500 → 200).
   - _Requirements: 10.19_
