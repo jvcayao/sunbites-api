@@ -99,8 +99,8 @@
     - Put `Fixtures: <count> files, digest <digest> (local only, not committed)` in the T-1 commit body.
     - _Requirements: 1.9_
 
-- [ ] C-1. MySQL test job in CI *(approved 2026-10-12; design §15; Req 14)*
-  - [ ] C-1.1 Add the `test-mysql` job
+- [x] C-1. MySQL test job in CI *(approved 2026-10-12; design §15; Req 14)*
+  - [x] C-1.1 Add the `test-mysql` job
     - Add the job exactly as written in design §15 to `.github/workflows/ci.yml`, after the existing `test` job. Do not change the `test` job, `staging.yml` or `production.yml`.
     - Tests: the design §15 verification steps 1–3 (YAML parses; only additions in the diff; the MySQL gate passes including `tests/Feature/Contract`). Step 4 (the real GitHub run) is the user's, on the PR.
     - Commit: `chore(ci): add MySQL 8.4 test job to CI workflow`.
