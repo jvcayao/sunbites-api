@@ -36,14 +36,15 @@ A Track A change and a Track B change are never combined in one PR.
 
 #### Acceptance Criteria
 
-1. WHEN Track A work begins THEN every route listed by `php artisan route:list --path=api --except-vendor` (165 routes on 2026-09-26) SHALL have at least one committed contract fixture recording its HTTP status and the recursive JSON *shape* of its body (keys, JSON types, and string formats), per the grammar in design §4.1.
+1. WHEN Track A work begins THEN every route listed by `php artisan route:list --path=api --except-vendor` (165 routes on 2026-09-26) SHALL have at least one contract fixture (stored locally and gitignored, design §4.1.7) recording its HTTP status and the recursive JSON *shape* of its body (keys, JSON types, and string formats), per the grammar in design §4.1.
 2. WHEN a route returns a file (Excel export, photo) THEN its fixture SHALL record status, `Content-Type`, and the `Content-Disposition` filename pattern instead of a body shape.
 3. WHEN a route validates input or has a documented error path THEN it SHALL also have fixtures for each error envelope in use today, including the non-standard ones: `{ "errors": {...} }` with **no** `message` (subscription end-before-start in `EnrollmentController::store`, `PaymentController::addRange`, `Public\PreRegistrationController::store`; `Portal\ProfileController::changePassword`), and `{ "message", "error": "account_not_activated" | "account_disabled" }` from portal login.
-4. The system SHALL have a route-coverage test that fails when any API route lacks a success fixture. Adding a route without a fixture breaks CI.
+4. The system SHALL have a route-coverage test that fails when any API route lacks a success fixture. Adding a route without a fixture breaks the local contract gate. CI has no fixtures and skips this check (design §4.1.7).
 5. The system SHALL have a role-authorization matrix test asserting, for every route inside a `role:` middleware group, that each of `admin`, `manager`, `supervisor`, `cashier` receives 403 exactly when its role is not listed.
 6. IF a Track A change alters any fixture or matrix expectation THEN it is a regression and SHALL NOT merge. Fixtures change only in Track B commits, and each changed fixture is listed in that commit's body and in the PR description with its frontend impact.
 7. WHEN fixtures are recorded THEN each recorded shape SHALL be cross-checked against the consuming TypeScript interface in `~/sunbites-pos/lib/api/*.ts`, `~/sunbites-pos/types/*.ts`, `~/sunbites-portal/lib/api/*.ts` and `~/sunbites-portal/types/*.ts`. Every mismatch SHALL be logged in `.kiro/specs/16-backend-code-quality/contract-gaps.md` and not fixed in Track A.
 8. The system SHALL NOT assert JSON key order (`.claude/rules/testing.md`).
+9. *(Decided 2026-10-12.)* Contract fixtures SHALL NOT be committed, pushed or deployed: `/tests/Fixtures/contracts` is in `.gitignore`. A fixture-dependent test SHALL be skipped when the fixtures directory is absent (CI), and SHALL fail when the directory exists but its fixture is missing. Locally, a skipped test is a gate failure. Fixture changes SHALL be proven with the fixture digest and per-file hash diff (design §4.1.7) instead of `git diff`.
 
 ### Requirement 2: Thin controllers: extract domain logic into Actions/Services
 
@@ -192,7 +193,7 @@ A Track A change and a Track B change are never combined in one PR.
 2. `binafy/laravel-cart` SHALL be removed (steering D4).
 3. The top-level `/broadcasting/auth` web route SHALL be removed by dropping `channels:` from `withRouting()` and loading `routes/channels.php` from `AppServiceProvider::boot()` (steering D3).
 4. Before any removal, `BroadcastChannelAuthTest` SHALL be added (none exists today) proving staff and parent private-channel authorization on the two `/api` auth routes.
-5. **The API SHALL NOT be affected:** `route:list --path=api --except-vendor --json` is identical before and after, the contract suite has zero fixture diffs, and the full suite passes on both databases (design §4.8).
+5. **The API SHALL NOT be affected:** `route:list --path=api --except-vendor --json` is identical before and after, the contract suite passes with the fixture digest unchanged (design §4.1.7), and the full suite passes on both databases (design §4.8).
 
 ### Requirement 12: Mandatory tooling and final simplification pass *(non-negotiable)*
 
@@ -205,7 +206,7 @@ A Track A change and a Track B change are never combined in one PR.
 3. WHEN a task writes or changes tests THEN the `testing-best-practices` skill SHALL be activated. WHEN it touches `app/Exports/` THEN `laravel-excel`. WHEN it touches roles, permissions or `role:` middleware THEN `laravel-permission-development`. WHEN it touches Fortify THEN `fortify-development`.
 4. IF the Laravel Boost MCP server is not connected (it runs through Sail: `vendor/bin/sail artisan boost:mcp`) THEN the implementer SHALL start Sail (`vendor/bin/sail up -d`), reconnect, and SHALL NOT continue the task until Boost is available.
 5. The PR description SHALL contain a **Tooling log** with one block per commit: the skills activated, the rule files read, and each `search-docs` query with the doc section it relied on.
-6. WHEN every backend commit in this spec (Track A, every approved Track B item, and the T-18 standards audit) is on `bump-laravel-13-latest` THEN a final task (T-19) SHALL run the `laravel:laravel-simplifier` agent over the complete Spec 16 backend diff (`<spec16-start-sha>..HEAD`), under the constraints in design §12.3, before the branch is pushed for the PR. Its changes SHALL pass the full verification gate (both databases, zero contract-fixture diffs, role matrix, Pint).
+6. WHEN every backend commit in this spec (Track A, every approved Track B item, and the T-18 standards audit) is on `bump-laravel-13-latest` THEN a final task (T-19) SHALL run the `laravel:laravel-simplifier` agent over the complete Spec 16 backend diff (`<spec16-start-sha>..HEAD`), under the constraints in design §12.3, before the branch is pushed for the PR. Its changes SHALL pass the full verification gate (both databases, fixture digest unchanged per design §4.1.7, role matrix, Pint).
 7. The simplifier pass SHALL NOT change behaviour, response shapes, validation rule sets, messages, status codes, activity-log calls or hazard-protected code (design §3). Any simplifier suggestion that would do so SHALL be rejected and listed in the PR as "rejected: <hazard id>".
 
 ### Requirement 13: Laravel 13 and PHP standards alignment *(final check)*

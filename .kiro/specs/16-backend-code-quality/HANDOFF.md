@@ -12,7 +12,7 @@ This spec was written against the real code. Every claim was verified in `vendor
 2. **Never invent a decision.** If the spec does not say how to do something you need to do, **stop and ask** (§8). Do not pick "the reasonable option", "the cleaner way" or "what Laravel usually does".
 3. **The spec beats your judgement.** If code differs from what `design.md` describes, and an earlier step of this spec did not legitimately change it (see §5.4), stop and report drift. Do not adapt silently.
 4. **No scope creep.** Fix nothing that is not in the current task. A bug, smell or typo you notice goes in your report under "Found, not fixed". Do not fix it.
-5. **Behaviour must not change in Track A.** Response shapes, status codes, messages, activity-log rows, validation errors and SQL results stay identical. The contract fixtures (created in T-1) prove it. **A Track A commit that changes any file under `tests/Fixtures/contracts/` is wrong by definition.**
+5. **Behaviour must not change in Track A.** Response shapes, status codes, messages, activity-log rows, validation errors and SQL results stay identical. The contract fixtures (created in T-1) prove it. **A Track A commit that changes any contract fixture is wrong by definition.** The fixtures are gitignored: they stay on this machine and are never committed, pushed or deployed (design §4.1.7). Never `git add -f` them. Because git cannot see them, the proof is the fixture digest, not `git status`.
 6. **Evidence, not claims.** Never say "tests pass" without the pasted output of the actual command. Never say "verified" about something you did not run or read.
 7. **Don't simplify defensive code.** Design §3 lists 18 hazards (H1–H18) where the "obviously equivalent, simpler" version is wrong. Read them before every task.
 
@@ -120,9 +120,10 @@ Re-read #7 (§3 hazards) and #8 (ground rules) at the start of **every** step.
 3. Full suite with the **MySQL gate** (design §11.1, exact command).
 4. Full suite with the **SQLite gate** (design §11.1, exact command).
    **Never** use `vendor/bin/sail artisan test` as a gate: it silently runs SQLite (design §11.1).
-5. Fixture check (from T-2 onward): `git status --porcelain tests/Fixtures/contracts`.
-   - **Track A: this must print nothing.**
-   - **Track B:** only the fixtures the task lists may appear.
+5. Fixture check (from T-2 onward), using the digest commands in design §4.1.7. `git status` cannot see the fixtures because they are gitignored.
+   - **Track A:** the count and digest equal the previous commit's.
+   - **Track B:** the before/after per-file hash `diff` shows only the fixtures the task lists.
+   - Steps 3 and 4 must end with a plain `OK`: **no skipped tests**. A skip means the fixtures folder is missing. STOP.
 6. Hazard review: re-read your diff (`git diff`) against every hazard the task names. Write one line per hazard in your report ("H5: adjust() still uses Eloquent `$item->update()`").
 7. FE check: list the design §13.2 rows for the endpoints you touched, and the §13.3 pages for this task.
 8. Tick the task's checkboxes in `tasks.md` (`[ ]` → `[x]`), only for sub-tasks that are fully done and verified.
@@ -196,7 +197,7 @@ Notes on the order:
   - `Task:` the step ID and the requirement IDs.
   - `Tests:` the passed/total lines from the MySQL and SQLite runs.
   - `Pint:` `ran, N file(s) fixed` or `ran, no changes`.
-  - `Fixtures:` `unchanged` (Track A), or the list of fixture files changed with their FE impact (Track B).
+  - `Fixtures:` `unchanged` (Track A), or the list of fixture files changed with their FE impact (Track B), followed by `<count> files, digest <digest>`.
   - `Tooling:` the skills loaded, the rule files read, and each `search-docs` query with the doc section used.
   - **T-1 only:** `spec16-start-sha: 3454977`.
   - **T-18 only:** the audit command output.
@@ -210,14 +211,14 @@ Notes on the order:
 ## 7. Track-specific rules
 
 **Track A (T-1 … T-19, plus C-1):**
-- Zero behaviour change. Zero fixture diffs after T-1. Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-04 (deletions), B-05 (`BillingReportTest` seeds).
-- T-1 creates fixtures in **record mode**: MySQL gate first, then SQLite overrides only where shapes differ (design §4.1.2). Contract tests use `app.debug = false`. Recording happens **only** in T-1.
+- Zero behaviour change. The fixture digest stays unchanged after T-1 (design §4.1.7). Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-04 (deletions), B-05 (`BillingReportTest` seeds).
+- T-1 creates fixtures in **record mode**: MySQL gate first, then SQLite overrides only where shapes differ (design §4.1.2). Contract tests use `app.debug = false`. Recording happens **only** in T-1. The fixtures are gitignored, so the T-1 commit holds the harness and the tests, not the fixtures (T-1.8).
 
 **Track B (B-xx):**
 1. Write the failing test **first**. Run it and paste the failing output in your report.
 2. Implement exactly the design §5.x change.
 3. Show that the test now passes.
-4. Change **only** the fixtures the task lists. Re-record only those, using the record-mode env flags, for that fixture's test only.
+4. Change **only** the fixtures the task lists. Re-record only those, using the record-mode env flags, for that fixture's test only. Prove it with the before/after per-file hash diff (design §4.1.7).
 
 ---
 
@@ -263,7 +264,7 @@ Sub-tasks ticked:
 Files created / changed:
 Tests: MySQL <passed/total>   SQLite <passed/total>   (paste the summary lines)
 New tests added:
-Fixtures: unchanged | changed: <list + FE impact>
+Fixtures: unchanged | changed: <list + FE impact>; <count> files, digest <digest>
 Hazards checked: H#: <one line each>
 FE check: §13.2 rows: …   §13.3 pages to smoke-test: …
 Pint: <result>

@@ -27,7 +27,7 @@
   - `<spec16-start-sha>` = **`3454977`** (HEAD of `bump-laravel-13-latest` on 2026-10-09, before any Spec 16 commit). Record it in the T-1 commit body.
   - The first commit is the spec/steering/rules documents: `docs(spec16): add backend code quality spec, steering update and pint rule`.
   - After T-19, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
-- **Track A commits must not modify any file under `tests/Fixtures/contracts/`.** Track B commits modify only the fixtures listed in the task.
+- **Track A commits must not change any contract fixture:** the fixture digest (design §4.1.7) stays identical. Track B commits change only the fixtures listed in the task, proven by the per-file hash diff. **Fixtures are gitignored and are never committed:** never `git add -f` them.
 - **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), T-17.1 (`tests/TestCase.php` unused Fortify helper), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
 - **`make:request` generates `authorize(): bool { return false; }`** (verified in the framework stub). Every Form Request in this spec MUST change it to `return true;`, since authorization lives in route middleware and `#[Authorize]`. Leaving `false` makes the endpoint return 403 for everyone. The contract suite catches this, but check it anyway.
 - **Create files with Artisan**, then fill them in:
@@ -38,7 +38,7 @@
   2. **SQLite gate** (design §11.1, exact command), all green. **`vendor/bin/sail artisan test` is not a gate**: it runs SQLite, not MySQL
   3. **FE integration check:** re-read the design §13.2 rows for every endpoint the task touches, and list the §13.3 pages to smoke-test on staging in the PR description
   4. `vendor/bin/sail bin pint --dirty --format agent`
-  5. Contract suite green with **zero** fixture diffs (Track A)
+  5. Contract suite green with **no skipped tests**; fixture digest unchanged (Track A) or changed only in the listed files (Track B) (design §4.1.7)
   6. Re-read the diff against every hazard the task lists
 
 ---
@@ -86,6 +86,18 @@
     - For every fixture, compare it with its FE type (`rg -n "apiClient\.(get|post|put|patch|delete)<" ~/sunbites-pos/lib/api ~/sunbites-portal/lib/api`) and add a row per mismatch. Do **not** fix mismatches here.
     - No test is needed (this is documentation); the PR description links the file.
     - _Requirements: 1.7_
+  - [ ] 1.8 Keep fixtures out of git and keep CI green without them *(design §4.1.7)*
+    - `/tests/Fixtures/contracts` is already in `.gitignore` (added by the spec owner on 2026-10-12). Do not change that line, and never `git add -f` a fixture. Before committing, confirm that `git status --porcelain` lists no fixture and that `git check-ignore -q 'tests/Fixtures/contracts/get__api_health@ok.json'` exits 0.
+    - Implement the skip rule in `AssertsApiContract` and `RouteCoverageTest`, and the `AssertsApiContractTest` changes (`mkdir` in `setUp()`, the new skip test), exactly as design §4.1.7 states.
+    - Prove the CI behaviour locally:
+      1. Note the digest.
+      2. Rename the folder in place: `mv tests/Fixtures/contracts tests/Fixtures/contracts.ci-check`.
+      3. Run the SQLite gate with `tests/Feature/Contract tests/Unit/Contract`. Expect zero failures and zero errors, with only skips.
+      4. Rename it back: `mv tests/Fixtures/contracts.ci-check tests/Fixtures/contracts`.
+      5. Confirm the digest is unchanged and the full gates show no skips.
+      Do not commit between the two renames.
+    - Put `Fixtures: <count> files, digest <digest> (local only, not committed)` in the T-1 commit body.
+    - _Requirements: 1.9_
 
 - [ ] C-1. MySQL test job in CI *(approved 2026-10-12; design §15; Req 14)*
   - [ ] C-1.1 Add the `test-mysql` job
@@ -391,7 +403,7 @@
     - Run every command in design §14.4.
     - Each must return its expected result. Fix any leftover behaviour-identically in this commit, or record it as an exception with its reason.
     - Paste the command output into the commit body.
-    - Tests: full verification gate (both databases, zero fixture diffs, role matrix, `vendor/bin/sail bin pint --format agent` reporting no changes).
+    - Tests: full verification gate (both databases, fixture digest unchanged, role matrix, `vendor/bin/sail bin pint --format agent` reporting no changes).
     - _Requirements: 13.1, 13.2, 13.3, 13.4_
 
 ---
@@ -401,7 +413,7 @@
     - Starts only after **every** Track A commit, every approved Track B commit and T-18 are on `bump-laravel-13-latest`.
     - Build the file list from `git diff --name-only <spec16-start-sha>..HEAD -- app routes bootstrap config`. `<spec16-start-sha>` is `3454977`, recorded in the T-1 commit body.
     - Invoke the `laravel:laravel-simplifier` agent with the verbatim fenced prompt in design §12.3 plus the file list.
-    - Tests: none new. Run the full verification gate: MySQL + SQLite suites green, **zero** contract-fixture diffs, role matrix green, Pint (`--dirty --format agent`, then `vendor/bin/sail bin pint --format agent` reporting no changes).
+    - Tests: none new. Run the full verification gate: MySQL + SQLite suites green with no skipped tests, contract-fixture digest unchanged (design §4.1.7), role matrix green, Pint (`--dirty --format agent`, then `vendor/bin/sail bin pint --format agent` reporting no changes).
     - Revert (don't fix) any individual simplifier change that fails the gate.
     - Commit as `refactor(spec16): apply laravel-simplifier pass`. The commit body lists applied changes, rejected suggestions (`rejected: H#`) and reverted changes.
     - Then stop and tell the user the work is complete. Do not push unless asked (design §6).
@@ -491,7 +503,7 @@
 
 | Requirement | Tasks |
 |---|---|
-| 1.1–1.8 | T-1.1–1.7 |
+| 1.1–1.9 | T-1.1–1.8 |
 | 2.1, 2.2 | T-3.3, 3.4, 4.2, 5.1, 8.1, 9.1 |
 | 2.3 | T-3.1, 7.1 |
 | 2.4 | the test bullet of every extraction task |

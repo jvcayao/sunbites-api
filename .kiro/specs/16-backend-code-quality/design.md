@@ -93,7 +93,7 @@ Each hazard names the concrete sites. A task is not done until its diff has been
 tests/Support/Contract/ShapeExtractor.php      Tests\Support\Contract\ShapeExtractor
 tests/Support/Contract/AssertsApiContract.php  Tests\Support\Contract\AssertsApiContract (trait)
 tests/Support/Contract/ContractScenario.php    Tests\Support\Contract\ContractScenario
-tests/Fixtures/contracts/*.json                one file per route × variant
+tests/Fixtures/contracts/*.json                one file per route × variant (gitignored, local only: §4.1.7)
 tests/Feature/Contract/Kitchen/*ContractTest.php
 tests/Feature/Contract/Portal/*ContractTest.php
 tests/Feature/Contract/Public/*ContractTest.php
@@ -158,7 +158,7 @@ protected function assertFileContract(TestResponse $response, string $routeKey, 
   ```
   `now()` follows `travelTo()`, so wallet timestamps equal the frozen time. This applies to contract tests only; existing tests and production are unchanged. Do **not** publish `config/wallet.php` or change any production binding. The role matrix and route coverage tests also extend it, but override scenario building as §4.1.5 describes.
 - **Driver overrides:** the primary fixture is recorded on **MySQL**, using the MySQL gate command in §11.1. **Not** `vendor/bin/sail artisan test`, which runs SQLite. When run on SQLite, the trait first looks for `{slug}@{variant}.sqlite.json` and uses it if present. The override is created only when the SQLite shape differs (H15), and every override gets a row in `contract-gaps.md` (column `proposed Track B item` = `driver divergence`). Record order: MySQL first (the MySQL gate with `-e CONTRACT_RECORD=1` added before `laravel.test`), then SQLite (the SQLite gate with `-e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1`), which writes an override **only** when the shape differs from the MySQL fixture.
-- **Record mode:** when `env('CONTRACT_RECORD') === '1'`, write the fixture and `markTestIncomplete('recorded')`. Otherwise a missing fixture fails with `"No contract fixture for {slug}@{variant}; run with CONTRACT_RECORD=1 in the contract-freeze PR only."`. A mismatch fails with `assertSame($expected, $actual)` so PHPUnit prints a diff.
+- **Record mode:** when `env('CONTRACT_RECORD') === '1'`, write the fixture and `markTestIncomplete('recorded')`. Otherwise a missing fixture fails with `"No contract fixture for {slug}@{variant}; run with CONTRACT_RECORD=1 in the contract-freeze PR only."`. If the fixtures **directory** is missing (CI), the test is skipped instead (§4.1.7). A mismatch fails with `assertSame($expected, $actual)` so PHPUnit prints a diff.
 
 #### 4.1.3 Deterministic scenario (`ContractScenario`)
 
@@ -224,7 +224,7 @@ If you find another shape branch while writing a test, add the variant and list 
 
 #### 4.1.5 Coverage and authorization guards
 
-- **`RouteCoverageTest`:** iterates `Route::getRoutes()`, keeps URIs starting with `api/` whose action class is in the `App\` namespace or is a closure (the `api/health` closure is included; the two framework-owned `Illuminate\Broadcasting\BroadcastController@authenticate` routes are **explicitly excluded**, and their auth behaviour is covered by the 401 checks below and the existing channel tests), builds `"{METHOD} {uri}"` from the first non-HEAD method, converts it to a slug, and asserts `tests/Fixtures/contracts/{slug}@ok.json` exists. Failure message: `"Route {key} has no contract fixture."`.
+- **`RouteCoverageTest`:** iterates `Route::getRoutes()`, keeps URIs starting with `api/` whose action class is in the `App\` namespace or is a closure (the `api/health` closure is included; the two framework-owned `Illuminate\Broadcasting\BroadcastController@authenticate` routes are **explicitly excluded**, and their auth behaviour is covered by the 401 checks below and the existing channel tests), builds `"{METHOD} {uri}"` from the first non-HEAD method, converts it to a slug, and asserts `tests/Fixtures/contracts/{slug}@ok.json` exists. Failure message: `"Route {key} has no contract fixture."`. If the fixtures directory is missing (CI), the test is skipped (§4.1.7).
 - **`RoleAuthorizationMatrixTest`:** for each kitchen route, reads `$route->gatherMiddleware()` and finds any `role:x|y` entry. For each role in `['admin', 'manager', 'supervisor', 'cashier']` it calls the route with scenario-resolved parameters and a `{}` body.
   - It asserts `403` when the role is not listed.
   - Otherwise it asserts the status is **not** `403`, with an explicit exceptions array for business-rule 403s. **Exactly these two entries, each with its reason as a comment:**
@@ -253,6 +253,37 @@ Pre-verified entries to seed the file with:
 | `GET api/v1/reports/sales`, `GET api/v1/reports/billing` | `cashier` / `recorder` / `student` | full models incl. `daily_rate`, `phone`, `birthday`, `qr_code` | FE reads only names/ids | PII over-exposure | B-12 |
 | `GET api/v1/references/inventory` | archived rows | never returned (`InventoryItem::active()`) | `references/inventory/page.tsx:894-895` expects them for the Archived section | Unarchive unreachable | B-16 |
 | many | decimal fields | `"string:decimal2"` | typed `number` | none today (UI parses) | none: document only |
+
+#### 4.1.7 Fixture storage: local only, never committed *(decided 2026-10-12)*
+
+- **Decision (user, 2026-10-12):** contract fixtures must not reach production. `/tests/Fixtures/contracts` is in `.gitignore`. The fixtures live only in the working tree at `~/sunbites-api`, which the spec-owner and implementer sessions share. They are never committed, pushed or deployed. **Never `git add -f` anything under `tests/Fixtures/contracts/`.**
+- **Why CI needs a rule.** GitHub Actions checks out the repo without fixtures. That covers both `ci.yml` jobs (including C-1's `test-mysql`) and the test jobs in `staging.yml` and `production.yml`, which gate the deploys. Without a rule, every fixture comparison would fail and block every deploy. So:
+  - `AssertsApiContract::assertMatchesContractFixture()`: when record mode is off and `! is_dir($this->contractFixturesDirectory())`, call `$this->markTestSkipped('Contract fixtures are local only (gitignored, Spec 16 design §4.1.7).')`. When the directory exists but one file is missing, it still fails with the existing message.
+  - `RouteCoverageTest::test_every_api_route_has_an_ok_contract_fixture()`: the same check and message, as its first statement. `test_the_api_exposes_the_expected_number_of_routes()` reads no fixtures and runs everywhere.
+  - `RoleAuthorizationMatrixTest`, `ContractScenarioTest`, `ShapeExtractorTest` and `AssertsApiContractTest` read no fixtures and run everywhere, CI included.
+  - `AssertsApiContractTest::setUp()` creates its temp directory (`mkdir($this->fixturesDirectory, 0755, true)`), so `test_compare_mode_fails_with_instructions_when_the_fixture_is_missing` still tests a missing **file**. Add `test_compare_mode_skips_when_the_fixtures_directory_is_absent`:
+    - remove the directory and call `assertContract()`
+    - catch `PHPUnit\Framework\SkippedWithMessageException` and assert its message equals the one above, using the same try/catch pattern as `recordJson()`
+    - `SkippedWithMessageException` extends `AssertionFailedError`, so do not catch `AssertionFailedError` for this
+  - No workflow file changes. CI reports these tests as skipped, and deploys are unaffected.
+- **Locally, a skip is a failure.** The fixtures folder exists, so the MySQL and SQLite gates (§11.1) must end with a plain `OK (N tests, M assertions)`. `OK, but some tests were skipped!` means the folder is missing or moved: STOP.
+- **Fixture digest.** This replaces `git status` on fixtures, which now always prints nothing. Run the commands on the host from the repo root (no PHP, so no Sail):
+  ```bash
+  # count
+  find tests/Fixtures/contracts -type f -name '*.json' | wc -l | tr -d ' '
+  # per-file hashes (save before a Track B re-record, then diff after)
+  (cd tests/Fixtures/contracts && find . -type f -name '*.json' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256)
+  # digest (one line)
+  (cd tests/Fixtures/contracts && find . -type f -name '*.json' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -c1-64
+  ```
+  - **T-1 commit body:** `Fixtures: <count> files, digest <digest> (local only, not committed)`.
+  - **Every Track A commit body:** the same line. The digest must equal the previous commit's.
+  - **Track B commits:**
+    1. Before re-recording, save the per-file hashes to `"${TMPDIR:-/tmp}/spec16-fixtures-before.sha"`.
+    2. Re-record only the listed tests.
+    3. Save the hashes again to `"${TMPDIR:-/tmp}/spec16-fixtures-after.sha"` and `diff` the two files. The diff must show only the files the task lists.
+    4. The commit body lists each of those files as `added`, `removed`, or `changed` (old status → new status), followed by the new count and digest.
+- **Durability:** the fixtures exist on one machine only. If they are lost before Spec 16 merges, the pre-refactor baseline is gone, and re-recording would only freeze whatever the code does at that moment. A local archive outside the repo is optional and is made **only if the user asks** for one.
 
 ### 4.2 Form Requests (Req 3)
 
@@ -769,7 +800,7 @@ Tests use `RefreshDatabase`/`LazilyRefreshDatabase`, which run after-commit call
 
 **Proof that the API is unaffected** (all required in the commit):
 - `vendor/bin/sail artisan route:list --path=api --except-vendor --json` is byte-identical before and after (165 routes, or 163 if B-04 already landed)
-- the contract suite has zero fixture diffs
+- the contract suite passes with the fixture digest unchanged (§4.1.7)
 - the full suite passes on MySQL and SQLite
 - `BroadcastChannelAuthTest` passes
 - `route:list --only-vendor` no longer lists the Fortify routes or the top-level `broadcasting/auth`
@@ -1055,7 +1086,7 @@ Track B commits are placed after the Track A commit they depend on (listed per i
 ## 7. Integration points
 
 - **Routes:** unchanged in Track A (165 API routes). B-04 removes 2, and B-02 adds a middleware alias.
-- **Contracts:** the fixtures in `tests/Fixtures/contracts/` become the authoritative API contract. Frontend teams can read them.
+- **Contracts:** the fixtures in `tests/Fixtures/contracts/` are the API contract for the duration of Spec 16. They are local only and not in git (§4.1.7), so the PR description lists every fixture change with its FE impact instead.
 - **Depends on:** `CreditLedgerService` (unchanged API), `EnrollmentService`, `ParentProvisioningService`, `StudentLedgerQuery`/`LedgerEntryFormatter` (unchanged), bavix wallet `deposit`/`withdraw`.
 
 ## 8. Security considerations
@@ -1072,7 +1103,7 @@ Track B commits are placed after the Track A commit they depend on (listed per i
 - Each **commit** is independently revertible (one commit per area, §6). Keep it that way by merging the PR without squashing.
 - After the single PR merges to `staging` (auto-deploy via `staging.yml` → Laravel Cloud), run the complete §13.3 checklist before promoting `staging` → `main`.
 - B-02 additionally needs the login → branch → dashboard smoke test.
-- **Rollback:** before merge, `git revert <commit>` on the branch. After merge, revert the specific area's commit on `staging` (requires a non-squash merge), or revert the merge commit for everything. Fixtures revert with their commit.
+- **Rollback:** before merge, `git revert <commit>` on the branch. After merge, revert the specific area's commit on `staging` (requires a non-squash merge), or revert the merge commit for everything. Fixtures are not in git (§4.1.7). Reverting a Track A commit leaves them valid. After reverting a Track B commit, re-record only the fixtures that item listed, then check the per-file hash diff.
 
 ## 10. Error handling
 
@@ -1105,6 +1136,8 @@ Verified on 2026-10-09:
 **Credentials:** the MySQL gate reads `DB_USERNAME`/`DB_PASSWORD` from `.env` at run time. Never print them, never write them into files or commits, and never edit `.env`.
 
 **Never** point tests at the `laravel` (dev) database (H18).
+
+**Skipped tests:** locally, both gates must report no skipped tests. A skip means the contract fixtures folder is missing (§4.1.7): STOP.
 
 ## 11. Testing strategy
 
@@ -1165,7 +1198,7 @@ Agent: `laravel:laravel-simplifier` (installed via the Laravel plugin). Its defa
 
    > Review and simplify ONLY these files, which were changed by Spec 16: <file list>. Read `.kiro/specs/16-backend-code-quality/design.md` §3 (hazards H1–H18) and §14 (Laravel 13 standards, including the rejected list in §14.3 and the attribute inventory in §14.5) first; every hazard is a hard constraint. Do NOT: make classes `final`, add `declare(strict_types=1)`, use PHP 8.4+ syntax (`composer.json` requires `^8.3`), or convert `Carbon::create*()` month loops to `now()`/immutable dates (H16); create custom exception classes or an `app/Exceptions/` directory (spec Req 2.7); merge or "consolidate" validation rule sets, Form Requests or Resources across endpoints (H13); add, remove or change any `(float)`/`(int)`/`round()` cast (H1, H15); change any `abort()` into `response()->json()` or the reverse (H3); move guards out of `prepareForValidation()` (H4); switch between Eloquent `update()` and query-builder `update()` (H5); return a `JsonResource` directly from a controller (H6); replace `$request->only(...)` in the password-reset controllers (H7); tighten any permissive rule (H8); change any response key, message text, status code, activity-log name or property; remove docblocks that explain cross-branch (`withoutBranch`) reasons, or the comment on `WalletController::voidTopUp`'s `int|string` parameter. Do simplify: naming, nesting, dead code, redundant local variables, import order, nested ternaries into `match`, and duplicated private helpers *within* one class. For every change, state the file and a one-line reason. For every rule of yours you chose NOT to apply because of the constraints above, list it as "rejected: <hazard id>".
 
-4. Run the full verification gate: both databases, zero fixture diffs, role matrix, Pint.
+4. Run the full verification gate: both databases, fixture digest unchanged (§4.1.7), role matrix, Pint.
 5. Revert any single change that fails the gate; don't debug the simplifier's output. List the reverted items in the PR.
 6. Commit as `refactor(spec16): apply laravel-simplifier pass`. The commit body and PR description list the agent's applied changes, the rejected list and the gate results.
 
@@ -1429,6 +1462,7 @@ Every Track A commit must leave this table unchanged, except the route count aft
 **Why each line is safe and correct:**
 - **`services.mysql`:** GitHub starts a throwaway MySQL 8.4 container for this job only and deletes it when the job ends. `password` exists only inside that container; it is not a secret and not used anywhere else.
 - **`cp .env.example .env`:** gives `APP_DEBUG=false` and `DB_CONNECTION=sqlite`. The job's `env:` values override `.env` because Dotenv is immutable. There is no `.env.testing` in CI.
+- **Contract tests:** CI has no fixtures (they are gitignored), so the fixture comparisons and the route-coverage fixture check are skipped in this job, as in the `test` job (§4.1.7). The role matrix, the scenario tests and the harness unit tests still run.
 - **`vendor/bin/phpunit`:** `php artisan test` would clear the `DB_*` variables (Collision `clearEnv()`, §11.1) and silently run SQLite.
 - **No Pint step:** the existing `test` job already runs `pint --test`.
 - **No secrets, no deploy:** `staging.yml` and `production.yml` are unchanged. Their deploy jobs still use only the Laravel Cloud token.
