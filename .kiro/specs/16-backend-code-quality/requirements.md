@@ -178,6 +178,8 @@ A Track A change and a Track B change are never combined in one PR.
 14. **B-14 500 on bad status input.** `PATCH /students/{student}/status` calls `EnrollmentStatus::from($request->enrollment_status)` inside the rule definition, so a missing or invalid value returns 500 instead of 422. It SHALL use `tryFrom`.
 15. **B-15 Portal payment-history 403 message.** See Req 6.3.
 16. **B-16 Archived inventory unreachable in POS.** The POS inventory page (`references/inventory/page.tsx:894-895`) splits `GET /references/inventory` into active and archived sections and offers "Unarchive". But `InventoryController::index` returns only `InventoryItem::active()`, so the archived section is always empty and unarchive cannot be reached. `GET /api/v1/references/inventory` SHALL return active **and** archived items (ordered by `name`), and `GET /api/v1/pos/inventory` SHALL keep returning active items only. Verified safe: every consumer of `/references/inventory` already filters `is_archived` client-side where it needs active items (`components/pos/menu-mgmt-tab.tsx:442`, `reports/inventory/page.tsx:539`).
+17. **B-17 *(proposed, awaiting approval)*: cross-branch branch monthly amounts.** Updating or deleting another branch's `BranchMonthlyAmount` by id SHALL return 404 (design §5.15).
+18. **B-18 *(proposed, awaiting approval)*: cross-branch feedback.** Replying to or marking read another branch's `Feedback` by id SHALL return 404 (design §5.16).
 
 ### Requirement 11: Dependency and surface cleanup *(Q6 approved 2026-10-09, on condition that the API is not affected)*
 

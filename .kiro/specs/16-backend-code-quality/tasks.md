@@ -463,6 +463,12 @@
   - Fixtures: none (row shape unchanged; only the set of rows grows). If the `ok` fixture's scenario has an archived item, its list shape stays identical.
   - Staging smoke test: References → Inventory shows the Archived section with the archived item, and Unarchive moves it back.
   - _Requirements: 10.16_
+- [ ] B-17. *(PROPOSED, awaiting user approval; do not implement)* Cross-branch branch monthly amounts *(design §5.15)*
+  - Failing test: a branch-A supervisor `PUT`/`DELETE` on a branch-B `BranchMonthlyAmount` gets 404.
+  - _Requirements: 10.17_
+- [ ] B-18. *(PROPOSED, awaiting user approval; do not implement)* Cross-branch feedback *(design §5.16)*
+  - Failing test: a branch-A supervisor reply/mark-read on branch-B feedback gets 404, and no `FeedbackReplyMail` is queued.
+  - _Requirements: 10.18_
 - [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.

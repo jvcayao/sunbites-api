@@ -177,6 +177,8 @@ Start SHA: **`3454977`**. Already committed by the spec owner: `b8f82b1`, `f873a
 | 32 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
 | 33 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 
+**B-17 and B-18 are proposed but NOT approved.** Do not implement them unless the user approves them and the spec owner adds them to this table.
+
 Notes on the order:
 - **B-02 runs after T-7 and T-9 on purpose.** It removes branch checks in `MealPlannerController` that T-7's design still describes. `tasks.md` says "after T-6", which is a minimum, not the slot.
 - **B-16 runs after B-01**, because B-01 fixes the unarchive endpoint that B-16 makes reachable.

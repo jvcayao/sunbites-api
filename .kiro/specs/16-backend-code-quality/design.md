@@ -139,7 +139,22 @@ protected function assertFileContract(TestResponse $response, string $routeKey, 
 - Fixture path: `tests/Fixtures/contracts/{slug}@{variant}.json`, where `slug = strtolower(method).'__'.trim(preg_replace('/[^a-z0-9{}]+/i', '_', uri), '_')`. Example: `get__api_v1_students_{student}@ok.json`.
 - Fixture content: `{"status": 200, "body": <shape>}`, pretty-printed with `JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES`.
 - **Debug mode:** contract tests run with `config(['app.debug' => false])`, set in `Tests\Feature\Contract\ContractTestCase::setUp()` (below). Fixtures therefore record the **production-shaped** body (`APP_DEBUG=false` in production and in CI's `.env.example`; the local `.env.testing` has `APP_DEBUG=true`). Without this, every `abort()` variant would record `exception`/`file`/`line`/`trace` locally but not in CI.
-- **Base class:** every contract test extends `Tests\Feature\Contract\ContractTestCase` (new, `abstract class ContractTestCase extends Tests\TestCase`, `use LazilyRefreshDatabase; use AssertsApiContract;`), whose `setUp()` calls `parent::setUp()`, then `config(['app.debug' => false])`, then `$this->scenario = ContractScenario::build($this)`. The role matrix and route coverage tests also extend it, but override scenario building as §4.1.5 describes.
+- **Base class:** every contract test extends `Tests\Feature\Contract\ContractTestCase` (new, `abstract class ContractTestCase extends Tests\TestCase`, `use LazilyRefreshDatabase; use AssertsApiContract;`), whose `setUp()` calls, in this order:
+  1. `parent::setUp()`
+  2. `config(['app.debug' => false])`
+  3. **the wallet clock binding** (below)
+  4. `$this->scenario = ContractScenario::build($this)`
+- **Wallet clock binding (decided 2026-10-12):** `bavix/laravel-wallet` stamps transactions with its own clock (`Bavix\Wallet\Internal\Service\ClockService::now()` returns `new DateTimeImmutable()`, the real wall clock), so it ignores `travelTo()`. The package registers that clock as a container singleton from its documented swap point, config key `wallet.internal.clock` (`WalletServiceProvider` L256; PSR-20 interface). `ContractTestCase::setUp()` must rebind it **before any wallet code runs**:
+  ```php
+  $this->app->singleton(\Bavix\Wallet\Internal\Service\ClockServiceInterface::class, fn () => new class implements \Bavix\Wallet\Internal\Service\ClockServiceInterface
+  {
+      public function now(): \DateTimeImmutable
+      {
+          return now()->toDateTimeImmutable();
+      }
+  });
+  ```
+  `now()` follows `travelTo()`, so wallet timestamps equal the frozen time. This applies to contract tests only; existing tests and production are unchanged. Do **not** publish `config/wallet.php` or change any production binding. The role matrix and route coverage tests also extend it, but override scenario building as §4.1.5 describes.
 - **Driver overrides:** the primary fixture is recorded on **MySQL**, using the MySQL gate command in §11.1. **Not** `vendor/bin/sail artisan test`, which runs SQLite. When run on SQLite, the trait first looks for `{slug}@{variant}.sqlite.json` and uses it if present. The override is created only when the SQLite shape differs (H15), and every override gets a row in `contract-gaps.md` (column `proposed Track B item` = `driver divergence`). Record order: MySQL first (the MySQL gate with `-e CONTRACT_RECORD=1` added before `laravel.test`), then SQLite (the SQLite gate with `-e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1`), which writes an override **only** when the shape differs from the MySQL fixture.
 - **Record mode:** when `env('CONTRACT_RECORD') === '1'`, write the fixture and `markTestIncomplete('recorded')`. Otherwise a missing fixture fails with `"No contract fixture for {slug}@{variant}; run with CONTRACT_RECORD=1 in the contract-freeze PR only."`. A mismatch fails with `assertSame($expected, $actual)` so PHPUnit prints a diff.
 
@@ -149,16 +164,21 @@ protected function assertFileContract(TestResponse $response, string $routeKey, 
 
 - **Clock:** time is frozen with `$test->travelTo(Carbon::parse($now))`. The default is school year 2026, month October; pass `'2027-01-20 09:30:00'` for the January scenarios used by B-05.
 - **Branches:** A (`slug` `ant`, active) and B (active).
-- **Staff:** one user per role, `admin`, `manager`, `supervisor`, `cashier` (`$this->seed(PermissionSeeder::class)`), all attached to branch A. Plus one manager attached only to branch B.
+- **Seeders:** `$test->seed(PermissionSeeder::class)` and `$test->seed(SystemConfigurationSeeder::class)` (production always has the configuration rows; they give `{key}` = `credit_limit` and a non-empty `GET /system-configurations`).
+- **Staff:** one user per role, `admin`, `manager`, `supervisor`, `cashier`, all attached to branch A. Plus one manager attached only to branch B.
 - **Students in branch A:**
-  - a subscription student with a wallet (deposit ₱500 performed by the cashier), `credit_balance` 50.00 via `CreditLedgerService::charge`, and payments: June 2026 paid, October 2026 unpaid, January 2027 unpaid, and one **voided** payment (November 2026) created as `StudentMonthlyPayment::factory()->paid()->create(['student_id' => …, 'school_month' => 'november', 'year' => 2026, 'status' => 'voided', 'voided_at' => now(), 'voided_by' => $manager->id, 'void_reason' => 'Contract scenario'])`. Use attribute overrides, not the void endpoint, so the scenario does not depend on endpoint guards
+  - a subscription student with a wallet. Two deposits via the bavix API with **exactly** the meta keys `WalletController::topUp` writes:
+    - `$student->deposit(50000, ['payment_method' => 'cash', 'reference_number' => null, 'note' => 'Contract scenario', 'performed_by' => $cashier->id])` (₱500, left voidable: used as `{transaction}` by the matrix and by the void route's `ok` variant)
+    - `$student->deposit(10000, ['payment_method' => 'gcash', 'reference_number' => 'GC123456', 'note' => null, 'performed_by' => $cashier->id])` (₱100, voided by the manager, see **Wallet** below)
+  - `credit_balance` 50.00 via `app(CreditLedgerService::class)->charge($student, 50.00, "order {$creditOrder->receipt_number}", $cashier)`. The service takes a description, not an order, and leaves `order_id` null by design, exactly as `CheckoutController` does, and payments: June 2026 paid, October 2026 unpaid, January 2027 unpaid, and one **voided** payment (November 2026) created as `StudentMonthlyPayment::factory()->paid()->create(['student_id' => …, 'school_month' => 'november', 'year' => 2026, 'status' => 'voided', 'voided_at' => now(), 'voided_by' => $manager->id, 'void_reason' => 'Contract scenario'])`. Use attribute overrides, not the void endpoint, so the scenario does not depend on endpoint guards
   - a non-subscription student
   - a soft-deleted student
-- **Student in branch B:** one, for isolation checks.
+- **Branch B records (for every `404`/other-branch variant):** one of each route-bound type in branch B: student, order, inventory item, menu item, announcement, feedback, pre-registration, branch monthly amount, monthly payment (of the branch-B student), student contact (of the branch-B student), and a parent linked **only** to the branch-B student.
+  - **Record what happens today.** Several are not branch-protected today and will return 200: parents (B-01), branch monthly amounts and feedback (proposed B-17/B-18). That is expected; those Track B items change those fixtures later.
 - **Contacts and parents:** `StudentContact` rows (primary and secondary, one with an email), and a `ParentUser` linked to the subscription student (`wallet_alert_threshold` 100) plus one unactivated parent.
-- **Menu and inventory:** `PosMenuItem` (subscription-eligible, meal) mapped to an `InventoryItem` (quantity 100, `quantity_used` 1), one archived `InventoryItem`, and a `WeeklyMealPlan` for June week 1.
-- **Orders:** cash walk-in, wallet order, credit order (`OrderFactory::credit()`), and a voided order (`voided()`), all with items and `InventoryLog` sale rows.
-- **Wallet:** a `WalletTopupVoid` created through the real endpoint, `$test->postJson('/api/v1/students/{id}/wallet/top-ups/{txId}/void', ['reason' => 'Contract scenario'])`, as the manager with the branch A header. It goes through HTTP because `VoidWalletTopUpAction` does not exist yet at T-1.
+- **Menu and inventory:** `PosMenuItem` (subscription-eligible, meal) mapped to an `InventoryItem` (quantity 100, `quantity_used` 1), one archived `InventoryItem`, a `WeeklyMealPlan` for June week 1, and one `InventoryLog` of type `manual` (so the inventory report's `discrepancy` list is not empty).
+- **Orders:** cash walk-in, wallet order, credit order (`OrderFactory::credit()`), and a voided order (`voided()`), all with items and `InventoryLog` sale rows. For the wallet and credit orders, also move the wallet with `$student->withdraw($centavos)` **with no meta**, exactly as `CheckoutController` does.
+- **Wallet:** a `WalletTopupVoid` created through the real endpoint, `$test->postJson('/api/v1/students/{id}/wallet/top-ups/{txId}/void', ['reason' => 'Contract scenario'])`, for the **₱100** deposit, as the manager with the branch A header. It goes through HTTP because `VoidWalletTopUpAction` does not exist yet at T-1. It works because the wallet clock binding (§4.1.2) makes the deposit "today". After the call, reset authentication (`$test->app['auth']->forgetGuards()`) so later requests choose their own actor.
 - **Communication:** an `Announcement` with one notification, a `Feedback` row, `PreRegistration` rows in each status with contacts, and a `ParentPaymentReminder`.
 
 Each contract test class uses `LazilyRefreshDatabase`, calls `ContractScenario::build()` in `setUp()`, and authenticates:
@@ -168,6 +188,17 @@ Each contract test class uses `LazilyRefreshDatabase`, calls `ContractScenario::
 Endpoints with external HTTP (`Public\PreRegistrationController::store`) use `Http::fake(['www.google.com/recaptcha/*' => Http::response(['success' => true, 'score' => 0.9])])`. `Mail::fake()` and `Notification::fake()` apply where the endpoint sends.
 
 Fill optional fields in the scenario wherever possible (e.g. `section`, `allergies`, `reference_number`) so fewer shapes record as `"null"`.
+
+**Actor per route:** use the **least-privileged** role the route's `role:` group allows (cashier → supervisor → manager → admin). Routes outside any `role:` group use the cashier; portal routes use the linked parent.
+
+**Extra `ok-*` variants are required wherever the response shape branches on input or actor:**
+- `POST /pos/students/lookup`: `ok-qr` (`student`) and `ok-search` (`students`), plus `422-not-enrolled` for a QR of a non-enrolled student
+- `GET /students`: `ok-deleted` (`deleted=1`, adds `deleted_at`)
+- `GET /users` and `GET /users/{user}`: `ok-as-admin` (`UserResource` adds `daily_rate` and the government ID fields for admins)
+- `GET /reports/wallet/{student}/history`: `ok-purchases`, `ok-topups`, `ok-credit` (the `type` parameter)
+- `GET /references/meal-planner` and `GET /portal/meal-planner`: `ok-hidden` for a week whose visibility is false (the portal returns `days: []`)
+
+If you find another shape branch while writing a test, add the variant and list it in the T-1 commit body.
 
 #### 4.1.4 Required variants per route
 
@@ -937,6 +968,20 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - `components/pos/menu-mgmt-tab.tsx:442` and `app/(kitchen)/reports/inventory/page.tsx:539` already filter `!is_archived`, so they are unaffected.
   - `components/pos/inventory-tab.tsx:300` uses `/pos/inventory`, so it is unaffected.
 - Do B-01's unarchive fix (drop `withoutBranch()`) first or in the same PR, because B-16 makes the unarchive endpoint reachable from the UI.
+
+### 5.15 B-17 *(proposed 2026-10-12, awaiting approval; do not implement until approved)*: Cross-branch branch monthly amounts
+
+- **Defect:** `BranchMonthlyAmount` has no `HasBranch` trait, and `BranchMonthlyAmountController::update`/`destroy` (route group `role:admin|manager|supervisor`) do not check the branch. Staff in branch A can change or delete branch B's monthly fee overrides by id.
+- **Fix:** in `update` and `destroy`, throw `(new ModelNotFoundException)->setModel(BranchMonthlyAmount::class)` unless `$branchMonthlyAmount->branch_id === app('active_branch')->id`. This renders 404 `{"message":"Not found."}`.
+- **Fixtures:** the `404-other-branch` variants change from 200 to 404.
+- **FE impact:** none. The POS edits only rows from `GET /branch-monthly-amounts`, which is filtered by the active branch.
+
+### 5.16 B-18 *(proposed 2026-10-12, awaiting approval; do not implement until approved)*: Cross-branch feedback reply and mark-read
+
+- **Defect:** `Feedback` has no `HasBranch` trait, and `Kitchen\FeedbackController::reply`/`markRead` do not check the branch. Staff in branch A can reply to (and email) a parent who sent feedback to branch B, or mark it read.
+- **Fix:** in `reply` and `markRead`, the same `ModelNotFoundException` guard on `$feedback->branch_id === app('active_branch')->id`. For `reply`, run it in `ReplyFeedbackRequest::prepareForValidation()` **before** sanitising, so 404 wins over 422 (H4).
+- **Fixtures:** the `404-other-branch` variants change from 200 to 404.
+- **FE impact:** none. The POS feedback page lists only the active branch's feedback (`FeedbackController::index` filters by `branch_id`).
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
