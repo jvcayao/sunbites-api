@@ -45,8 +45,8 @@
 
 ## Track A
 
-- [ ] 1. Contract freeze harness and fixtures *(design §4.1; Req 1)*
-  - [ ] 1.1 Create the shape extractor
+- [x] 1. Contract freeze harness and fixtures *(design §4.1; Req 1)*
+  - [x] 1.1 Create the shape extractor
     - Create `tests/Support/Contract/ShapeExtractor.php` implementing the grammar in design §4.1.1 exactly (token names, check order, `ksort`, `__map__`, `__list__`, `__list_union__`, `list:empty`).
     - Write `tests/Unit/Contract/ShapeExtractorTest.php`, extending `PHPUnit\Framework\TestCase` (pure logic), with one test per token, plus:
       - key order is ignored
@@ -55,16 +55,16 @@
       - `"150.00"` gives `string:decimal2`, not `string`
       - `"2026-10-15T09:30:00.000000Z"` gives `string:iso8601_micro`
     - _Requirements: 1.1, 1.8_
-  - [ ] 1.2 Create the assertion trait
+  - [x] 1.2 Create the assertion trait
     - Create `tests/Support/Contract/AssertsApiContract.php` with `assertContract()` and `assertFileContract()` (design §4.1.2): slug rule, fixture path, record mode via `CONTRACT_RECORD=1`, failure messages verbatim, pretty JSON flags.
     - Unit test: the slug for `GET api/v1/students/{student}` is `get__api_v1_students_{student}`; record mode writes a file; compare mode fails on a changed shape.
     - _Requirements: 1.1, 1.2, 1.6_
-  - [ ] 1.3 Create the deterministic scenario
+  - [x] 1.3 Create the deterministic scenario
     - Create `tests/Support/Contract/ContractScenario.php` building every record in design §4.1.3 with existing factories and states only (attribute overrides allowed where no state exists, e.g. the voided payment; no new factory states) (`Student::factory()->subscription()`, `StudentMonthlyPayment::factory()->paid()`, `Order::factory()->credit()`, `->voided()`, `PreRegistration::factory()->pending()/approved()/expired()`, `ParentUserFactory::unactivated()`, …). Freeze time with `travelTo('2026-10-15 09:30:00')`.
     - Expose typed public properties (`$branchA`, `$branchB`, `$admin`, `$manager`, `$supervisor`, `$cashier`, `$subscriptionStudent`, …) and helpers `asStaff(User $u)` and `asParent(ParentUser $p)` following the `tests/Feature/PosCheckoutTest.php` pattern.
     - Test (`tests/Feature/Contract/ContractScenarioTest.php`): builds twice in separate tests with identical counts per table; branch B data is not visible with the branch A header.
     - _Requirements: 1.1_
-  - [ ] 1.4 Write the contract tests for every route
+  - [x] 1.4 Write the contract tests for every route
     - One test class per controller under `tests/Feature/Contract/{Kitchen,Portal,Public}/{Controller}ContractTest.php`.
     - For each route in `php artisan route:list --path=api --except-vendor` (165 on 2026-09-26), write the variants required by design §4.1.4.
     - Use `Http::fake` for reCAPTCHA, and `Mail::fake()`/`Notification::fake()`/`Storage::fake('private')`/`Storage::fake('public')` where the endpoint sends or stores.
@@ -73,20 +73,20 @@
     - Record on **MySQL** with the MySQL gate (design §11.1), adding `-e CONTRACT_RECORD=1` before `laravel.test` and `tests/Feature/Contract` at the end.
     - Then create SQLite overrides only where shapes differ, with the SQLite gate plus `-e CONTRACT_RECORD=1 -e CONTRACT_DRIVER_OVERRIDE=1` and `tests/Feature/Contract` (design §4.1.2, H15). Then run again **without** the flags on both drivers; both must be green with no diffs. List every `.sqlite.json` override in `contract-gaps.md`.
     - _Requirements: 1.1, 1.2, 1.3_
-  - [ ] 1.5 Add the route coverage test
+  - [x] 1.5 Add the route coverage test
     - `tests/Feature/Contract/RouteCoverageTest.php` per design §4.1.5. It must pass after 1.4.
     - Also add a test that asserts the route count is 165, with a comment explaining the number, so an added or removed route is a visible, deliberate change.
     - _Requirements: 1.4_
-  - [ ] 1.6 Add the role authorization matrix
+  - [x] 1.6 Add the role authorization matrix
     - `tests/Feature/Contract/RoleAuthorizationMatrixTest.php` per design §4.1.5: parameter resolver by URI, the exceptions array, and the 401 checks selected **by middleware** (`auth:parents` / `auth:sanctum`), excluding public routes.
     - **No data provider:** PHPUnit 12 runs providers before Laravel boots, so `Route::getRoutes()` would fail there. Write one test method per role that iterates the routes at runtime and asserts once on the collected mismatches (design §4.1.5).
     - _Requirements: 1.5_
-  - [ ] 1.7 Cross-check against the frontend types
+  - [x] 1.7 Cross-check against the frontend types
     - Create `.kiro/specs/16-backend-code-quality/contract-gaps.md` seeded with the five rows in design §4.1.6, then extend it from design §13.1 (unused routes) and §13.2.
     - For every fixture, compare it with its FE type (`rg -n "apiClient\.(get|post|put|patch|delete)<" ~/sunbites-pos/lib/api ~/sunbites-portal/lib/api`) and add a row per mismatch. Do **not** fix mismatches here.
     - No test is needed (this is documentation); the PR description links the file.
     - _Requirements: 1.7_
-  - [ ] 1.8 Keep fixtures out of git and keep CI green without them *(design §4.1.7)*
+  - [x] 1.8 Keep fixtures out of git and keep CI green without them *(design §4.1.7)*
     - `/tests/Fixtures/contracts` is already in `.gitignore` (added by the spec owner on 2026-10-12). Do not change that line, and never `git add -f` a fixture. Before committing, confirm that `git status --porcelain` lists no fixture and that `git check-ignore -q 'tests/Fixtures/contracts/get__api_health@ok.json'` exits 0.
     - Implement the skip rule in `AssertsApiContract` and `RouteCoverageTest`, and the `AssertsApiContractTest` changes (`mkdir` in `setUp()`, the new skip test), exactly as design §4.1.7 states.
     - Prove the CI behaviour locally:
