@@ -129,7 +129,7 @@ Decimal detection runs **before** date detection. Order of checks: decimal2 → 
 protected function assertContract(
     TestResponse $response,
     string $routeKey,          // e.g. 'GET api/v1/students/{student}' — exactly as in route:list
-    string $variant = 'ok',    // 'ok', '422-validation', '422-end-before-start', '404', …
+    string $variant = 'ok',    // 'ok', 'ok-search', '422-validation', '422-end-before-start', 'other-branch', '404', … (naming rules: §4.1.4)
     array $mapPaths = [],
 ): void;
 
@@ -175,7 +175,7 @@ protected function assertFileContract(TestResponse $response, string $routeKey, 
   - `credit_balance` 50.00 via `app(CreditLedgerService::class)->charge($student, 50.00, "order {$creditOrder->receipt_number}", $cashier)`. The service takes a description, not an order, and leaves `order_id` null by design, exactly as `CheckoutController` does, and payments: June 2026 paid, October 2026 unpaid, January 2027 unpaid, and one **voided** payment (November 2026) created as `StudentMonthlyPayment::factory()->paid()->create(['student_id' => …, 'school_month' => 'november', 'year' => 2026, 'status' => 'voided', 'voided_at' => now(), 'voided_by' => $manager->id, 'void_reason' => 'Contract scenario'])`. Use attribute overrides, not the void endpoint, so the scenario does not depend on endpoint guards
   - a non-subscription student
   - a soft-deleted student
-- **Branch B records (for every `404`/other-branch variant):** one of each route-bound type in branch B: student, order, inventory item, menu item, announcement, feedback, pre-registration, branch monthly amount, monthly payment (of the branch-B student), student contact (of the branch-B student), and a parent linked **only** to the branch-B student.
+- **Branch B records (for every `other-branch` variant):** one of each route-bound type in branch B: student, order, inventory item, menu item, announcement, feedback, pre-registration, branch monthly amount, monthly payment (of the branch-B student), student contact (of the branch-B student), and a parent linked **only** to the branch-B student.
   - **Record what happens today.** Several are not branch-protected today and will return 200: parents (B-01), branch monthly amounts (B-17) and feedback (B-18). That is expected; those Track B items change those fixtures later.
 - **Contacts and parents:** `StudentContact` rows (primary and secondary, one with an email), and a `ParentUser` linked to the subscription student (`wallet_alert_threshold` 100) plus one unactivated parent.
 - **Menu and inventory:** `PosMenuItem` (subscription-eligible, meal) mapped to an `InventoryItem` (quantity 100, `quantity_used` 1), one archived `InventoryItem`, a `WeeklyMealPlan` for June week 1, and one `InventoryLog` of type `manual` (so the inventory report's `discrepancy` list is not empty).
@@ -194,10 +194,10 @@ Fill optional fields in the scenario wherever possible (e.g. `section`, `allergi
 **Actor per route:** use the **least-privileged** role the route's `role:` group allows (cashier → supervisor → manager → admin). Routes outside any `role:` group use the cashier; portal routes use the linked parent.
 
 **Extra `ok-*` variants are required wherever the response shape branches on input or actor:**
-- `POST /pos/students/lookup`: `ok-qr` (`student`) and `ok-search` (`students`), plus `422-not-enrolled` for a QR of a non-enrolled student
+- `POST /pos/students/lookup`: `ok` = `type=qr` (`student`), `ok-search` = `type=search` (`students`), plus `422-not-enrolled` for a QR of a non-enrolled student
 - `GET /students`: `ok-deleted` (`deleted=1`, adds `deleted_at`)
 - `GET /users` and `GET /users/{user}`: `ok-as-admin` (`UserResource` adds `daily_rate` and the government ID fields for admins)
-- `GET /reports/wallet/{student}/history`: `ok-purchases`, `ok-topups`, `ok-credit` (the `type` parameter)
+- `GET /reports/wallet/{student}/history`: `ok` = `type=topups` (the controller's `default` branch), `ok-purchases` = `type=purchases`, `ok-credit` = `type=credit`
 - `GET /references/meal-planner` and `GET /portal/meal-planner`: `ok-hidden` for a week whose visibility is false (the portal returns `days: []`)
 
 If you find another shape branch while writing a test, add the variant and list it in the T-1 commit body.
@@ -210,8 +210,16 @@ If you find another shape branch while writing a test, add the variant and list 
 | Routes with a Form Request / `validate()` | `422-validation` (send `{}` or one invalid field) |
 | Routes with a hand-built error envelope (A-12, portal login) | one variant per envelope, e.g. `422-end-before-start`, `401-not-activated`, `401-disabled`, `422-invalid-credentials` |
 | Routes with a named `abort()` business guard | one variant per guard (e.g. `422-already-voided` for `POST api/v1/pos/transactions/{order}/void`) |
-| Route-model-bound routes | `404` using a branch-B id (documents today's isolation, including the B-01 gaps as today's 200s) |
-| File routes (6 exports, 2 photo GETs) | `assertFileContract` `ok`; photo GET also `404` |
+| Route-model-bound routes | `other-branch`: the same request as `ok` but with a branch-B id for the bound model. It records **whatever happens today**, which is 404 for `HasBranch` models and 200 for the known gaps (parents B-01, branch monthly amounts B-17, feedback B-18) |
+| File routes (6 exports, 2 photo GETs) | `assertFileContract` `ok`; photo GET also `404` (student without a photo: the `'Photo not found.'` guard) |
+
+**Variant naming rules (authoritative):**
+1. Every route has **exactly one** plain `ok` fixture: its default or most common successful request. `RouteCoverageTest` requires `@ok.json` for every route (and `@ok.sqlite.json` is only ever an additional override).
+2. Additional successful shapes are `ok-<what differs>` (`ok-search`, `ok-deleted`, `ok-as-admin`, `ok-hidden`, `ok-purchases`, `ok-credit`).
+3. Error variants whose status is fixed by design start with the status: `422-validation`, `422-<guard>`, `401-<case>`, `403-<case>`.
+4. `other-branch` is **status-neutral** (rule above). Never name it `404-…`.
+5. Plain `404` is only for an explicit not-found guard on an in-branch request (missing photo, unknown notification id, unknown `{key}`). It is optional elsewhere.
+6. Names are lowercase kebab-case after the `@`, e.g. `get__api_v1_students_{student}@other-branch.json`.
 
 #### 4.1.5 Coverage and authorization guards
 
@@ -773,7 +781,7 @@ Each subsection gives the behaviour before and after, the fixtures it changes, a
   - Rendered as `{"message":"Not found."}` by `bootstrap/app.php`.
 - **`InventoryController::unarchive`:** replace `InventoryItem::withoutBranch()` with `InventoryItem::query()`.
 - **`UpdateStaffStatusRequest`:** `'user_id' => ['required', Rule::exists('branch_user', 'user_id')->where('branch_id', app('active_branch')->id)]`. This gives a 422 validation error.
-- **Fixtures:** new `404-other-branch` variants only.
+- **Fixtures:** the `other-branch` variants recorded in T-1 for the parent routes, `PATCH references/inventory/{item}/unarchive` and `POST dashboard/staff-status` change from today's 200 to 404 (staff-status: 422). No new variants. List each changed fixture in the commit body.
 - **FE impact:** none. The POS only lists parents, inventory and roster users from the active branch (`references/parents`, `references/inventory`, dashboard roster).
 
 ### 5.2 B-02: Branch required
@@ -975,14 +983,14 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 
 - **Defect:** `BranchMonthlyAmount` has no `HasBranch` trait, and `BranchMonthlyAmountController::update`/`destroy` (route group `role:admin|manager|supervisor`) do not check the branch. Staff in branch A can change or delete branch B's monthly fee overrides by id.
 - **Fix:** in `update` and `destroy`, throw `(new ModelNotFoundException)->setModel(BranchMonthlyAmount::class)` unless `$branchMonthlyAmount->branch_id === app('active_branch')->id`. This renders 404 `{"message":"Not found."}`.
-- **Fixtures:** the `404-other-branch` variants change from 200 to 404.
+- **Fixtures:** the `other-branch` variants recorded in T-1 change from 200 to 404.
 - **FE impact:** none. The POS edits only rows from `GET /branch-monthly-amounts`, which is filtered by the active branch.
 
 ### 5.16 B-18 *(approved 2026-10-12)*: Cross-branch feedback reply and mark-read
 
 - **Defect:** `Feedback` has no `HasBranch` trait, and `Kitchen\FeedbackController::reply`/`markRead` do not check the branch. Staff in branch A can reply to (and email) a parent who sent feedback to branch B, or mark it read.
 - **Fix:** in `reply` and `markRead`, the same `ModelNotFoundException` guard on `$feedback->branch_id === app('active_branch')->id`. For `reply`, run it in `ReplyFeedbackRequest::prepareForValidation()` **before** sanitising, so 404 wins over 422 (H4).
-- **Fixtures:** the `404-other-branch` variants change from 200 to 404.
+- **Fixtures:** the `other-branch` variants recorded in T-1 change from 200 to 404.
 - **FE impact:** none. The POS feedback page lists only the active branch's feedback (`FeedbackController::index` filters by `branch_id`).
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
