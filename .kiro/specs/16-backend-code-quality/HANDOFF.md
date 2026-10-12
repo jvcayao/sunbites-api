@@ -140,48 +140,49 @@ If an earlier step of this spec moved the code (the design names the destination
 ## 6. Commit order (authoritative; one commit per row)
 
 Branch: **`bump-laravel-13-latest` (current branch). Do not create a branch. Never commit on `main`.**
-Start SHA: **`3454977`**. Already committed by the spec owner: `b8f82b1`, `f873a5f` and the commit that added this file.
+Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec16): …` and `chore(spec16): …` commit after `3454977` (starting with `b8f82b1` and `f873a5f`).
 
 | # | Step | Commit subject (use exactly; < 72 chars) |
 |---|---|---|
 | 1 | T-1 | `test(contract): freeze API response shapes for all 165 routes` |
 | 2 | C-1 | `chore(ci): add MySQL 8.4 test job to CI workflow` |
-| 3 | T-2 | `refactor(auth): adopt Authorize attributes and UsePolicy` |
-| 4 | B-15 | `fix(portal): B-15 use student policy for payment history` |
-| 5 | T-3 | `refactor(pos): extract checkout, void and stock services` |
-| 6 | B-07 | `fix(pos): B-07 show cashier name on receipts` |
-| 7 | T-4 | `refactor(wallet): extract top-up void and credit resources` |
-| 8 | T-5 | `refactor(students): form requests and enrollment action` |
-| 9 | B-14 | `fix(students): B-14 return 422 for invalid status input` |
-| 10 | T-6 | `refactor(staff): form requests for auth, users and config` |
-| 11 | T-7 | `refactor(inventory): resources, scopes and form requests` |
-| 12 | B-03 | `fix(inventory): B-03 lock stock rows to prevent lost updates` |
-| 13 | T-8 | `refactor(pre-reg): approve action and form requests` |
-| 14 | B-09 | `fix(pre-reg): B-09 make pre-registration writes atomic` |
-| 15 | T-9 | `refactor(reminders): reminder service and N+1 fixes` |
-| 16 | B-01 | `fix(security): B-01 block cross-branch record access` |
-| 17 | B-17 | `fix(security): B-17 block cross-branch monthly amount edits` |
-| 18 | B-18 | `fix(security): B-18 block cross-branch feedback replies` |
-| 19 | B-16 | `fix(inventory): B-16 return archived items to references` |
-| 20 | B-02 | `fix(security): B-02 require an active branch header` |
-| 21 | T-10 | `refactor(reports): form requests and shared filters` |
-| 22 | B-05 | `fix(billing): B-05 treat year params as school year` |
-| 23 | B-10 | `fix(search): B-10 match search wildcards literally` |
-| 24 | B-11 | `fix(analytics): B-11 read credit limit from settings` |
-| 25 | B-12 + B-13 | `fix(reports): B-12 stop exposing staff PII in report rows` |
-| 26 | B-04 | `fix(portal): B-04 remove unused pre-registration routes` |
-| 27 | T-11 | `refactor(portal): form requests and authorize attributes` |
-| 28 | B-08 | `fix(portal): B-08 hide disabled state on wrong password` |
-| 29 | T-12 | `refactor(models): payment status enum, scopes and casts` |
-| 30 | T-13 | `refactor(core): log lazy-loading violations outside tests` |
-| 31 | T-14 | `refactor(queue): dispatch notifications after commit` |
-| 32 | T-15 | `chore(composer): correct package metadata and scripts` |
-| 33 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
-| 34 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
-| 35 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
-| 36 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
+| 3 | B-19 | `fix(reports): B-19 restore the inventory report export` |
+| 4 | T-2 | `refactor(auth): adopt Authorize attributes and UsePolicy` |
+| 5 | B-15 | `fix(portal): B-15 use student policy for payment history` |
+| 6 | T-3 | `refactor(pos): extract checkout, void and stock services` |
+| 7 | B-07 | `fix(pos): B-07 show cashier name on receipts` |
+| 8 | T-4 | `refactor(wallet): extract top-up void and credit resources` |
+| 9 | T-5 | `refactor(students): form requests and enrollment action` |
+| 10 | B-14 | `fix(students): B-14 return 422 for invalid status input` |
+| 11 | T-6 | `refactor(staff): form requests for auth, users and config` |
+| 12 | T-7 | `refactor(inventory): resources, scopes and form requests` |
+| 13 | B-03 | `fix(inventory): B-03 lock stock rows to prevent lost updates` |
+| 14 | T-8 | `refactor(pre-reg): approve action and form requests` |
+| 15 | B-09 | `fix(pre-reg): B-09 make pre-registration writes atomic` |
+| 16 | T-9 | `refactor(reminders): reminder service and N+1 fixes` |
+| 17 | B-01 | `fix(security): B-01 block cross-branch record access` |
+| 18 | B-17 | `fix(security): B-17 block cross-branch monthly amount edits` |
+| 19 | B-18 | `fix(security): B-18 block cross-branch feedback replies` |
+| 20 | B-16 | `fix(inventory): B-16 return archived items to references` |
+| 21 | B-02 | `fix(security): B-02 require an active branch header` |
+| 22 | T-10 | `refactor(reports): form requests and shared filters` |
+| 23 | B-05 | `fix(billing): B-05 treat year params as school year` |
+| 24 | B-10 | `fix(search): B-10 match search wildcards literally` |
+| 25 | B-11 | `fix(analytics): B-11 read credit limit from settings` |
+| 26 | B-12 + B-13 | `fix(reports): B-12 stop exposing staff PII in report rows` |
+| 27 | B-04 | `fix(portal): B-04 remove unused pre-registration routes` |
+| 28 | T-11 | `refactor(portal): form requests and authorize attributes` |
+| 29 | B-08 | `fix(portal): B-08 hide disabled state on wrong password` |
+| 30 | T-12 | `refactor(models): payment status enum, scopes and casts` |
+| 31 | T-13 | `refactor(core): log lazy-loading violations outside tests` |
+| 32 | T-14 | `refactor(queue): dispatch notifications after commit` |
+| 33 | T-15 | `chore(composer): correct package metadata and scripts` |
+| 34 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
+| 35 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
+| 36 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
+| 37 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 
-**B-19 (inventory export crash) is proposed and NOT yet approved.** If the user approves it, the spec owner inserts it as step 3 (right after C-1). Until then, skip it.
+**B-19 (inventory export crash) was approved on 2026-10-12** and is step 3, right after C-1, so the exports work before any refactor touches the reports. It is a Track B item: failing test first, and only its listed fixture changes (design §5.17).
 
 **C-1 edits `.github/workflows/ci.yml`.** That is the only workflow file you may change, and only as design §15 states. **B-17 and B-18 were approved on 2026-10-12** and are in the table above.
 
@@ -204,7 +205,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 36, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 37, stop. The user pushes and opens the PR.
 
 ---
 

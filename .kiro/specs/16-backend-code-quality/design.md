@@ -22,6 +22,7 @@ The refactor has two tracks:
 | Q7 | `WalletAlertJob` retries: `#[Tries(3)]`, `#[Backoff(10, 60)]` (Req 8.3) | **Approved** 2026-10-09 |
 | Track B | Defect fixes B-01–B-05, B-07–B-16 (B-06 merged into B-05) | **Approved** 2026-10-09 |
 | Track B | B-17, B-18 (cross-branch monthly amounts and feedback, found during T-1) | **Approved** 2026-10-12 |
+| Track B | B-19 (inventory export crash after the `maatwebsite/excel` update, found during T-1) | **Approved** 2026-10-12 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
@@ -1028,7 +1029,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **Fixtures:** the `other-branch` variants recorded in T-1 change from 200 to 404.
 - **FE impact:** none. The POS feedback page lists only the active branch's feedback (`FeedbackController::index` filters by `branch_id`).
 
-### 5.17 B-19 *(proposed 2026-10-12, awaiting approval)*: Inventory report export crashes (500)
+### 5.17 B-19 *(approved 2026-10-12)*: Inventory report export crashes (500)
 
 - **Defect:** `GET /api/v1/reports/inventory/export` returns 500 for every request. In the installed `maatwebsite/excel` 4.x-dev (`0509858`), `Excel::download()` requires `Maatwebsite\Excel\Concerns\Export` (`vendor/maatwebsite/excel/src/Excel.php` `download(Export $export, …)`). `App\Exports\InventoryReportExport` implements only `WithMultipleSheets`, which does not extend `Export`. Every other export implements `FromCollection`, which does.
 - **When it broke:** the package moved from `a9a16f1` (commit `0faee70`, Spec 15) to `0509858` in the Laravel 13.32 bump (`4353663`) on this branch. Production was last deployed on 2026-08-05, before that bump, so production most likely still works. **The branch would break it on deploy.** No existing test downloads a successful export.
@@ -1055,7 +1056,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (36 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (37 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD
