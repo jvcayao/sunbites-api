@@ -447,7 +447,7 @@
   - Apply the permitted `BillingReportTest` edit described in design §5.5 (seed calendar year; add frozen-clock variants).
   - Fixtures: none (shapes unchanged).
   - _Requirements: 10.6_
-- [ ] B-07. Receipt cashier name *(design §5.6; after T-3)*
+- [x] B-07. Receipt cashier name *(design §5.6; after T-3)*
   - Failing test: checkout response `order.cashier.name` equals the cashier's full name.
   - Fixtures: the 4 listed in the design.
   - _Requirements: 10.7_
