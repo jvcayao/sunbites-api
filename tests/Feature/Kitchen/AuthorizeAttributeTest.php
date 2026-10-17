@@ -25,7 +25,7 @@ class AuthorizeAttributeTest extends TestCase
 {
     use LazilyRefreshDatabase;
 
-    private const array FORBIDDEN = ['message' => 'This action is unauthorized.'];
+    private const array FORBIDDEN = ['message' => 'Forbidden.'];
 
     private Branch $branch;
 

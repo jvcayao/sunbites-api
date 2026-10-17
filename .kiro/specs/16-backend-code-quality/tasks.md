@@ -504,7 +504,7 @@
   - Failing test first (`tests/Feature/Kitchen/PreRegistrationBirthdayTest.php`, app timezone Asia/Manila): `show` returns `2016-02-14`, and a PATCH round trip keeps it.
   - Fixtures: the four pre-registration show/patch fixtures listed in design §5.20.
   - _Requirements: 10.22_
-- [ ] B-23. *(approved 2026-10-17)* 403/404 bodies *(design §5.21; HANDOFF §6 step 5, right after T-2)*
+- [x] B-23. *(approved 2026-10-17)* 403/404 bodies *(design §5.21; HANDOFF §6 step 5, right after T-2)*
   - Failing test first (`tests/Feature/ApiExceptionRenderingTest.php`): a policy denial gives `Forbidden.` and a binding miss gives `Not found.`; `abort()` texts and the `role:` middleware text are unchanged.
   - Named edit: `AuthorizeAttributeTest` expects `Forbidden.`.
   - Fixtures: none.

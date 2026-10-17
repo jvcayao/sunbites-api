@@ -15,6 +15,8 @@ use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Sentry\Laravel\Integration;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -52,11 +54,11 @@ return Application::configure(basePath: dirname(__DIR__))
                     return response()->json(['message' => 'Unauthenticated.'], 401);
                 }
 
-                if ($e instanceof AuthorizationException) {
+                if ($e instanceof AccessDeniedHttpException && $e->getPrevious() instanceof AuthorizationException) {
                     return response()->json(['message' => 'Forbidden.'], 403);
                 }
 
-                if ($e instanceof ModelNotFoundException) {
+                if ($e instanceof NotFoundHttpException && $e->getPrevious() instanceof ModelNotFoundException) {
                     return response()->json(['message' => 'Not found.'], 404);
                 }
 
