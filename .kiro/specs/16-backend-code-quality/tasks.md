@@ -421,7 +421,7 @@
 
 ---
 
-## Track B (22 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-23 on 2026-10-17; one commit each; failing test first)
+## Track B (22 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-23 on 2026-10-17; B-24 proposed; one commit each; failing test first)
 
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -509,6 +509,10 @@
   - Named edit: `AuthorizeAttributeTest` expects `Forbidden.`.
   - Fixtures: none.
   - _Requirements: 10.23_
+- [ ] B-24. *(PROPOSED, awaiting user approval; do not implement)* Checkout with another branch's menu item *(design §5.22; slot if approved: right after B-07)*
+  - Failing test first (in `CheckoutActionTest`): a branch-B menu item gives 422 with the exact message and writes nothing.
+  - Fixture: new `post__api_v1_pos_checkout@422-other-branch-item.json`.
+  - _Requirements: 10.24_
 - [x] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
@@ -544,7 +548,7 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.23 | B-01 … B-23 |
+| 10.2–10.24 | B-01 … B-24 |
 | 14.1–14.5 | C-1.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
