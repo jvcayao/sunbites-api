@@ -25,7 +25,7 @@ The refactor has two tracks:
 | Track B | B-19 (inventory export crash after the `maatwebsite/excel` update, found during T-1) | **Approved** 2026-10-12 |
 | Track B | B-20 (sold menu item delete 500), B-21 (portal dashboard credit badge), both found during T-1 | **Approved** 2026-10-17 |
 | Track B | B-22 (pre-registration birthday shifted one day per save), B-23 (make the 403/404 bodies in `bootstrap/app.php` effective; found during T-2) | **Approved** 2026-10-17 |
-| Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | Proposed 2026-10-17, awaiting approval |
+| Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
@@ -1154,7 +1154,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **FE impact:** the text changes, nothing else. Where a screen shows the API message for a denied or missing record, it now shows "Forbidden." or "Not found." instead of "This action is unauthorized." or "No query results for model […]". No FE code compares these texts: in a grep of both FEs, the only hit is a POS test mock (`waive-credit-dialog.test.tsx:112`), which already uses "Forbidden.".
 - **Slot:** step 5, right after T-2 and before B-15. B-01, B-15, B-17, B-18 and T-6.3 state `Forbidden.`/`Not found.`, which is true only once B-23 has landed. If B-23 is not approved, the spec owner rewrites those texts before B-15 starts.
 
-### 5.22 B-24 *(proposed 2026-10-17, awaiting approval; do not implement until approved)*: Checkout with another branch's menu item crashes (500)
+### 5.22 B-24 *(approved 2026-10-17)*: Checkout with another branch's menu item crashes (500)
 
 - **Defect** (found by the implementer during T-3, verified by the spec owner):
   - `CheckoutRequest` validates `'items.*.pos_menu_item_id' => ['required', 'exists:pos_menu_items,id']`, which is not branch-scoped. `CheckoutAction` then loads `PosMenuItem::with('inventoryItems')->findMany($menuItemIds)`, which **is** branch-scoped (`HasBranch`).
@@ -1175,7 +1175,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - before the fix it returns 500
 - **Fixtures:** new variant `post__api_v1_pos_checkout@422-other-branch-item.json`. No existing fixture changes.
 - **FE impact:** positive, with no FE change needed. The POS toast shows the message instead of "Server Error".
-- **Slot:** it depends only on T-3, which created `CheckoutAction`. If approved, the spec owner inserts it as the next step after approval.
+- **Slot:** HANDOFF §6 step 10, right after T-4. It depends only on T-3, which created `CheckoutAction`.
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
@@ -1192,7 +1192,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (41 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (42 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD

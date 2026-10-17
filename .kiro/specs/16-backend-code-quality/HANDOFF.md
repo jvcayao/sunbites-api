@@ -153,40 +153,41 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 7 | T-3 | `refactor(pos): extract checkout, void and stock services` |
 | 8 | B-07 | `fix(pos): B-07 show cashier name on receipts` |
 | 9 | T-4 | `refactor(wallet): extract top-up void and credit resources` |
-| 10 | T-5 | `refactor(students): form requests and enrollment action` |
-| 11 | B-14 | `fix(students): B-14 return 422 for invalid status input` |
-| 12 | T-6 | `refactor(staff): form requests for auth, users and config` |
-| 13 | T-7 | `refactor(inventory): resources, scopes and form requests` |
-| 14 | B-03 | `fix(inventory): B-03 lock stock rows to prevent lost updates` |
-| 15 | B-20 | `fix(menu): B-20 block deleting menu items with sales history` |
-| 16 | T-8 | `refactor(pre-reg): approve action and form requests` |
-| 17 | B-09 | `fix(pre-reg): B-09 make pre-registration writes atomic` |
-| 18 | B-22 | `fix(pre-reg): B-22 serialise birthday as a plain date` |
-| 19 | T-9 | `refactor(reminders): reminder service and N+1 fixes` |
-| 20 | B-01 | `fix(security): B-01 block cross-branch record access` |
-| 21 | B-17 | `fix(security): B-17 block cross-branch monthly amount edits` |
-| 22 | B-18 | `fix(security): B-18 block cross-branch feedback replies` |
-| 23 | B-16 | `fix(inventory): B-16 return archived items to references` |
-| 24 | B-02 | `fix(security): B-02 require an active branch header` |
-| 25 | T-10 | `refactor(reports): form requests and shared filters` |
-| 26 | B-05 | `fix(billing): B-05 treat year params as school year` |
-| 27 | B-10 | `fix(search): B-10 match search wildcards literally` |
-| 28 | B-11 | `fix(analytics): B-11 read credit limit from settings` |
-| 29 | B-12 + B-13 | `fix(reports): B-12 stop exposing staff PII in report rows` |
-| 30 | B-04 | `fix(portal): B-04 remove unused pre-registration routes` |
-| 31 | T-11 | `refactor(portal): form requests and authorize attributes` |
-| 32 | B-08 | `fix(portal): B-08 hide disabled state on wrong password` |
-| 33 | B-21 | `fix(portal): B-21 send credit balance on the dashboard` |
-| 34 | T-12 | `refactor(models): payment status enum, scopes and casts` |
-| 35 | T-13 | `refactor(core): log lazy-loading violations outside tests` |
-| 36 | T-14 | `refactor(queue): dispatch notifications after commit` |
-| 37 | T-15 | `chore(composer): correct package metadata and scripts` |
-| 38 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
-| 39 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
-| 40 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
-| 41 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
+| 10 | B-24 | `fix(pos): B-24 reject other-branch menu items at checkout` |
+| 11 | T-5 | `refactor(students): form requests and enrollment action` |
+| 12 | B-14 | `fix(students): B-14 return 422 for invalid status input` |
+| 13 | T-6 | `refactor(staff): form requests for auth, users and config` |
+| 14 | T-7 | `refactor(inventory): resources, scopes and form requests` |
+| 15 | B-03 | `fix(inventory): B-03 lock stock rows to prevent lost updates` |
+| 16 | B-20 | `fix(menu): B-20 block deleting menu items with sales history` |
+| 17 | T-8 | `refactor(pre-reg): approve action and form requests` |
+| 18 | B-09 | `fix(pre-reg): B-09 make pre-registration writes atomic` |
+| 19 | B-22 | `fix(pre-reg): B-22 serialise birthday as a plain date` |
+| 20 | T-9 | `refactor(reminders): reminder service and N+1 fixes` |
+| 21 | B-01 | `fix(security): B-01 block cross-branch record access` |
+| 22 | B-17 | `fix(security): B-17 block cross-branch monthly amount edits` |
+| 23 | B-18 | `fix(security): B-18 block cross-branch feedback replies` |
+| 24 | B-16 | `fix(inventory): B-16 return archived items to references` |
+| 25 | B-02 | `fix(security): B-02 require an active branch header` |
+| 26 | T-10 | `refactor(reports): form requests and shared filters` |
+| 27 | B-05 | `fix(billing): B-05 treat year params as school year` |
+| 28 | B-10 | `fix(search): B-10 match search wildcards literally` |
+| 29 | B-11 | `fix(analytics): B-11 read credit limit from settings` |
+| 30 | B-12 + B-13 | `fix(reports): B-12 stop exposing staff PII in report rows` |
+| 31 | B-04 | `fix(portal): B-04 remove unused pre-registration routes` |
+| 32 | T-11 | `refactor(portal): form requests and authorize attributes` |
+| 33 | B-08 | `fix(portal): B-08 hide disabled state on wrong password` |
+| 34 | B-21 | `fix(portal): B-21 send credit balance on the dashboard` |
+| 35 | T-12 | `refactor(models): payment status enum, scopes and casts` |
+| 36 | T-13 | `refactor(core): log lazy-loading violations outside tests` |
+| 37 | T-14 | `refactor(queue): dispatch notifications after commit` |
+| 38 | T-15 | `chore(composer): correct package metadata and scripts` |
+| 39 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
+| 40 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
+| 41 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
+| 42 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 
-**B-20 and B-21 were approved on 2026-10-17** and are in the table: B-20 runs after T-7 and B-03 (it touches `PosMenuItemController`, which T-7 refactors), and B-21 runs after T-11 and B-08 (portal). **B-24 (checkout with another branch's menu item) is proposed and NOT approved.** If approved, the spec owner inserts it as the next step after approval (it depends only on T-3). Until then, skip it. **B-22 and B-23 were approved on 2026-10-17** and are in the table. B-23 is step 5, right after T-2: from then on, a policy denial returns `Forbidden.` and a binding miss returns `Not found.` (design H19), which B-15, T-6.3, B-01, B-17 and B-18 rely on. B-22 runs right after B-09, in the pre-registration area.
+**B-20 and B-21 were approved on 2026-10-17** and are in the table: B-20 runs after T-7 and B-03 (it touches `PosMenuItemController`, which T-7 refactors), and B-21 runs after T-11 and B-08 (portal). **B-24 (checkout with another branch's menu item) was approved on 2026-10-17** and is step 10, right after T-4. **B-22 and B-23 were approved on 2026-10-17** and are in the table. B-23 is step 5, right after T-2: from then on, a policy denial returns `Forbidden.` and a binding miss returns `Not found.` (design H19), which B-15, T-6.3, B-01, B-17 and B-18 rely on. B-22 runs right after B-09, in the pre-registration area.
 
 **B-19 (inventory export crash) was approved on 2026-10-12** and is step 3, right after C-1, so the exports work before any refactor touches the reports. It is a Track B item: failing test first, and only its listed fixture changes (design §5.17).
 
@@ -211,7 +212,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 41, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 42, stop. The user pushes and opens the PR.
 
 ---
 

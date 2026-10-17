@@ -421,7 +421,7 @@
 
 ---
 
-## Track B (22 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-23 on 2026-10-17; B-24 proposed; one commit each; failing test first)
+## Track B (23 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17; one commit each; failing test first)
 
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -509,7 +509,7 @@
   - Named edit: `AuthorizeAttributeTest` expects `Forbidden.`.
   - Fixtures: none.
   - _Requirements: 10.23_
-- [ ] B-24. *(PROPOSED, awaiting user approval; do not implement)* Checkout with another branch's menu item *(design §5.22; slot if approved: the next step after approval, any time after T-3)*
+- [ ] B-24. *(approved 2026-10-17)* Checkout with another branch's menu item *(design §5.22; HANDOFF §6 step 10, right after T-4)*
   - Failing test first (in `CheckoutActionTest`): a branch-B menu item gives 422 with the exact message and writes nothing.
   - Fixture: new `post__api_v1_pos_checkout@422-other-branch-item.json`.
   - _Requirements: 10.24_
