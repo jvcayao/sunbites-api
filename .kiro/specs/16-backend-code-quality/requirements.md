@@ -150,7 +150,7 @@ A Track A change and a Track B change are never combined in one PR.
 3. New cross-cutting defaults (Req 4.6) live in `AppServiceProvider::configureDefaults()`.
 4. `#[CurrentUser]` SHALL NOT be adopted wholesale; it MAY appear in new Action entry points only.
 
-### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17, B-18 and B-19 approved 2026-10-12; B-06 merged into B-05)*
+### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17, B-18 and B-19 approved 2026-10-12; B-20 and B-21 approved 2026-10-17; B-22 proposed 2026-10-17; B-06 merged into B-05)*
 
 **User Story:** As the product owner, I want each real defect listed separately with its verified frontend impact, so that I can approve, defer or reject each one.
 
@@ -182,6 +182,9 @@ A Track A change and a Track B change are never combined in one PR.
 17. **B-17 *(approved 2026-10-12)*: cross-branch branch monthly amounts.** Updating or deleting another branch's `BranchMonthlyAmount` by id SHALL return 404 (design §5.15).
 18. **B-18 *(approved 2026-10-12)*: cross-branch feedback.** Replying to or marking read another branch's `Feedback` by id SHALL return 404 (design §5.16).
 19. **B-19 *(approved 2026-10-12)*: inventory export crashes.** `GET /reports/inventory/export` SHALL return the xlsx (200) instead of 500, by making `InventoryReportExport` implement `Maatwebsite\Excel\Concerns\Export` (design §5.17).
+20. **B-20 *(approved 2026-10-17)*: sold menu item delete.** Deleting a menu item that has order lines SHALL return 422 `{"message": "This menu item has sales history and cannot be deleted. Mark it as unavailable instead."}` instead of 500, and SHALL leave the item in place (design §5.18).
+21. **B-21 *(approved 2026-10-17)*: portal dashboard credit.** `GET /portal/dashboard` SHALL include `credit_balance` (number) for each student, so the existing "Credit owed" badge works (design §5.19).
+22. **B-22 *(proposed 2026-10-17, awaiting approval)*: pre-registration birthday.** Pre-registration responses SHALL serialise `birthday` as `Y-m-d`, so the POS edit form shows it and saving does not move it back one day (design §5.20).
 
 ### Requirement 11: Dependency and surface cleanup *(Q6 approved 2026-10-09, on condition that the API is not affected)*
 

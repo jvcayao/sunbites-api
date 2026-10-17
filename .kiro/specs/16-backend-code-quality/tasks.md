@@ -421,7 +421,7 @@
 
 ---
 
-## Track B (all 17 items approved: B-01–B-16 on 2026-10-09, B-17/B-18 on 2026-10-12; one commit each; failing test first)
+## Track B (20 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20/B-21 on 2026-10-17; B-22 proposed; one commit each; failing test first)
 
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -492,6 +492,18 @@
   - Failing test first: a real download (no `Excel::fake()`) returns 200, the filename pattern, and a 2-sheet workbook (design §5.17).
   - Fixture: `get__api_v1_reports_inventory_export@ok.json` (500 → 200).
   - _Requirements: 10.19_
+- [ ] B-20. *(approved 2026-10-17)* Sold menu item delete *(design §5.18; HANDOFF §6, right after B-03)*
+  - Failing test first (`tests/Feature/PosMenuItemDeleteTest.php`): a sold item gives 422 with the exact message, the item stays, and there is no `deleted` activity row; an unsold item still deletes.
+  - Fixture: new `delete__api_v1_pos_menu_items_{item}@422-has-sales.json`.
+  - _Requirements: 10.20_
+- [ ] B-21. *(approved 2026-10-17)* Portal dashboard credit *(design §5.19; HANDOFF §6, right after B-08)*
+  - Failing test first (`tests/Feature/Portal/DashboardCreditBalanceTest.php`): `credit_balance` is 37.5 for a student who owes, and 0 for one who does not.
+  - Fixture: `get__api_v1_portal_dashboard@ok.json` gains `students[].credit_balance`.
+  - _Requirements: 10.21_
+- [ ] B-22. *(PROPOSED, awaiting user approval; do not implement)* Pre-registration birthday *(design §5.20; slot if approved: right after B-09)*
+  - Failing test first (`tests/Feature/Kitchen/PreRegistrationBirthdayTest.php`, app timezone Asia/Manila): `show` returns `2016-02-14`, and a PATCH round trip keeps it.
+  - Fixtures: the four pre-registration show/patch fixtures listed in design §5.20.
+  - _Requirements: 10.22_
 - [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
@@ -527,7 +539,7 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.19 | B-01 … B-19 |
+| 10.2–10.22 | B-01 … B-22 |
 | 14.1–14.5 | C-1.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |

@@ -23,6 +23,8 @@ The refactor has two tracks:
 | Track B | Defect fixes B-01–B-05, B-07–B-16 (B-06 merged into B-05) | **Approved** 2026-10-09 |
 | Track B | B-17, B-18 (cross-branch monthly amounts and feedback, found during T-1) | **Approved** 2026-10-12 |
 | Track B | B-19 (inventory export crash after the `maatwebsite/excel` update, found during T-1) | **Approved** 2026-10-12 |
+| Track B | B-20 (sold menu item delete 500), B-21 (portal dashboard credit badge), both found during T-1 | **Approved** 2026-10-17 |
+| Track B | B-22 (pre-registration birthday shifted one day per save) | Proposed 2026-10-17, awaiting approval |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
@@ -1041,6 +1043,76 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **Fixtures:** `get__api_v1_reports_inventory_export@ok.json` changes from the recorded 500 to 200 with the xlsx content type.
 - **FE impact:** positive. The POS Inventory report's Export button (`app/(kitchen)/reports/inventory/page.tsx:275`, `exportReport("reports/inventory")`) works again.
 
+### 5.18 B-20 *(approved 2026-10-17)*: Deleting a sold menu item crashes (500)
+
+- **Defect:** `DELETE /api/v1/pos/menu-items/{item}` (`role:admin|manager`) calls `$item->delete()` with no check. `order_items.pos_menu_item_id` is a foreign key with no `ON DELETE` rule (`database/migrations/2026_05_24_075958_create_order_items_table.php` L14), and `PosMenuItem` has no `SoftDeletes`. Deleting any item that was ever sold therefore throws `SQLSTATE[23000] … order_items_pos_menu_item_id_foreign` and returns 500 (`{"message":"Server Error"}` in production). Found during T-1 (`contract-gaps.md`). The ingredient pivot cascades (`2026_05_31_152853_create_pos_menu_item_inventory_table.php` L12), so unsold items delete fine.
+- **Fix** (the same pattern as `InventoryController::destroy` L131-134):
+  1. Add a relation to `PosMenuItem`, after `inventoryItems()`:
+     ```php
+     /** @return HasMany<OrderItem, $this> */
+     public function orderItems(): HasMany
+     {
+         return $this->hasMany(OrderItem::class, 'pos_menu_item_id');
+     }
+     ```
+     It carries the S10 generic docblock now, so T-16's relation count (§14.1 S10) does not change. Import `Illuminate\Database\Eloquent\Relations\HasMany`.
+  2. Make this the first statement of `PosMenuItemController::destroy()`:
+     ```php
+     if ($item->orderItems()->exists()) {
+         return response()->json(['message' => 'This menu item has sales history and cannot be deleted. Mark it as unavailable instead.'], 422);
+     }
+     ```
+     Use `response()->json`, not `abort()` (H3), to match the sibling guard. Nothing is deleted, so no activity row is written.
+- **Not chosen:**
+  - soft deletes (a migration, plus `withTrashed()` in every menu, report and order-item query)
+  - cascading the FK (it would delete sales history)
+- **Race:** an order placed between the check and the delete still hits the FK, which protects the data. The window is milliseconds and the route is admin/manager only. Accepted.
+- **Test** (failing first; new file `tests/Feature/PosMenuItemDeleteTest.php`, with the same auth setup as `tests/Feature/PosMenuItemTest.php`):
+  - A manager deletes a menu item that has one `OrderItem`. `OrderItemFactory` hardcodes `pos_menu_item_id => 1`, so pass `['pos_menu_item_id' => $item->id]`. Expect 422 with the exact message, the row still exists, and no `deleted` activity row has it as subject.
+  - A manager deletes a menu item with no order lines. Expect 200 `{"message":"Menu item deleted."}` and the row is gone. This already passes; it guards the unchanged path.
+- **Fixtures:** new variant `delete__api_v1_pos_menu_items_{item}@422-has-sales.json`, which deletes the scenario's sold menu item. The `ok` fixture is unchanged.
+- **FE impact:** positive, with no FE change. `sunbites-pos/components/pos/menu-mgmt-tab.tsx:497-498` shows `err.message` in a toast, so staff see the message instead of "Server Error". The availability toggle reads "Available"/"Unavailable" (L366), which matches the message.
+
+### 5.19 B-21 *(approved 2026-10-17)*: Portal dashboard never shows credit owed
+
+- **Defect:** the portal dashboard card shows a "Credit owed" badge when `student.credit_balance > 0` and formats it with `formatPHP(student.credit_balance)` (`sunbites-portal/app/(portal)/dashboard/page.tsx:78-90`, typed at `types/portal.ts:34`, added in Spec 14). `Portal\DashboardController::index` (L28-38) never sends `credit_balance`, so the value is `undefined` and the badge never shows. Found during T-1 (`contract-gaps.md`).
+- **Fix:** add one key to each `students[]` item, right after `wallet_balance`:
+  ```php
+  'credit_balance' => (float) $student->credit_balance,
+  ```
+  - It is cast with `(float)` because the column is cast to `decimal:2`, which serialises as a string (H1), and the FE passes the value to `formatPHP(amount: number)`. This matches `GET /portal/students`, which already sends `credit_balance` as a number.
+  - `$parent->students()` already selects every column, so the query does not change.
+- **Additive only:** no key is removed or renamed. The POS does not call this route.
+- **Test** (failing first; new file `tests/Feature/Portal/DashboardCreditBalanceTest.php`, with the same parent auth as `tests/Feature/Portal/PortalCreditTest.php`):
+  - A parent linked to a student with `credit_balance` 37.50 (factory attribute; `StudentFactory` defaults it to 0) gets `assertJsonPath('students.0.credit_balance', 37.5)`.
+  - A student with no credit gets `assertJsonPath('students.0.credit_balance', 0)`. That is the integer `0`: Laravel's JSON encoder drops `.0`, and `assertJsonPath` uses `assertSame`.
+- **Fixtures:** `get__api_v1_portal_dashboard@ok.json` gains `"credit_balance": "number"` in `students[]`.
+- **FE impact:** positive, with no FE change. The badge appears for students who owe credit. §13.3 smoke test: the portal dashboard for a parent whose student owes credit.
+
+### 5.20 B-22 *(proposed 2026-10-17, awaiting approval; do not implement until approved)*: Pre-registration birthday shown blank, and moved back one day on every save
+
+- **Defect:**
+  - `PreRegistration` casts `birthday` as `date` (L50). `Kitchen\PreRegistrationController::show` and `update` return `$preRegistration->toArray()`, which serialises the date as a UTC timestamp.
+  - The app timezone is `Asia/Manila` (`config/app.php` L74 default; `.env.example` does not set it), so 14 Feb 2016 is served as `2016-02-13T16:00:00.000000Z`. The T-1 fixtures show `T00:00:00` only because `phpunit.xml` sets `APP_TIMEZONE=UTC`.
+  - **Read:** the POS edit page binds the value to `<Input type="date">` (`sunbites-pos/app/(kitchen)/pre-registrations/[id]/page.tsx:193, 497-500`), which cannot show an ISO timestamp, so the field is blank.
+  - **Write (data corruption):** the POS save sends every field back (`handleSave`, L296-302), including the untouched timestamp. The rule `'birthday' => ['sometimes', 'date', 'before:today']` accepts it, and the `date` cast stores `2016-02-13 16:00:00`, so the DATE column keeps `2016-02-13`. **Every save of the edit form moves the birthday back one day**, and approval copies it to the student (`toEnrollmentData()` L114).
+  - Verified by the spec owner with tinker (no database writes) in `Asia/Manila`: served `2016-02-13T16:00:00.000000Z`, stored `2016-02-13 16:00:00`.
+  - `PreRegistration` has no activity log, so records that were already affected cannot be found automatically.
+- **Fix:** change the cast to `'birthday' => 'date:Y-m-d'`.
+  - Serialisation becomes `"2016-02-14"`.
+  - `$this->birthday` is still a Carbon instance, so `toEnrollmentData()` and every other PHP use is unchanged.
+  - The POS then sends back `"2016-02-14"`, which is stored correctly.
+- **Not chosen:** a frontend-only fix. `slice(0, 10)` gives the wrong day in Manila, and formatting in local time depends on the browser's timezone while every other consumer still gets the shifted value.
+- **Affected responses:** run `grep -l '"birthday": "string:iso8601_micro"' tests/Fixtures/contracts/*.json`.
+  - These four fixtures change `data.birthday` from `string:iso8601_micro` to `string`: `get__api_v1_pre_registrations_{preRegistration}@ok`, `…@other-branch`, `patch__api_v1_pre_registrations_{preRegistration}@ok` and `…@other-branch`.
+  - After the fix, the only matches left are `get__api_v1_reports_billing@ok.json` and `get__api_v1_reports_sales@ok.json`. Those are `Student`/`User` birthdays, which B-12 removes.
+- **Test** (failing first; new file `tests/Feature/Kitchen/PreRegistrationBirthdayTest.php`):
+  - **Timezone setup:** in `setUp()`, after `parent::setUp()`, call `config(['app.timezone' => 'Asia/Manila'])` and `date_default_timezone_set('Asia/Manila')`. In `tearDown()`, call `date_default_timezone_set('UTC')` before `parent::tearDown()`, so later tests keep `phpunit.xml`'s UTC.
+  - `GET /pre-registrations/{id}` for a birthday of `2016-02-14` returns `data.birthday === "2016-02-14"`.
+  - **Round trip:** PATCH with the `birthday` value from `show` plus a changed `first_name`, and the stored birthday stays `2016-02-14` (`$preRegistration->fresh()->birthday->toDateString()`).
+  - Before the fix, both fail: the first gets `2016-02-13T16:00:00.000000Z`, and the second stores `2016-02-13`.
+- **FE impact:** positive, with no FE change. The POS date input shows the birthday, and saving keeps it. The POS has no other use of a pre-registration birthday.
+
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
 All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
@@ -1056,7 +1128,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (37 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (39 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD
