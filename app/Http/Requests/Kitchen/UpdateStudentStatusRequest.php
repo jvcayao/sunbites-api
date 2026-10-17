@@ -17,8 +17,8 @@ class UpdateStudentStatusRequest extends FormRequest
     }
 
     /**
-     * `EnrollmentStatus::from()` runs before validation, so a missing or unknown status still
-     * fails with a 500, exactly as before the move. B-14 fixes it.
+     * The status is read before it is validated, so `tryFrom()` lets a missing or unknown
+     * value fall through to the `enrollment_status` rule (a 422) instead of throwing.
      *
      * @return array<string, mixed>
      */
@@ -28,7 +28,7 @@ class UpdateStudentStatusRequest extends FormRequest
             'enrollment_status' => ['required', Rule::enum(EnrollmentStatus::class)],
             'reason' => [
                 Rule::when(
-                    EnrollmentStatus::from($this->input('enrollment_status'))->requiresReason(),
+                    EnrollmentStatus::tryFrom((string) $this->input('enrollment_status'))?->requiresReason() ?? false,
                     ['required', 'string', 'max:500'],
                     ['nullable'],
                 ),

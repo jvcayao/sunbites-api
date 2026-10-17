@@ -473,7 +473,7 @@
     - `data.0.student` has no `qr_code`
   - Fixtures: sales and billing `ok`.
   - _Requirements: 10.12, 10.13_
-- [ ] B-14. Status update 500 *(design §5.12; after T-5)*
+- [x] B-14. Status update 500 *(design §5.12; after T-5)*
   - Failing test: `PATCH /students/{student}/status` with `{}` returns 422, not 500.
   - Fixture: new `422-missing-status`.
   - _Requirements: 10.14_

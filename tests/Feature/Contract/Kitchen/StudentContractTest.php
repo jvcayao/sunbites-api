@@ -176,6 +176,13 @@ class StudentContractTest extends ContractTestCase
         $this->assertContract($response, 'PATCH api/v1/students/{student}/status', '422-validation');
     }
 
+    public function test_changing_enrollment_status_without_a_status_matches_contract(): void
+    {
+        $response = $this->asSupervisor()->patchJson($this->studentUrl('/status'), []);
+
+        $this->assertContract($response, 'PATCH api/v1/students/{student}/status', '422-missing-status');
+    }
+
     public function test_changing_an_other_branch_enrollment_status_matches_contract(): void
     {
         $response = $this->asSupervisor()->patchJson($this->otherBranchUrl('/status'), ['enrollment_status' => 'paused']);
