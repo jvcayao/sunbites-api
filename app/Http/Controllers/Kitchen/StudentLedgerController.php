@@ -4,22 +4,22 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Concerns\ResolvesStudentLedger;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StudentLedgerRequest;
 use App\Models\Student;
 use App\Services\LedgerEntryFormatter;
 use App\Services\StudentLedgerQuery;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class StudentLedgerController extends Controller
 {
     use ResolvesStudentLedger;
 
     public function __construct(
-        private StudentLedgerQuery $ledgerQuery,
-        private LedgerEntryFormatter $formatter,
+        private readonly StudentLedgerQuery $ledgerQuery,
+        private readonly LedgerEntryFormatter $formatter,
     ) {}
 
-    public function index(Request $request, Student $student): JsonResponse
+    public function index(StudentLedgerRequest $request, Student $student): JsonResponse
     {
         $entries = $this->paginatedLedgerEntries($request, $student, $this->ledgerQuery);
 

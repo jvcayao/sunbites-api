@@ -163,20 +163,20 @@
     - Tests: fixtures unchanged.
     - _Requirements: 3.1_
 
-- [ ] 4. Wallet and credit *(design §4.3.4, §4.4 `CreditLedgerEntryResource`; hazards H1, H3)*
-  - [ ] 4.1 Create `TopUpWalletRequest`
+- [x] 4. Wallet and credit *(design §4.3.4, §4.4 `CreditLedgerEntryResource`; hazards H1, H3)*
+  - [x] 4.1 Create `TopUpWalletRequest`
     - Keep `strip_tags(note)` at the point of use.
     - Tests: fixtures unchanged; `WalletTopUpTest` unchanged.
     - _Requirements: 3.1, 3.5_
-  - [ ] 4.2 Create `VoidWalletTopUpAction`
+  - [x] 4.2 Create `VoidWalletTopUpAction`
     - Create `app/Actions/Wallet/VoidWalletTopUpAction.php` moving the body verbatim (design §4.3.4). The controller keeps the `int|string $transaction` parameter and its comment.
     - Tests: `tests/Feature/Kitchen/VoidWalletTopUpActionTest.php` has one test per guard (not found ×2, already voided, self-void, outside today for non-admin, admin outside today allowed), full and partial recovery, and the shortfall charged as credit. `WalletTopUpVoidTest` passes unchanged.
     - _Requirements: 2.1, 2.2_
-  - [ ] 4.3 Create `CreditLedgerEntryResource`
+  - [x] 4.3 Create `CreditLedgerEntryResource`
     - Replace `CreditController::entryPayload()` with `app/Http/Resources/CreditLedgerEntryResource.php`, nested as `'transaction' => new CreditLedgerEntryResource($entry)` (H6).
     - Tests: fixtures unchanged; `CreditSettlementTest` and `CreditWaiveTest` unchanged.
     - _Requirements: 5.1, 5.2_
-  - [ ] 4.4 Wallet history and ledger requests
+  - [x] 4.4 Wallet history and ledger requests
     - Create `ListWalletHistoryRequest` (`per_page` max 50, H13) and the shared `app/Http/Requests/StudentLedgerRequest.php`. Change the `ResolvesStudentLedger` trait signature (design §4.2.1).
     - Tests: fixtures unchanged; `StudentLedgerTest` unchanged; plus a portal precedence test: an unlinked parent with `per_page=999` gets 403, not 422.
     - _Requirements: 3.1, 3.4_

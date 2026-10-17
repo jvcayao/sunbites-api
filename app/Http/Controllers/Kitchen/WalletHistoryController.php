@@ -4,27 +4,22 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListWalletHistoryRequest;
 use App\Models\CreditTransaction;
 use App\Models\Order;
 use App\Models\Student;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class WalletHistoryController extends Controller
 {
-    public function index(Request $request, Student $student): JsonResponse
+    public function index(ListWalletHistoryRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'type' => ['required', 'in:purchases,topups,credit'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:50'],
-            'page' => ['nullable', 'integer', 'min:1'],
-        ]);
+        $validated = $request->validated();
 
         $perPage = $validated['per_page'] ?? 15;
         $search = $validated['search'] ?? null;
@@ -104,8 +99,7 @@ class WalletHistoryController extends Controller
             ->whereNull('transactions.deleted_at');
 
         if ($search) {
-            $matchingUserIds = User::where('first_name', 'like', "%{$search}%")
-                ->orWhere('last_name', 'like', "%{$search}%")
+            $matchingUserIds = User::whereAny(['first_name', 'last_name'], 'like', "%{$search}%")
                 ->pluck('id')
                 ->toArray();
 
