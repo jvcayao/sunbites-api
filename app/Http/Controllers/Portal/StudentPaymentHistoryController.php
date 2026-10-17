@@ -7,19 +7,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class StudentPaymentHistoryController extends Controller
 {
+    #[Authorize('view', 'student')]
     public function index(Request $request, Student $student): JsonResponse
     {
-        $parent = $request->user();
-
-        abort_unless(
-            $parent->students()->where('students.id', $student->id)->exists(),
-            403,
-            'You do not have access to this student.'
-        );
-
         $monthOrder = array_column(SchoolMonth::cases(), 'value');
 
         $payments = $student->monthlyPayments()

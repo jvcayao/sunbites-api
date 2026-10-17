@@ -116,6 +116,20 @@ class StudentPaymentHistoryTest extends TestCase
         $response->assertForbidden();
     }
 
+    /**
+     * Debug mode is off, as in production and CI, so the 403 body has no exception details.
+     */
+    public function test_unlinked_parent_gets_403_with_the_forbidden_message(): void
+    {
+        config(['app.debug' => false]);
+        $otherStudent = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
+
+        $response = $this->asParent()
+            ->getJson("/api/v1/portal/students/{$otherStudent->id}/payment-history");
+
+        $response->assertForbidden()->assertExactJson(['message' => 'Forbidden.']);
+    }
+
     public function test_unauthenticated_request_is_rejected(): void
     {
         $response = $this->getJson("/api/v1/portal/students/{$this->subscriptionStudent->id}/payment-history");

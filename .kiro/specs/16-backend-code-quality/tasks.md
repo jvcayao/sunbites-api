@@ -509,7 +509,7 @@
   - Named edit: `AuthorizeAttributeTest` expects `Forbidden.`.
   - Fixtures: none.
   - _Requirements: 10.23_
-- [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
+- [x] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
   - _Requirements: 6.3, 10.15_
