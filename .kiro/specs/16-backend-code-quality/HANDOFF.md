@@ -184,7 +184,7 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 38 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
 | 39 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 
-**B-20 and B-21 were approved on 2026-10-17** and are in the table: B-20 runs after T-7 and B-03 (it touches `PosMenuItemController`, which T-7 refactors), and B-21 runs after T-11 and B-08 (portal). **B-22 (pre-registration birthday) is proposed and NOT approved.** If the user approves it, the spec owner inserts it right after B-09. Until then, skip it.
+**B-20 and B-21 were approved on 2026-10-17** and are in the table: B-20 runs after T-7 and B-03 (it touches `PosMenuItemController`, which T-7 refactors), and B-21 runs after T-11 and B-08 (portal). **B-23 (403/404 bodies) is proposed and NOT approved.** If approved, the spec owner inserts it as step 5, right after T-2. **Do not start B-15 until the spec owner confirms B-23's status**, because B-15's expected text depends on it. **B-22 (pre-registration birthday) is proposed and NOT approved.** If the user approves it, the spec owner inserts it right after B-09. Until then, skip it.
 
 **B-19 (inventory export crash) was approved on 2026-10-12** and is step 3, right after C-1, so the exports work before any refactor touches the reports. It is a Track B item: failing test first, and only its listed fixture changes (design §5.17).
 

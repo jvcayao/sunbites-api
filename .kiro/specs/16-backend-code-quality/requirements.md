@@ -109,7 +109,7 @@ A Track A change and a Track B change are never combined in one PR.
 
 1. Route files SHALL remain the single source of truth for **role** middleware. Role checks SHALL NOT move to controller attributes.
 2. Every `$this->authorize()` call SHALL become an `#[Authorize('ability', 'routeParam')]` method attribute (verified present in the installed framework: `Illuminate\Routing\Attributes\Controllers\Authorize`).
-3. `Portal\StudentPaymentHistoryController::index` SHALL use `#[Authorize('view', 'student')]`. Today it hand-rolls the check with message `'You do not have access to this student.'`, and after the change the 403 body becomes `{"message":"Forbidden."}`. The body text changes, so it ships as Track B item **B-15**. Verified 2026-09-26: the portal does not display that message (`payment-history-tab.tsx:31` shows a fixed "Failed to load payment history."), so FE impact is none.
+3. `Portal\StudentPaymentHistoryController::index` SHALL use `#[Authorize('view', 'student')]`. Today it hand-rolls the check with message `'You do not have access to this student.'`, and after the change the 403 body becomes `{"message":"Forbidden."}` once B-23 has landed (today Laravel would render `This action is unauthorized.`, design H19). The body text changes, so it ships as Track B item **B-15**. Verified 2026-09-26: the portal does not display that message (`payment-history-tab.tsx:31` shows a fixed "Failed to load payment history."), so FE impact is none.
 4. `AuthorizesRequests` SHALL be declared once on the base `Controller` (7 copies today).
 5. Business-rule `abort(403|422, '...')` guards keep status and message (Req 2.5).
 
@@ -150,7 +150,7 @@ A Track A change and a Track B change are never combined in one PR.
 3. New cross-cutting defaults (Req 4.6) live in `AppServiceProvider::configureDefaults()`.
 4. `#[CurrentUser]` SHALL NOT be adopted wholesale; it MAY appear in new Action entry points only.
 
-### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17, B-18 and B-19 approved 2026-10-12; B-20 and B-21 approved 2026-10-17; B-22 proposed 2026-10-17; B-06 merged into B-05)*
+### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17, B-18 and B-19 approved 2026-10-12; B-20 and B-21 approved 2026-10-17; B-22 and B-23 proposed 2026-10-17; B-06 merged into B-05)*
 
 **User Story:** As the product owner, I want each real defect listed separately with its verified frontend impact, so that I can approve, defer or reject each one.
 
@@ -185,6 +185,7 @@ A Track A change and a Track B change are never combined in one PR.
 20. **B-20 *(approved 2026-10-17)*: sold menu item delete.** Deleting a menu item that has order lines SHALL return 422 `{"message": "This menu item has sales history and cannot be deleted. Mark it as unavailable instead."}` instead of 500, and SHALL leave the item in place (design §5.18).
 21. **B-21 *(approved 2026-10-17)*: portal dashboard credit.** `GET /portal/dashboard` SHALL include `credit_balance` (number) for each student, so the existing "Credit owed" badge works (design §5.19).
 22. **B-22 *(proposed 2026-10-17, awaiting approval)*: pre-registration birthday.** Pre-registration responses SHALL serialise `birthday` as `Y-m-d`, so the POS edit form shows it and saving does not move it back one day (design §5.20).
+23. **B-23 *(proposed 2026-10-17, awaiting approval)*: 403/404 bodies.** For `api/*`, a policy denial SHALL return 403 `{"message":"Forbidden."}` and a model-binding or `firstOrFail()` miss SHALL return 404 `{"message":"Not found."}`, as `bootstrap/app.php` intends. Every `abort()` text and the `role:` middleware text SHALL stay unchanged (design §5.21).
 
 ### Requirement 11: Dependency and surface cleanup *(Q6 approved 2026-10-09, on condition that the API is not affected)*
 

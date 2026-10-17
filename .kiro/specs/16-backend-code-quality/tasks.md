@@ -115,7 +115,7 @@
   - [ ] 2.2 Replace `$this->authorize()` with `#[Authorize]`
     - Replace all 14 calls with the attributes in the design §4.2.1 table (`use Illuminate\Routing\Attributes\Controllers\Authorize;`). Delete the call lines.
     - Confirm `rg -n '\$this->authorize\(' app` returns nothing afterwards.
-    - Tests: add `tests/Feature/Kitchen/AuthorizeAttributeTest.php` with one test per attribute asserting 403 `{"message":"Forbidden."}` for a denied actor (e.g. a parent without a link to the student, supervisor voiding when the policy denies, and a user deactivating self).
+    - Tests: add `tests/Feature/Kitchen/AuthorizeAttributeTest.php` with one test per attribute asserting 403 `{"message":"This action is unauthorized."}` (today's production body, H19; `app.debug=false` in `setUp()`) for a denied actor (e.g. a parent without a link to the student, supervisor voiding when the policy denies, and a user deactivating self).
     - Matrix and fixtures are unchanged.
     - _Requirements: 6.2_
   - [ ] 2.3 Bind policies with `#[UsePolicy]`
@@ -421,7 +421,7 @@
 
 ---
 
-## Track B (20 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20/B-21 on 2026-10-17; B-22 proposed; one commit each; failing test first)
+## Track B (20 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20/B-21 on 2026-10-17; B-22 and B-23 proposed; one commit each; failing test first)
 
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -504,6 +504,11 @@
   - Failing test first (`tests/Feature/Kitchen/PreRegistrationBirthdayTest.php`, app timezone Asia/Manila): `show` returns `2016-02-14`, and a PATCH round trip keeps it.
   - Fixtures: the four pre-registration show/patch fixtures listed in design §5.20.
   - _Requirements: 10.22_
+- [ ] B-23. *(PROPOSED, awaiting user approval; do not implement)* 403/404 bodies *(design §5.21; slot if approved: step 5, right after T-2)*
+  - Failing test first (`tests/Feature/ApiExceptionRenderingTest.php`): a policy denial gives `Forbidden.` and a binding miss gives `Not found.`; `abort()` texts and the `role:` middleware text are unchanged.
+  - Named edit: `AuthorizeAttributeTest` expects `Forbidden.`.
+  - Fixtures: none.
+  - _Requirements: 10.23_
 - [ ] B-15. Portal payment-history 403 *(design §5.13; after T-2)*
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
@@ -539,7 +544,7 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.22 | B-01 … B-22 |
+| 10.2–10.23 | B-01 … B-23 |
 | 14.1–14.5 | C-1.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |

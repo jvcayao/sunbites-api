@@ -25,6 +25,7 @@ The refactor has two tracks:
 | Track B | B-19 (inventory export crash after the `maatwebsite/excel` update, found during T-1) | **Approved** 2026-10-12 |
 | Track B | B-20 (sold menu item delete 500), B-21 (portal dashboard credit badge), both found during T-1 | **Approved** 2026-10-17 |
 | Track B | B-22 (pre-registration birthday shifted one day per save) | Proposed 2026-10-17, awaiting approval |
+| Track B | B-23 (make the 403/404 bodies in `bootstrap/app.php` effective; found during T-2) | Proposed 2026-10-17, awaiting approval |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
@@ -40,6 +41,7 @@ The refactor has two tracks:
 | In tests, `RefreshDatabase`/`DatabaseTransactions` install `Illuminate\Foundation\Testing\DatabaseTransactionsManager`, which skips the test's wrapping transaction, so after-commit callbacks run when the application's own transaction commits | `Foundation/Testing/DatabaseTransactionsManager.php` |
 | `make:request` stub generates `authorize()` returning `false` | `Foundation/Console/stubs/request.stub` L15 |
 | A `JsonResource` returned directly from a controller is wrapped in `{"data": …}`. When serialised via `response()->json($resource)` or nested in an array it is **not** wrapped. | `Illuminate/Http/Resources/Json/JsonResource` (`toResponse` vs `jsonSerialize`) |
+| `Handler::render()` runs `prepareException()` (which converts `AuthorizationException` → `AccessDeniedHttpException` and `ModelNotFoundException` → `NotFoundHttpException`) **before** the `renderable` callbacks, so callbacks see the converted exception, with the original as `getPrevious()` (H19, B-23) | `Foundation/Exceptions/Handler.php` L705-725, L769-785 |
 
 ## 2. Architecture
 
@@ -84,6 +86,7 @@ Each hazard names the concrete sites. A task is not done until its diff has been
 | H16 | **Carbon mutability.** `now()`/`today()` return `CarbonImmutable` here (`Date::use(CarbonImmutable::class)` in `AppServiceProvider`), but `Carbon\Carbon::create*()` returns a **mutable** instance. The month loops `while ($current->lte($end)) { … $current->addMonth(); }` in `EnrollmentService::seedMonthlyPayments` and `PaymentController::addRange` rely on mutation. With an immutable instance `addMonth()` returns a new object, `$current` never advances, and **the request loops forever**. | Never replace `Carbon::create*()`/`Carbon::createFromDate()` with `now()`, `Date::…` or `CarbonImmutable` in these loops. If a loop is touched, write `$current = $current->addMonth();`, which is correct for both mutable and immutable. T-5.1 and T-5.3 add a test that seeds June→March (10 rows) and returns. | `EnrollmentService`, `PaymentController::addRange` |
 | H17 | **Form Request class attributes that change responses.** Laravel 13.35 ships `#[FailOnUnknownFields]` (rejects any input key without a rule; `FormRequest::validateNoUnknownFields`), `#[StopOnFirstFailure]` (returns only the first error), `#[ErrorBag]`, `#[RedirectTo]` and `#[RedirectToRoute]` (web redirects). Both FEs send keys that have no rule (e.g. `page` on list endpoints, verified in §13.2), and the FE shows every field error. | **Never** add these attributes to any Form Request, and never call `FormRequest::failOnUnknownFields()` globally. They look like "Laravel 13 style" but would break pages (422 on every paginated list) or change error envelopes. | all Form Requests (§4.2) |
 | H18 | **Config cache during tests points tests at the real database.** `bootstrap/cache/config.php` overrides `phpunit.xml`/env. If it exists, tests boot with the local `.env` database (`laravel`), and `RefreshDatabase` can run `migrate:fresh` against it. *Observed on 2026-10-09:* a `config:cache` run concurrently with the SQLite suite made `ParentProvisioningTest` read the dev DB (301 real rows + 1). Its transaction rolled back and the data was intact. | Never run `config:cache`, `route:cache`, `event:cache` or `optimize` locally while working on this spec. Before every test run, `bootstrap/cache/` must contain only `packages.php` and `services.php`; run `vendor/bin/sail artisan config:clear` if unsure (the composer `test` script does this too). | every task |
+| H19 | **403/404 message texts.** Laravel converts `AuthorizationException` and `ModelNotFoundException` into HTTP exceptions **before** `bootstrap/app.php`'s renderable runs (`Handler.php` L705-725, L769-785). So today a policy denial returns `{"message":"This action is unauthorized."}`, and a binding or `firstOrFail()` miss returns `{"message":"No query results for model [App\\Models\\X] id"}`, not the `Forbidden.`/`Not found.` the renderable intends. The fixtures record the shape only, so they cannot see the text. | Before B-23 (step 5), tests assert today's texts. From B-23 on, they assert `Forbidden.`/`Not found.`. Never change a text in Track A. | T-2, B-23 and every later 403/404 test |
 | H14 | **Lazy-loading prevention.** Enabling it throws on existing lazy loads (e.g. `OrderResource` reads `student->wallet` where only `student` is eager-loaded in `TransactionController::index`). | T-13 must fix every violation the full suite surfaces, and must throw **only in `testing`**. `local` and `staging` log instead, because developers run both frontends against `APP_ENV=local`. | §4.5.4 |
 
 ## 4. Track A components
@@ -1003,7 +1006,7 @@ The `lower(...) like ?` searches (`ParentController`, `FeedbackController`, `Pre
 
 Replace the `abort_unless(..., 403, 'You do not have access to this student.')` with `#[Authorize('view', 'student')]`.
 
-- **Fixture:** the `403` variant body changes the `message` text.
+- **Fixture:** none. The `403` variant keeps the shape `{"message": "string"}`; only the text changes, from `You do not have access to this student.` to `Forbidden.` (once B-23 has landed, H19). The B-15 test asserts the exact text.
 - **FE impact:** none. `payment-history-tab.tsx:31` shows a fixed "Failed to load payment history." on any error.
 
 ### 5.14 B-16: Archived inventory in POS references
@@ -1112,6 +1115,43 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - **Round trip:** PATCH with the `birthday` value from `show` plus a changed `first_name`, and the stored birthday stays `2016-02-14` (`$preRegistration->fresh()->birthday->toDateString()`).
   - Before the fix, both fail: the first gets `2016-02-13T16:00:00.000000Z`, and the second stores `2016-02-13`.
 - **FE impact:** positive, with no FE change. The POS date input shows the birthday, and saving keeps it. The POS has no other use of a pre-registration birthday.
+
+### 5.21 B-23 *(proposed 2026-10-17, awaiting approval; do not implement until approved)*: Make the API's 403/404 bodies match `bootstrap/app.php`
+
+- **Defect** (found by the implementer during T-2, verified by the spec owner in the framework source):
+  - `bootstrap/app.php` L55-61 intends 403 `{"message":"Forbidden."}` for `AuthorizationException` and 404 `{"message":"Not found."}` for `ModelNotFoundException`. **Neither branch ever runs.**
+  - `Foundation\Exceptions\Handler::render()` (L705-725) calls `prepareException()` **before** `renderViaCallbacks()`. `prepareException()` (L769-785) turns `ModelNotFoundException` into `NotFoundHttpException` (L773) and `AuthorizationException` into `AccessDeniedHttpException` (L777), each with the original as its `previous`. The renderable receives the converted exception, so its `instanceof` checks fail.
+  - **Bodies today** (`app.debug=false`, production):
+    - policy or `#[Authorize]` denial: 403 `{"message":"This action is unauthorized."}`
+    - route-binding or `firstOrFail()` miss: 404 `{"message":"No query results for model [App\\Models\\Student] 4"}`, which **discloses internal class names and record ids** to any client
+  - The 401 and 422 branches work, because those exceptions are not converted.
+- **Fix:** in the `bootstrap/app.php` renderable, replace the two dead branches with:
+  ```php
+  if ($e instanceof AccessDeniedHttpException && $e->getPrevious() instanceof AuthorizationException) {
+      return response()->json(['message' => 'Forbidden.'], 403);
+  }
+
+  if ($e instanceof NotFoundHttpException && $e->getPrevious() instanceof ModelNotFoundException) {
+      return response()->json(['message' => 'Not found.'], 404);
+  }
+  ```
+  Import `Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException` and `Symfony\Component\HttpKernel\Exception\NotFoundHttpException`. Keep the `AuthorizationException` and `ModelNotFoundException` imports, which the `getPrevious()` checks still use.
+  - Matching on `getPrevious()` keeps every other 403/404 exactly as it is today:
+    - `abort(403|404, 'text')` has no previous exception, so it still returns its own text: `UserManagementController` L54/L98, `StudentContactController` L151, `Portal\MealPlannerController` L27, `CheckoutController` L305
+    - a bare `abort(404)` is unchanged (`ParentController` L145, `AnnouncementController` L101)
+    - the spatie `role:` middleware 403 (`User does not have the right roles.`) is unchanged; it is not a converted `AuthorizationException`
+    - unknown URLs and enum-binding misses are unchanged (their previous is not `ModelNotFoundException`)
+  - No policy returns `Response::deny('…')` with custom text (`grep -rn "deny(" app/Policies` finds nothing), so no custom denial message is lost.
+- **Test** (failing first; new file `tests/Feature/ApiExceptionRenderingTest.php`; `config(['app.debug' => false])` in `setUp()`; every assertion uses `assertExactJson`):
+  - a policy denial (an unlinked parent on `GET /portal/students/{student}/wallet`) returns 403 `{"message":"Forbidden."}`
+  - a route-binding miss (`GET /students/999999` as a manager with the branch header) returns 404 `{"message":"Not found."}`
+  - unchanged: a manager assigning the admin role returns 403 `{"message":"Only an admin may assign the admin role."}`
+  - unchanged: a contact that belongs to another student returns 404 `{"message":"Contact does not belong to this student."}`
+  - unchanged: a cashier on a `role:admin|manager` route returns 403 `{"message":"User does not have the right roles."}`
+- **Named edit to an existing test:** `tests/Feature/Kitchen/AuthorizeAttributeTest.php` (from T-2) expects today's `{"message":"This action is unauthorized."}`. Change its expected body to `{"message":"Forbidden."}`. No other existing test asserts either text.
+- **Fixtures:** none change. They record the shape `{"message": "string"}`, not the text.
+- **FE impact:** the text changes, nothing else. Where a screen shows the API message for a denied or missing record, it now shows "Forbidden." or "Not found." instead of "This action is unauthorized." or "No query results for model […]". No FE code compares these texts: in a grep of both FEs, the only hit is a POS test mock (`waive-credit-dialog.test.tsx:112`), which already uses "Forbidden.".
+- **Slot:** step 5, right after T-2 and before B-15. B-01, B-15, B-17, B-18 and T-6.3 state `Forbidden.`/`Not found.`, which is true only once B-23 has landed. If B-23 is not approved, the spec owner rewrites those texts before B-15 starts.
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
@@ -1306,7 +1346,7 @@ Agent: `laravel:laravel-simplifier` (installed via the Laravel plugin). Its defa
 | Form Requests (rules verbatim) | 83 methods (§4.2.1) | all `lib/api/*.ts` | `ApiError` parsing of `{message, errors}` in `lib/api/client.ts` (both apps) | Same envelope (`ValidationException` → `bootstrap/app.php`). Safe |
 | Permissive magic-input rules (§4.2.3) | `GET /students`, `GET /users`, `GET /references/meal-planner`, `GET /branch-monthly-amounts`, `GET /reminders/eligible-parents` | POS `students/page.tsx:1385-1393` (`type, page, search, grade, status, month, year, payment_status`, plus `deleted`), `references/users/page.tsx:152-157` (`search, role, status, page`), `lib/api/meal-planner.ts:12-14` (`month` lowercase, `week`), `lib/api/students.ts:180-181` (`year`), `reminders/page.tsx:176-181` (`search, status, school_month, school_year`) | Every value is accepted by `['nullable']`; `page` is read by the paginator, not `validated()` | Safe |
 | Pre-validation guards (§4.2.2) | 18 methods | POS void, payments, contacts, pre-reg, feedback; portal feedback | Error `message` text shown in toasts | Same message wins (precedence tests). Safe |
-| `#[Authorize]` (14 calls) | user mgmt, void, portal student routes | POS users pages, transactions void; portal wallet/activity/photo/spending | 403 → `{"message":"Forbidden."}` | Same body. Safe |
+| `#[Authorize]` (14 calls) | user mgmt, void, portal student routes | POS users pages, transactions void; portal wallet/activity/photo/spending | 403 → `{"message":"This action is unauthorized."}` today (H19); `Forbidden.` after B-23 | Same body as the old `$this->authorize()`. Safe |
 | Resources (§4.4) | notifications ×2, inventory items/logs, menu items, ingredients, credit settle/waive | POS `notification-bell.tsx`, `references/inventory/page.tsx`, `menu-mgmt-tab.tsx`, `inventory-tab.tsx`, credit dialogs; portal `notification-bell.tsx`, `notifications/page.tsx` | keys and types incl. `data`, `read_at`, `created_at`, `status`, `inventory_status` | Copied 1:1, serialised without a `data` wrapper (H6). Safe |
 | `PaymentStatus` enum cast | `/students/{student}/payments*`, `/students`, `/reports/billing`, `/reports/students`, `/reports/subscription`, reminders, portal payment-history | POS `MonthlyPayment.status` (`'paid'\|'unpaid'\|'voided'`), billing page `row.status`; portal `payment-history-tab.tsx`, `payment-history-timeline.tsx` | the status string | A backed enum JSON-encodes to the same string. Safe |
 | `AuthorizesRequests`, `#[UsePolicy]`, scopes, accessors | n/a | n/a | n/a | No response change. Safe |
