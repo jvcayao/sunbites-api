@@ -10,7 +10,7 @@ Versions below are the **installed** versions (`composer.lock`, `package.json`, 
 
 | Layer | Technology | Version |
 |---|---|---|
-| API backend | Laravel | 13.35 |
+| API backend | Laravel | 13.37 |
 | PHP | PHP | 8.5 (`composer.json` constraint `^8.3`) |
 | POS & admin frontend | Next.js (App Router) | 16.2.6 |
 | Parent portal frontend | Next.js (App Router) | 16.2.6 |

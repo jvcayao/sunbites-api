@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Sunbites API (Laravel **13.35.0**, PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on 2026-10-09 on MySQL 8.4 (Sail `testing` schema) and on SQLite (CI's driver), using the gate commands in design §11.1. It also grew feature by feature across Specs 01–15, and the code shows it:
+The Sunbites API (Laravel **13.35.0** when this spec was written, **13.37.0** since `5b5d5e3` on 2026-10-17; PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on 2026-10-09 on MySQL 8.4 (Sail `testing` schema) and on SQLite (CI's driver), using the gate commands in design §11.1. It also grew feature by feature across Specs 01–15, and the code shows it:
 - 83 controller methods (48 files) validate inline.
 - About 200 `response()->json([...])` calls hand-build response arrays.
 - Business rules live in controllers (Checkout 308 lines, Reminders 360, Analytics 535).

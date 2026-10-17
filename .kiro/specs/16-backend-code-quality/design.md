@@ -28,7 +28,7 @@ The refactor has two tracks:
 | Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
-### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
+### 1.2 Verified framework facts (installed `laravel/framework` v13.37.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 and on 13.37.0 on 2026-10-17, each after a `composer update` (commit `5b5d5e3`))
 
 | Fact | Verified in |
 |---|---|
@@ -37,7 +37,7 @@ The refactor has two tracks:
 | `#[Tries(int)]`, `#[Backoff(int ...)]` exist | `Illuminate/Queue/Attributes/*` |
 | `Exceptions::render()` and `renderable()` both call `$handler->renderable()`; they are aliases | `Illuminate/Foundation/Configuration/Exceptions.php` L49-67 |
 | `FormRequest::validateResolved()` runs `prepareForValidation()` → `authorize()` → validation → `passedValidation()` | framework `ValidatesWhenResolvedTrait` |
-| `ShouldQueueAfterCommit` extends `ShouldQueue` and is honoured by both `SendQueuedNotifications` (L105) and `SendQueuedMailable` (L67) | `Illuminate/Contracts/Queue/ShouldQueueAfterCommit.php`, `Notifications/SendQueuedNotifications.php`, `Mail/SendQueuedMailable.php` |
+| `ShouldQueueAfterCommit` extends `ShouldQueue` and is honoured by both `SendQueuedNotifications` (L105) and `SendQueuedMailable` (L81 on 13.37.0; L67 on 13.35.0) | `Illuminate/Contracts/Queue/ShouldQueueAfterCommit.php`, `Notifications/SendQueuedNotifications.php`, `Mail/SendQueuedMailable.php` |
 | In tests, `RefreshDatabase`/`DatabaseTransactions` install `Illuminate\Foundation\Testing\DatabaseTransactionsManager`, which skips the test's wrapping transaction, so after-commit callbacks run when the application's own transaction commits | `Foundation/Testing/DatabaseTransactionsManager.php` |
 | `make:request` stub generates `authorize()` returning `false` | `Foundation/Console/stubs/request.stub` L15 |
 | A `JsonResource` returned directly from a controller is wrapped in `{"data": …}`. When serialised via `response()->json($resource)` or nested in an array it is **not** wrapped. | `Illuminate/Http/Resources/Json/JsonResource` (`toResponse` vs `jsonSerialize`) |

@@ -287,7 +287,7 @@ Next step per §6: <id> (waiting for "proceed")
 
 | Fact | Value |
 |---|---|
-| Repo | `~/sunbites-api` (Laravel 13.35.0, PHP 8.5, Sail) |
+| Repo | `~/sunbites-api` (Laravel 13.37.0 since `5b5d5e3` on 2026-10-17; T-1 to T-6 ran on 13.35.0. PHP 8.5, Sail) |
 | Branch / start SHA | `bump-laravel-13-latest` / `3454977` |
 | MySQL gate | design §11.1 (direct `vendor/bin/phpunit` with `-e DB_CONNECTION=mysql -e DB_DATABASE=testing` and credentials read from `.env`) + `[path] [--filter=name]` |
 | SQLite gate | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit [path] [--filter=name]` |
