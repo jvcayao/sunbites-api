@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 abstract class Controller
 {
+    use AuthorizesRequests;
+
     /**
      * Strip markup from free-text input. Call this *before* validation so that
      * length rules are enforced against the value that will actually be stored.

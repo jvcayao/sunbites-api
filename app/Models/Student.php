@@ -9,9 +9,11 @@ use App\Enums\PaymentMethod;
 use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Models\Concerns\HasBranch;
+use App\Policies\ParentStudentPolicy;
 use Bavix\Wallet\Interfaces\Wallet;
 use Bavix\Wallet\Traits\HasWallet;
 use Database\Factories\StudentFactory;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,6 +26,7 @@ use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
+#[UsePolicy(ParentStudentPolicy::class)]
 class Student extends Model implements Wallet
 {
     /** @use HasFactory<StudentFactory> */

@@ -3,21 +3,13 @@
 namespace App\Providers;
 
 use App\Listeners\AuthEventSubscriber;
-use App\Models\Order;
 use App\Models\PreRegistration;
-use App\Models\Student;
-use App\Models\User;
-use App\Policies\OrderPolicy;
-use App\Policies\ParentStudentPolicy;
-use App\Policies\ReportPolicy;
-use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -30,11 +22,6 @@ class AppServiceProvider extends ServiceProvider
         $this->configureDefaults();
 
         Event::subscribe(AuthEventSubscriber::class);
-
-        Gate::policy(Order::class, OrderPolicy::class);
-        Gate::policy(User::class, UserPolicy::class);
-        Gate::policy(Student::class, ParentStudentPolicy::class);
-        Gate::policy(ReportPolicy::class, ReportPolicy::class);
 
         $this->bindCrossBranchRouteModels();
     }

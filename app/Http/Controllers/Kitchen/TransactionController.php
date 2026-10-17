@@ -13,15 +13,13 @@ use App\Models\Order;
 use App\Models\Student;
 use App\Models\SystemConfiguration;
 use App\Services\CreditLedgerService;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
 {
-    use AuthorizesRequests;
-
     public function __construct(private CreditLedgerService $creditLedger) {}
 
     public function index(Request $request): JsonResponse
@@ -71,10 +69,9 @@ class TransactionController extends Controller
         ]);
     }
 
+    #[Authorize('void', 'order')]
     public function void(Request $request, Order $order): JsonResponse
     {
-        $this->authorize('void', $order);
-
         if ($order->status === OrderStatus::Voided) {
             return response()->json(['message' => 'Order is already voided.'], 422);
         }

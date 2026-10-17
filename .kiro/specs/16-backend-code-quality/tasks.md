@@ -106,19 +106,19 @@
     - Commit: `chore(ci): add MySQL 8.4 test job to CI workflow`.
     - _Requirements: 14.1–14.5_
 
-- [ ] 2. Base authorization and policy wiring *(design §4.2.1 list of 14 calls, §4.5.3; Req 4.5, 6.2, 6.4)*
-  - [ ] 2.1 Move `AuthorizesRequests` to the base controller
+- [x] 2. Base authorization and policy wiring *(design §4.2.1 list of 14 calls, §4.5.3; Req 4.5, 6.2, 6.4)*
+  - [x] 2.1 Move `AuthorizesRequests` to the base controller
     - Add `use AuthorizesRequests;` to `app/Http/Controllers/Controller.php`.
     - Remove the 7 per-controller `use AuthorizesRequests;` statements and their imports.
     - Tests: the existing suite passes; fixtures are unchanged.
     - _Requirements: 6.4_
-  - [ ] 2.2 Replace `$this->authorize()` with `#[Authorize]`
+  - [x] 2.2 Replace `$this->authorize()` with `#[Authorize]`
     - Replace all 14 calls with the attributes in the design §4.2.1 table (`use Illuminate\Routing\Attributes\Controllers\Authorize;`). Delete the call lines.
     - Confirm `rg -n '\$this->authorize\(' app` returns nothing afterwards.
     - Tests: add `tests/Feature/Kitchen/AuthorizeAttributeTest.php` with one test per attribute asserting 403 `{"message":"This action is unauthorized."}` (today's production body, H19; `app.debug=false` in `setUp()`) for a denied actor (e.g. a parent without a link to the student, supervisor voiding when the policy denies, and a user deactivating self).
     - Matrix and fixtures are unchanged.
     - _Requirements: 6.2_
-  - [ ] 2.3 Bind policies with `#[UsePolicy]`
+  - [x] 2.3 Bind policies with `#[UsePolicy]`
     - Add `#[UsePolicy]` to `Order`, `User` and `Student` (design §4.5.3), and remove the four `Gate::policy()` lines and their imports from `AppServiceProvider`.
     - Run `rg -n "ReportPolicy|StudentPolicy" app routes tests`. If only the class files match, delete `app/Policies/ReportPolicy.php` and `app/Policies/StudentPolicy.php`. If tests match, stop and report.
     - Tests: `tests/Unit/PolicyResolutionTest.php` (extends `Tests\TestCase`; needs Gate) asserts `Gate::getPolicyFor(Order::class)` is an `OrderPolicy` (likewise `User` and `Student`); the suite and fixtures are unchanged.

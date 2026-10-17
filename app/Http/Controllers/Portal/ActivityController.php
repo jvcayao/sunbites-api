@@ -4,18 +4,15 @@ namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
 use App\Models\Student;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class ActivityController extends Controller
 {
-    use AuthorizesRequests;
-
+    #[Authorize('view', 'student')]
     public function index(Request $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
         $validated = $request->validate([
             'from' => ['nullable', 'date'],
             'to' => ['nullable', 'date', 'after_or_equal:from'],

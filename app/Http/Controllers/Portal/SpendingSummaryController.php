@@ -6,20 +6,17 @@ use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use App\Models\OrderItem;
 use App\Models\Student;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class SpendingSummaryController extends Controller
 {
-    use AuthorizesRequests;
-
+    #[Authorize('view', 'student')]
     public function show(Request $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
         $validated = $request->validate([
             'months' => ['nullable', 'integer', 'min:1', 'max:24'],
         ]);

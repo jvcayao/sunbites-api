@@ -7,9 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Student;
 use App\Services\LedgerEntryFormatter;
 use App\Services\StudentLedgerQuery;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 /**
  * The parent-facing unified ledger.
@@ -20,7 +20,6 @@ use Illuminate\Http\Request;
  */
 class StudentLedgerController extends Controller
 {
-    use AuthorizesRequests;
     use ResolvesStudentLedger;
 
     public function __construct(
@@ -28,10 +27,9 @@ class StudentLedgerController extends Controller
         private LedgerEntryFormatter $formatter,
     ) {}
 
+    #[Authorize('view', 'student')]
     public function index(Request $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
         $entries = $this->paginatedLedgerEntries($request, $student, $this->ledgerQuery);
 
         return response()->json([

@@ -7,9 +7,9 @@ use App\Http\Resources\UserResource;
 use App\Mail\StaffResetPasswordMail;
 use App\Models\Branch;
 use App\Models\User;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
@@ -18,8 +18,6 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 
 class UserManagementController extends Controller
 {
-    use AuthorizesRequests;
-
     public function index(Request $request): JsonResponse
     {
         $users = User::withTrashed()
@@ -149,9 +147,9 @@ class UserManagementController extends Controller
         return response()->json(new UserResource($user));
     }
 
+    #[Authorize('deactivate', 'user')]
     public function deactivate(Request $request, User $user): JsonResponse
     {
-        $this->authorize('deactivate', $user);
         abort_if($user->id === $request->user()->id, 403, 'You cannot deactivate your own account.');
         abort_if($user->hasRole('admin') && User::role('admin')->count() === 1, 403, 'At least one admin must remain.');
 
@@ -166,9 +164,9 @@ class UserManagementController extends Controller
         return response()->json(['message' => 'Account deactivated.']);
     }
 
+    #[Authorize('reactivate', 'user')]
     public function reactivate(Request $request, User $user): JsonResponse
     {
-        $this->authorize('reactivate', $user);
         $user->restore();
         $user->update(['is_active' => true]);
 
@@ -180,10 +178,9 @@ class UserManagementController extends Controller
         return response()->json(new UserResource($user->load(['roles', 'branches'])));
     }
 
+    #[Authorize('update', 'user')]
     public function sendResetEmail(Request $request, User $user): JsonResponse
     {
-        $this->authorize('update', $user);
-
         $token = Password::createToken($user);
         Mail::to($user->email)->queue(new StaffResetPasswordMail($user, $token));
 
@@ -195,9 +192,9 @@ class UserManagementController extends Controller
         return response()->json(['message' => 'Password reset email sent.']);
     }
 
+    #[Authorize('update', 'user')]
     public function uploadPhoto(Request $request, User $user): JsonResponse
     {
-        $this->authorize('update', $user);
         $request->validate([
             'photo' => ['required', 'file', 'mimes:jpeg,png,webp', 'max:2048'],
         ]);
@@ -212,9 +209,9 @@ class UserManagementController extends Controller
         return response()->json(['profile_photo_path' => $path]);
     }
 
+    #[Authorize('update', 'user')]
     public function assignBranch(Request $request, User $user): JsonResponse
     {
-        $this->authorize('update', $user);
         $validated = $request->validate([
             'branch_id' => ['required', 'integer', 'exists:branches,id'],
         ]);
@@ -229,9 +226,9 @@ class UserManagementController extends Controller
         return response()->json($user->load('branches')->branches);
     }
 
+    #[Authorize('update', 'user')]
     public function detachBranch(Request $request, User $user, Branch $branch): JsonResponse
     {
-        $this->authorize('update', $user);
         $user->branches()->detach($branch->id);
 
         return response()->json($user->load('branches')->branches);

@@ -5,18 +5,15 @@ namespace App\Http\Controllers\Portal;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
 use Bavix\Wallet\Models\Transaction;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class WalletController extends Controller
 {
-    use AuthorizesRequests;
-
+    #[Authorize('view', 'student')]
     public function index(Request $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
         $validated = $request->validate([
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'type' => ['nullable', 'string', 'in:deposit,withdraw'],
@@ -55,10 +52,9 @@ class WalletController extends Controller
         ]);
     }
 
+    #[Authorize('view', 'student')]
     public function setAlert(Request $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
         $validated = $request->validate([
             'threshold' => ['required', 'numeric', 'min:0', 'max:100000'],
         ]);
