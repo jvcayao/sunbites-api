@@ -82,6 +82,13 @@ class PosMenuItemContractTest extends ContractTestCase
         $this->assertContract($response, 'DELETE api/v1/pos/menu-items/{item}');
     }
 
+    public function test_deleting_a_sold_menu_item_matches_contract(): void
+    {
+        $response = $this->asManager()->deleteJson("/api/v1/pos/menu-items/{$this->scenario->menuItem->id}");
+
+        $this->assertContract($response, 'DELETE api/v1/pos/menu-items/{item}', '422-has-sales');
+    }
+
     public function test_deleting_an_other_branch_menu_item_matches_contract(): void
     {
         $response = $this->asManager()->deleteJson("/api/v1/pos/menu-items/{$this->scenario->branchBMenuItem->id}");

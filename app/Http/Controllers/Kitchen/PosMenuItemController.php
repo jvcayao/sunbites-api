@@ -57,6 +57,10 @@ class PosMenuItemController extends Controller
 
     public function destroy(PosMenuItem $item): JsonResponse
     {
+        if ($item->orderItems()->exists()) {
+            return response()->json(['message' => 'This menu item has sales history and cannot be deleted. Mark it as unavailable instead.'], 422);
+        }
+
         $item->delete();
 
         return response()->json(['message' => 'Menu item deleted.']);

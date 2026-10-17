@@ -8,6 +8,7 @@ use Database\Factories\PosMenuItemFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -49,5 +50,11 @@ class PosMenuItem extends Model
     {
         return $this->belongsToMany(InventoryItem::class, 'pos_menu_item_inventory')
             ->withPivot('quantity_used');
+    }
+
+    /** @return HasMany<OrderItem, $this> */
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class, 'pos_menu_item_id');
     }
 }

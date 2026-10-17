@@ -492,7 +492,7 @@
   - Failing test first: a real download (no `Excel::fake()`) returns 200, the filename pattern, and a 2-sheet workbook (design §5.17).
   - Fixture: `get__api_v1_reports_inventory_export@ok.json` (500 → 200).
   - _Requirements: 10.19_
-- [ ] B-20. *(approved 2026-10-17)* Sold menu item delete *(design §5.18; HANDOFF §6, right after B-03)*
+- [x] B-20. *(approved 2026-10-17)* Sold menu item delete *(design §5.18; HANDOFF §6, right after B-03)*
   - Failing test first (`tests/Feature/PosMenuItemDeleteTest.php`): a sold item gives 422 with the exact message, the item stays, and there is no `deleted` activity row; an unsold item still deletes.
   - Fixture: new `delete__api_v1_pos_menu_items_{item}@422-has-sales.json`.
   - _Requirements: 10.20_
