@@ -10,8 +10,10 @@ use App\Models\Order;
 use App\Models\PosMenuItem;
 use App\Models\User;
 use App\Services\InventoryStockService;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
@@ -39,10 +41,10 @@ class InventoryStockServiceTest extends TestCase
     }
 
     /**
-     * Reproduces hazard H10: both lines compute from the stale start quantity, so the second
-     * write overwrites the first. B-03 fixes this and deletes this test.
+     * Replaces the hazard H10 test from T-3: both lines now come off the locked quantity, and
+     * each Sale log records the stock left after its line (B-03).
      */
-    public function test_sale_with_two_lines_sharing_an_item_ends_one_unit_down(): void
+    public function test_sale_with_two_lines_sharing_an_item_deducts_both_lines(): void
     {
         $milk = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 10]);
         $latte = $this->menuItemUsing($milk, 1);
@@ -54,8 +56,50 @@ class InventoryStockServiceTest extends TestCase
             ['pos_menu_item_id' => $cocoa->id, 'quantity' => 1],
         ], $this->staff, $this->branch->id);
 
-        $this->assertSame('9.00', $milk->fresh()->quantity);
-        $this->assertSame(['9.00', '9.00'], InventoryLog::where('order_id', $order->id)->orderBy('id')->pluck('stock_after')->all());
+        $this->assertSame('8.00', $milk->fresh()->quantity);
+        $this->assertSame(['9.00', '8.00'], InventoryLog::where('order_id', $order->id)->orderBy('id')->pluck('stock_after')->all());
+    }
+
+    public function test_restock_for_void_locks_its_items_in_one_ordered_query(): void
+    {
+        $rice = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 10]);
+        $eggs = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 10]);
+        $order = $this->order();
+        foreach ([$eggs, $rice] as $item) {
+            InventoryLog::create([
+                'branch_id' => $this->branch->id,
+                'inventory_item_id' => $item->id,
+                'order_id' => $order->id,
+                'adjusted_by' => $this->staff->id,
+                'type' => InventoryLogType::Sale,
+                'quantity_change' => -2,
+                'stock_after' => 8,
+                'item_name_snapshot' => $item->name,
+                'reason' => 'Order #'.$order->receipt_number,
+            ]);
+        }
+
+        $queries = $this->queriesDuring(fn () => DB::transaction(fn () => $this->stock->restockForVoid($order, $this->staff)));
+
+        $locks = array_values(array_filter($queries, fn (array $query): bool => str_starts_with($query['sql'], 'select * from inventory_items where id in')));
+        $this->assertCount(1, $locks);
+        $this->assertMatchesRegularExpression('/^select \* from inventory_items where id in \(\?, \?\)( and inventory_items\.branch_id = \?)? order by id asc( for update)?$/', $locks[0]['sql']);
+        $this->assertSame($this->expectsLockClause(), str_ends_with($locks[0]['sql'], ' for update'));
+        $this->assertSame(['12.00', '12.00'], [$rice->fresh()->quantity, $eggs->fresh()->quantity]);
+    }
+
+    public function test_adjust_rereads_the_item_under_a_lock_inside_a_transaction(): void
+    {
+        $flour = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 10]);
+        $outerLevel = DB::transactionLevel();
+
+        $queries = $this->queriesDuring(fn () => $this->stock->adjust($flour, InventoryLogType::Restock, 5, 'add', 'Delivery', $this->staff, $this->branch->id));
+
+        $locks = array_values(array_filter($queries, fn (array $query): bool => str_starts_with($query['sql'], 'select * from inventory_items where inventory_items.id = ?')));
+        $this->assertCount(1, $locks);
+        $this->assertGreaterThan($outerLevel, $locks[0]['level']);
+        $this->assertSame($this->expectsLockClause(), str_ends_with($locks[0]['sql'], ' for update'));
+        $this->assertSame('15.00', $flour->fresh()->quantity);
     }
 
     public function test_sale_writes_a_sale_log_and_no_activity_row(): void
@@ -181,6 +225,31 @@ class InventoryStockServiceTest extends TestCase
         $this->stock->recordInitialStock($salt, $this->staff, $this->branch->id);
 
         $this->assertDatabaseMissing('inventory_logs', ['inventory_item_id' => $salt->id]);
+    }
+
+    /**
+     * Each query run by the callback, with identifier quotes removed and the transaction depth.
+     *
+     * @return list<array{sql: string, level: int}>
+     */
+    private function queriesDuring(callable $callback): array
+    {
+        $queries = [];
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = ['sql' => str_replace(['`', '"'], '', $query->sql), 'level' => $query->connection->transactionLevel()];
+        });
+
+        $callback();
+
+        return $queries;
+    }
+
+    /**
+     * SQLite has no row locks, so its grammar compiles `lockForUpdate()` to nothing.
+     */
+    private function expectsLockClause(): bool
+    {
+        return DB::getDriverName() !== 'sqlite';
     }
 
     private function menuItemUsing(InventoryItem $inventoryItem, int $quantityUsed): PosMenuItem

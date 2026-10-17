@@ -433,7 +433,7 @@
   - Fixtures: new `422-no-branch` variants.
   - **Staging smoke test before production.**
   - _Requirements: 10.3_
-- [ ] B-03. Stock race *(design §5.3; after T-3 and T-7)*
+- [x] B-03. Stock race *(design §5.3; after T-3 and T-7)*
   - Failing test: two cart lines sharing one inventory item deduct both units (replaces the H10 test from T-3.1, which is deleted here). Also: an ordered-lock query is issued (assert via the query log); adjust inside a transaction.
   - Fixtures: none.
   - _Requirements: 10.4_

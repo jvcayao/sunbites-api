@@ -7,11 +7,14 @@ use App\Jobs\WalletAlertJob;
 use App\Models\Branch;
 use App\Models\BranchSubscriptionConfig;
 use App\Models\InventoryItem;
+use App\Models\InventoryLog;
 use App\Models\PosMenuItem;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Laravel\Sanctum\Sanctum;
@@ -124,6 +127,44 @@ class CheckoutActionTest extends TestCase
             ->assertJsonPath('message', 'Only admin and manager roles can apply discounts.')
             ->assertJsonPath('exception', HttpException::class);
         $this->assertDatabaseCount('orders', 0);
+    }
+
+    /**
+     * Concurrent checkouts lock the same rows in the same order, so they queue instead of
+     * deadlocking or overselling (B-03).
+     */
+    public function test_checkout_locks_its_inventory_rows_in_id_order_inside_the_transaction(): void
+    {
+        $rice = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 50]);
+        $egg = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'quantity' => 50]);
+        $silog = PosMenuItem::factory()->create(['branch_id' => $this->branch->id]);
+        $this->mapToInventory($silog, $egg);
+        $this->mapToInventory($silog, $rice);
+        $outerLevel = DB::transactionLevel();
+
+        $queries = $this->queriesDuring(fn () => $this->asStaff($this->cashier)
+            ->postJson('/api/v1/pos/checkout', $this->cart(['payment_method' => 'cash', 'amount_tendered' => 500], $silog))
+            ->assertCreated());
+
+        $locks = array_values(array_filter($queries, fn (array $query): bool => str_starts_with($query['sql'], 'select * from inventory_items where id in')));
+        $this->assertCount(1, $locks);
+        $this->assertMatchesRegularExpression('/^select \* from inventory_items where id in \(\?, \?\) order by id asc( for update)?$/', $locks[0]['sql']);
+        $this->assertGreaterThan($outerLevel, $locks[0]['level']);
+        $this->assertSame(DB::getDriverName() !== 'sqlite', str_ends_with($locks[0]['sql'], ' for update'));
+    }
+
+    public function test_second_checkout_at_the_stock_boundary_returns_422_and_stock_stays_at_zero(): void
+    {
+        $egg = InventoryItem::factory()->create(['branch_id' => $this->branch->id, 'name' => 'Egg', 'quantity' => 1]);
+        $boiledEgg = PosMenuItem::factory()->create(['branch_id' => $this->branch->id]);
+        $this->mapToInventory($boiledEgg, $egg);
+        $this->asStaff($this->cashier)->postJson('/api/v1/pos/checkout', $this->cart(['payment_method' => 'cash', 'amount_tendered' => 500], $boiledEgg))->assertCreated();
+
+        $response = $this->asStaff($this->cashier)->postJson('/api/v1/pos/checkout', $this->cart(['payment_method' => 'cash', 'amount_tendered' => 500], $boiledEgg));
+
+        $response->assertUnprocessable()->assertExactJson(['message' => 'Egg is out of stock.']);
+        $this->assertSame('0.00', $egg->fresh()->quantity);
+        $this->assertSame(1, InventoryLog::where('inventory_item_id', $egg->id)->count());
     }
 
     public function test_cashier_checkout_without_a_discount_succeeds(): void
@@ -307,6 +348,24 @@ class CheckoutActionTest extends TestCase
             'reason' => 'Staff meal',
             'receipt_number' => $response->json('order.receipt_number'),
         ], $activity);
+    }
+
+    /**
+     * Each query run by the callback, with identifier quotes removed and the transaction depth.
+     * SQLite compiles `lockForUpdate()` to nothing, so only MySQL shows `for update`.
+     *
+     * @return list<array{sql: string, level: int}>
+     */
+    private function queriesDuring(callable $callback): array
+    {
+        $queries = [];
+        DB::listen(function (QueryExecuted $query) use (&$queries): void {
+            $queries[] = ['sql' => str_replace(['`', '"'], '', $query->sql), 'level' => $query->connection->transactionLevel()];
+        });
+
+        $callback();
+
+        return $queries;
     }
 
     /**

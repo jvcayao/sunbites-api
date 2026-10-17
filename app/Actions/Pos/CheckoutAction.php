@@ -101,7 +101,7 @@ class CheckoutAction
         $total = max(0, $subtotal - $discountAmount);
         $notes = isset($input['notes']) ? strip_tags($input['notes']) : null;
 
-        $order = DB::transaction(function () use ($cashier, $input, $paymentMethod, $total, $subtotal, $discountAmount, $menuItems, $notes, $isWalkIn) {
+        $order = DB::transaction(function () use ($cashier, $input, $paymentMethod, $total, $subtotal, $discountAmount, $menuItems, $deductions, $notes, $isWalkIn) {
             $student = null;
             $useCredit = ! empty($input['use_credit']);
 
@@ -155,6 +155,9 @@ class CheckoutAction
                     }
                 }
             }
+
+            // Lock the stock rows before anything is written, and re-check them under the lock (B-03).
+            $lockedItems = $this->stock->lockForSale($deductions);
 
             $receiptNumber = Order::generateReceiptNumber(app('active_branch')->id);
             $creditAmount = 0.0;
@@ -214,7 +217,7 @@ class CheckoutAction
             }
 
             // Inventory deduction — runs inside the same DB transaction
-            $this->stock->deductForSale($order, $menuItems, $input['items'], $cashier, app('active_branch')->id);
+            $this->stock->deductForSale($order, $menuItems, $input['items'], $cashier, app('active_branch')->id, $lockedItems);
 
             if ($student) {
                 $previousTotalSpent = (float) $student->total_spent;
