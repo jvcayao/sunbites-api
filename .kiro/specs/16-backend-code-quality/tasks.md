@@ -509,7 +509,7 @@
   - Named edit: `AuthorizeAttributeTest` expects `Forbidden.`.
   - Fixtures: none.
   - _Requirements: 10.23_
-- [ ] B-24. *(PROPOSED, awaiting user approval; do not implement)* Checkout with another branch's menu item *(design §5.22; slot if approved: right after B-07)*
+- [ ] B-24. *(PROPOSED, awaiting user approval; do not implement)* Checkout with another branch's menu item *(design §5.22; slot if approved: the next step after approval, any time after T-3)*
   - Failing test first (in `CheckoutActionTest`): a branch-B menu item gives 422 with the exact message and writes nothing.
   - Fixture: new `post__api_v1_pos_checkout@422-other-branch-item.json`.
   - _Requirements: 10.24_

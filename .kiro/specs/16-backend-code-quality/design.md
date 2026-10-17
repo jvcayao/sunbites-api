@@ -910,7 +910,7 @@ public static function secondHalfValues(): array // January–March
 
 `OrderResource`: `'name' => $this->cashier->full_name`.
 
-- **Fixture:** unchanged. `cashier.name` was `"null"` and becomes `"string"`; update the 4 affected fixtures (`POST api/v1/pos/checkout`, `POST api/v1/pos/transactions/{order}/void`, `GET api/v1/pos/transactions`, `GET api/v1/students/{student}/orders`).
+- **Fixtures:** 4 files change, each only in `cashier.name`, from `"null"` to `"string"`: `post__api_v1_pos_checkout@ok`, `post__api_v1_pos_checkout@ok-wallet`, `post__api_v1_pos_transactions_{order}_void@ok` and `get__api_v1_pos_transactions@ok`. *(Corrected 2026-10-17 after B-07: `GET students/{student}/orders` loads only `items`, so it has no `cashier` key and does not change.)*
 - **FE impact:** the receipt shows the cashier name, which was blank before.
 
 ### 5.7 B-08: Portal login disclosure
@@ -1175,7 +1175,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - before the fix it returns 500
 - **Fixtures:** new variant `post__api_v1_pos_checkout@422-other-branch-item.json`. No existing fixture changes.
 - **FE impact:** positive, with no FE change needed. The POS toast shows the message instead of "Server Error".
-- **Slot:** right after B-07 (it changes `CheckoutAction`, which T-3 created).
+- **Slot:** it depends only on T-3, which created `CheckoutAction`. If approved, the spec owner inserts it as the next step after approval.
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
