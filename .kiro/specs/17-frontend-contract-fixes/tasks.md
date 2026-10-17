@@ -11,7 +11,7 @@
   - Once the tree is clean: `git fetch origin && git switch -c <branch> origin/staging`.
 - **Verification (each repo, all must pass):** `npm run type-check`, `npm run lint`, `npm test`.
 - **Commits:** one per fix, `type(scope): description` under 72 characters. **No `Co-Authored-By`, no "Generated with" line, no AI attribution of any kind.** Never push, open or merge a PR, amend, rebase or force anything. The user pushes and opens each PR to `staging`.
-- Stop after each task and report: the branch, the commit hash, the test output (passed/total), the files changed, and the smoke-test steps from design §3.
+- Stop after each task and report: the branch, the commit hash, the test output (passed/total), the files changed, and the smoke-test steps from design §4.
 
 ## Tasks
 
@@ -29,10 +29,18 @@
   - [ ] 2.3 Run all three verification commands. Commit `fix(wallet): F-2 format wallet amounts with separators`.
   - _Requirements: 2.1–2.4, 3.1–3.4_
 
+- [ ] 3. F-3: Clear the POS cart on a branch switch *(PROPOSED, awaiting user approval; do not implement)* *(design §3; Req 4, 3)*
+  - Repo `~/sunbites-pos`, branch `fix/spec17-clear-cart-on-branch-switch`.
+  - [ ] 3.1 Extend `components/branch-cache-sync.test.tsx` (design §3.3). Confirm the two clearing tests fail on the current code.
+  - [ ] 3.2 Apply the design §3.2 edit to `components/branch-cache-sync.tsx`.
+  - [ ] 3.3 Run all three verification commands. Commit `fix(pos): F-3 clear the cart when the branch changes`.
+  - _Requirements: 4.1–4.3, 3.1–3.4_
+
 ## Coverage check
 
 | Requirement | Task |
 |---|---|
 | 1.1–1.7 | 1.1–1.3 |
 | 2.1–2.4 | 2.1–2.3 |
-| 3.1–3.4 | 1.1, 1.3, 2.1, 2.3 |
+| 3.1–3.4 | 1.1, 1.3, 2.1, 2.3, 3.1, 3.3 |
+| 4.1–4.3 | 3.1–3.3 (proposed) |

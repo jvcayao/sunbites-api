@@ -112,7 +112,27 @@ Model it on `app/(kitchen)/reports/credits/page.test.tsx`: the same `next/naviga
 - The updated assertion fails on the current code (`+PHP 1500.00`), which proves the fix.
 - Leave the other tests in the file unchanged. They exercise filters, not amounts.
 
-## 3. Smoke test on staging
+## 3. F-3: Clear the POS cart on a branch switch (`~/sunbites-pos`) *(proposed 2026-10-17, awaiting approval)*
+
+### 3.1 What goes wrong
+
+- `lib/store/cart.ts` is an in-memory Zustand store (not persisted). It survives client-side navigation, including the trip to `/branch` and back.
+- `components/branch-cache-sync.tsx` (rendered in `app/providers.tsx`) resets the TanStack Query cache when `activeBranch` changes, but not the cart.
+- After a switch, the cart still holds the old branch's menu items and student. Checkout then sends ids that do not exist in the new branch. Today that is a 500; after Spec 16 B-24 it is a 422 with "One or more items are not available in this branch…".
+
+### 3.2 Change
+
+In `BranchCacheSync`, inside the existing `if (previousBranchId.current !== null && previousBranchId.current !== branchId)` block, call `useCartStore.getState().clearCart();` before the query-cache branch (`clear()`/`resetQueries()`), so it runs for both a switch and a logout. Import `useCartStore` from `@/lib/store/cart`, following the import-order rule. Update the component's docblock to say it also clears the cart. Change nothing else.
+
+### 3.3 Test (extend `components/branch-cache-sync.test.tsx`)
+
+- Add one item to the cart store (`useCartStore.getState().addItem(...)`), switch the active branch A → B, and the cart is empty.
+- Logout (B → null) empties the cart.
+- First selection (null → B) leaves the cart unchanged.
+- Reset the cart store in `beforeEach` (`clearCart()`), as `components/pos/cart-panel.test.tsx:65` does. Keep the existing three tests unchanged.
+
+## 4. Smoke test on staging
 
 - **POS:** Reports → Inventory. The Stock Snapshot lists items with coloured badges, and the status filter narrows the list. In History, the type filter narrows the log, and with more than 25 log rows, Next shows different rows.
 - **Portal:** a student's Wallet tab with a top-up of ₱1,000 or more shows `+PHP 1,000.00` style amounts, with purchases in red.
+- **POS (F-3):** as a multi-branch manager, add items to the cart, switch branch, return to the POS: the cart is empty.
