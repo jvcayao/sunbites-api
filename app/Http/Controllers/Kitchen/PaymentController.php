@@ -4,6 +4,10 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\AddPaymentRangeRequest;
+use App\Http\Requests\Kitchen\RecordPaymentRequest;
+use App\Http\Requests\Kitchen\UpdatePaymentAmountRequest;
+use App\Http\Requests\Kitchen\VoidPaymentRequest;
 use App\Models\BranchMonthlyAmount;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
@@ -12,7 +16,6 @@ use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
@@ -37,12 +40,9 @@ class PaymentController extends Controller
         return response()->json($payments);
     }
 
-    public function updateAmount(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
+    public function updateAmount(UpdatePaymentAmountRequest $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
     {
-        abort_if($payment->student_id !== $student->id, 403);
-        abort_if($payment->isPaid() || $payment->isVoided(), 422, 'Can only edit amount on unpaid payments.');
-
-        $validated = $request->validate(['amount' => ['required', 'numeric', 'min:0']]);
+        $validated = $request->validated();
         $payment->update(['amount' => $validated['amount']]);
 
         return response()->json([
@@ -75,13 +75,9 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function record(Request $request, Student $student): JsonResponse
+    public function record(RecordPaymentRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'school_month' => ['required', Rule::enum(SchoolMonth::class)],
-            'year' => ['required', 'integer', 'digits:4'],
-            'amount' => ['required', 'numeric', 'min:0'],
-        ]);
+        $validated = $request->validated();
 
         $payment = StudentMonthlyPayment::where('student_id', $student->id)
             ->where('school_month', $validated['school_month'])
@@ -107,14 +103,9 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function void(Request $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
+    public function void(VoidPaymentRequest $request, Student $student, StudentMonthlyPayment $payment): JsonResponse
     {
-        abort_if($payment->student_id !== $student->id, 404);
-        abort_if(! $payment->isPaid(), 422, 'Only paid payments can be voided.');
-
-        $validated = $request->validate([
-            'reason' => ['required', 'string', 'max:500'],
-        ]);
+        $validated = $request->validated();
 
         $paymentMonthStart = Carbon::createFromDate($payment->year, $payment->school_month->toMonthNumber(), 1)->startOfMonth();
 
@@ -165,14 +156,9 @@ class PaymentController extends Controller
             ->log('payments.recorded');
     }
 
-    public function addRange(Request $request, Student $student): JsonResponse
+    public function addRange(AddPaymentRangeRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'subscription_start_month' => ['required', Rule::enum(SchoolMonth::class)],
-            'subscription_start_year' => ['required', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-            'subscription_end_month' => ['required', Rule::enum(SchoolMonth::class)],
-            'subscription_end_year' => ['required', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-        ]);
+        $validated = $request->validated();
 
         $start = Carbon::createFromDate(
             $validated['subscription_start_year'],
@@ -184,10 +170,6 @@ class PaymentController extends Controller
             SchoolMonth::from($validated['subscription_end_month'])->toMonthNumber(),
             1
         );
-
-        if ($end->lt($start)) {
-            return response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422);
-        }
 
         ['created' => $created, 'skipped' => $skipped] = DB::transaction(function () use ($start, $end, $student): array {
             $created = [];

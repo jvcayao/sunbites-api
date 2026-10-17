@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers\Kitchen;
 
-use App\Enums\EnrollmentStatus;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListStudentOrdersRequest;
+use App\Http\Requests\Kitchen\ListStudentsRequest;
+use App\Http\Requests\Kitchen\UpdateStudentRequest;
+use App\Http\Requests\Kitchen\UpdateStudentStatusRequest;
+use App\Http\Requests\Kitchen\UpdateStudentTypeRequest;
+use App\Http\Requests\Kitchen\UploadStudentPhotoRequest;
 use App\Http\Resources\OrderResource;
 use App\Http\Resources\StudentResource;
 use App\Models\Student;
@@ -12,15 +17,16 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
 use Spatie\Activitylog\Models\Activity;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListStudentsRequest $request): JsonResponse
     {
-        $query = $request->deleted
+        $filters = $request->validated();
+
+        $query = ($filters['deleted'] ?? null)
             ? Student::onlyTrashed()
             : Student::query();
 
@@ -29,25 +35,21 @@ class StudentController extends Controller
             'monthlyPayments',
             'wallet',
         ])
-            ->when($request->search, function ($q, $search) {
+            ->when($filters['search'] ?? null, function ($q, $search) {
                 $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search);
-                $q->where(function ($q) use ($escaped) {
-                    $q->where('first_name', 'like', "%{$escaped}%")
-                        ->orWhere('last_name', 'like', "%{$escaped}%")
-                        ->orWhere('student_number', 'like', "%{$escaped}%");
-                });
+                $q->whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$escaped}%");
             })
-            ->when($request->grade, fn ($q, $grade) => $q->where('grade_level', $grade));
+            ->when($filters['grade'] ?? null, fn ($q, $grade) => $q->where('grade_level', $grade));
 
-        if (! $request->deleted) {
+        if (! ($filters['deleted'] ?? null)) {
             $query
-                ->when($request->status, fn ($q, $status) => $q->where('enrollment_status', $status))
-                ->when($request->type && $request->type !== 'all', fn ($q) => $q->where('student_type', $request->type));
+                ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('enrollment_status', $status))
+                ->when(($filters['type'] ?? null) && ($filters['type'] ?? null) !== 'all', fn ($q) => $q->where('student_type', $filters['type']));
 
-            if ($request->type === 'subscription' && $request->month) {
-                $month = $request->month;
-                $paymentStatus = $request->payment_status;
-                $year = $request->year;
+            if (($filters['type'] ?? null) === 'subscription' && ($filters['month'] ?? null)) {
+                $month = $filters['month'];
+                $paymentStatus = $filters['payment_status'] ?? null;
+                $year = $filters['year'] ?? null;
 
                 $query->whereHas('monthlyPayments', function ($q) use ($month, $paymentStatus, $year) {
                     $q->where('school_month', $month);
@@ -93,27 +95,9 @@ class StudentController extends Controller
         ]);
     }
 
-    public function update(Request $request, Student $student): JsonResponse
+    public function update(UpdateStudentRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'first_name' => ['required', 'string', 'max:100'],
-            'last_name' => ['required', 'string', 'max:100'],
-            'student_number' => [
-                'nullable',
-                'string',
-                'max:50',
-                Rule::unique('students')
-                    ->where(fn ($q) => $q->where('branch_id', $student->branch_id))
-                    ->ignore($student->id)
-                    ->whereNotNull('student_number'),
-            ],
-            'grade_level' => ['required', 'string', 'in:'.implode(',', config('sunbites.grade_levels'))],
-            'section' => ['nullable', 'string', 'max:100'],
-            'birthday' => ['required', 'date', 'before:today'],
-            'allergies' => ['nullable', 'string', 'max:1000'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'photo' => ['nullable', 'file', 'mimes:jpeg,png,webp', 'max:2048'],
-        ]);
+        $validated = $request->validated();
 
         $validated['allergies'] = isset($validated['allergies']) ? strip_tags($validated['allergies']) : null;
         $validated['notes'] = isset($validated['notes']) ? strip_tags($validated['notes']) : null;
@@ -138,12 +122,8 @@ class StudentController extends Controller
         return response()->json(new StudentResource($student->fresh()));
     }
 
-    public function uploadPhoto(Request $request, Student $student): JsonResponse
+    public function uploadPhoto(UploadStudentPhotoRequest $request, Student $student): JsonResponse
     {
-        $request->validate([
-            'photo' => ['required', 'file', 'mimes:jpeg,png,webp', 'max:2048'],
-        ]);
-
         if ($student->photo_path) {
             Storage::disk('private')->delete($student->photo_path);
         }
@@ -198,18 +178,9 @@ class StudentController extends Controller
         return response()->json(new StudentResource($student->fresh()));
     }
 
-    public function updateStatus(Request $request, Student $student): JsonResponse
+    public function updateStatus(UpdateStudentStatusRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'enrollment_status' => ['required', Rule::enum(EnrollmentStatus::class)],
-            'reason' => [
-                Rule::when(
-                    EnrollmentStatus::from($request->enrollment_status)->requiresReason(),
-                    ['required', 'string', 'max:500'],
-                    ['nullable'],
-                ),
-            ],
-        ]);
+        $validated = $request->validated();
 
         $oldStatus = $student->enrollment_status->value;
 
@@ -228,11 +199,9 @@ class StudentController extends Controller
         return response()->json(new StudentResource($student->fresh()));
     }
 
-    public function orders(Request $request, Student $student): JsonResponse
+    public function orders(ListStudentOrdersRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $orders = $student->orders()
             ->with('items')
@@ -245,11 +214,9 @@ class StudentController extends Controller
         ]);
     }
 
-    public function updateType(Request $request, Student $student): JsonResponse
+    public function updateType(UpdateStudentTypeRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'student_type' => ['required', Rule::enum(StudentType::class)],
-        ]);
+        $validated = $request->validated();
 
         abort_if(
             $student->student_type === StudentType::Subscription

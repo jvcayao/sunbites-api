@@ -181,8 +181,8 @@
     - Tests: fixtures unchanged; `StudentLedgerTest` unchanged; plus a portal precedence test: an unlinked parent with `per_page=999` gets 403, not 422.
     - _Requirements: 3.1, 3.4_
 
-- [ ] 5. Students, enrollment, payments, contacts *(design §4.3.6, §4.2.1–4.2.3; hazards H3, H4, H8, H13)*
-  - [ ] 5.1 Create `EnrollStudentRequest` and `EnrollStudentAction`
+- [x] 5. Students, enrollment, payments, contacts *(design §4.3.6, §4.2.1–4.2.3; hazards H3, H4, H8, H13)*
+  - [x] 5.1 Create `EnrollStudentRequest` and `EnrollStudentAction`
     - End-before-start goes in `passedValidation()` as an errors-only `HttpResponseException`.
     - Tests: `tests/Feature/Kitchen/EnrollStudentActionTest.php` covers:
       - contacts `is_primary` by index
@@ -193,11 +193,11 @@
     - Plus (H16) enrolling a subscription student from June to March creates exactly 10 monthly payments and the request returns, which guards against an immutable-date infinite loop.
     - `EnrollmentTest` is unchanged.
     - _Requirements: 2.1, 3.1, 3.2_
-  - [ ] 5.2 `StudentController` requests
+  - [x] 5.2 `StudentController` requests
     - Create `ListStudentsRequest` (permissive, §4.2.3), `UpdateStudentRequest`, `UpdateStudentStatusRequest` (copy `from()` as is, H-note), `UpdateStudentTypeRequest`, `UploadStudentPhotoRequest` and `ListStudentOrdersRequest`.
     - Tests: fixtures unchanged, plus a test that `GET /students?deleted=1&type=all&month=june&year=abc` still returns 200 (permissive rules).
     - _Requirements: 3.1, 3.6_
-  - [ ] 5.3 `PaymentController` requests
+  - [x] 5.3 `PaymentController` requests
     - Create `RecordPaymentRequest`, `AddPaymentRangeRequest` (errors-only in `passedValidation()`), `UpdatePaymentAmountRequest` and `VoidPaymentRequest` with the `prepareForValidation()` guards in design §4.2.2, in the same order.
     - Tests, precedence:
       - `updateAmount` on a paid payment with a non-numeric amount → 422 `"Can only edit amount on unpaid payments."`
@@ -206,7 +206,7 @@
     - (H16) `addRange` June→March creates the expected rows and returns.
     - `PaymentControllerTest`, `VoidPaymentTest` and `PaymentRangeTest` unchanged.
     - _Requirements: 3.3_
-  - [ ] 5.4 `StudentContactController` requests
+  - [x] 5.4 `StudentContactController` requests
     - Create `StoreStudentContactRequest` and `UpdateStudentContactRequest` (404 guard in `prepareForValidation()`).
     - Tests, precedence: updating another student's contact with invalid email → 404 `"Contact does not belong to this student."`. `StudentContactTest` unchanged.
     - _Requirements: 3.3_
