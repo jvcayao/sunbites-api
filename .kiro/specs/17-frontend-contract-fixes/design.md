@@ -112,7 +112,7 @@ Model it on `app/(kitchen)/reports/credits/page.test.tsx`: the same `next/naviga
 - The updated assertion fails on the current code (`+PHP 1500.00`), which proves the fix.
 - Leave the other tests in the file unchanged. They exercise filters, not amounts.
 
-## 3. F-3: Clear the POS cart on a branch switch (`~/sunbites-pos`) *(proposed 2026-10-17, awaiting approval)*
+## 3. F-3: Clear the POS cart on a branch switch (`~/sunbites-pos`) *(approved 2026-10-17)*
 
 ### 3.1 What goes wrong
 

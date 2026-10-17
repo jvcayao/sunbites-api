@@ -29,7 +29,7 @@
   - [ ] 2.3 Run all three verification commands. Commit `fix(wallet): F-2 format wallet amounts with separators`.
   - _Requirements: 2.1–2.4, 3.1–3.4_
 
-- [ ] 3. F-3: Clear the POS cart on a branch switch *(PROPOSED, awaiting user approval; do not implement)* *(design §3; Req 4, 3)*
+- [ ] 3. F-3: Clear the POS cart on a branch switch *(approved 2026-10-17)* *(design §3; Req 4, 3)*
   - Repo `~/sunbites-pos`, branch `fix/spec17-clear-cart-on-branch-switch`.
   - [ ] 3.1 Extend `components/branch-cache-sync.test.tsx` (design §3.3). Confirm the two clearing tests fail on the current code.
   - [ ] 3.2 Apply the design §3.2 edit to `components/branch-cache-sync.tsx`.
@@ -43,4 +43,4 @@
 | 1.1–1.7 | 1.1–1.3 |
 | 2.1–2.4 | 2.1–2.3 |
 | 3.1–3.4 | 1.1, 1.3, 2.1, 2.3, 3.1, 3.3 |
-| 4.1–4.3 | 3.1–3.3 (proposed) |
+| 4.1–4.3 | 3.1–3.3 |

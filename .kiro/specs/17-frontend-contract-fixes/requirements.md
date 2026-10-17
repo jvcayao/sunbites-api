@@ -8,9 +8,9 @@ Spec 16's contract freeze (task T-1) compared every API response with the TypeSc
 |---|---|---|
 | F-1 | POS (`~/sunbites-pos`) | Reports → Inventory: the Stock Snapshot table is always empty, and once it has rows, the status filter, badges and colours never match. In History, the type filter and the paging are ignored, because the page sends the wrong parameter names |
 | F-2 | Portal (`~/sunbites-portal`) | Student → Wallet tab: amounts of ₱1,000 or more show without the thousands separator (`PHP 1500.00`) |
-| F-3 *(proposed 2026-10-17, awaiting approval)* | POS (`~/sunbites-pos`) | The cart and selected student survive a branch switch, so checkout sends the previous branch's items (500 today; 422 after Spec 16 B-24) |
+| F-3 *(approved 2026-10-17)* | POS (`~/sunbites-pos`) | The cart and selected student survive a branch switch, so checkout sends the previous branch's items (500 today; 422 after Spec 16 B-24) |
 
-The other T-1 findings are handled in Spec 16 as backend fixes: B-20 (menu item delete), B-21 (portal dashboard credit badge) and the proposed B-22 (pre-registration birthday). B-22 needs no frontend change.
+The other T-1 findings are handled in Spec 16 as backend fixes: B-20 (menu item delete), B-21 (portal dashboard credit badge), B-22 (pre-registration birthday) and B-24 (checkout with another branch's items). None of them needs a frontend change.
 
 **Depends on:** nothing. Both fixes match the API as it is today, and Spec 16 Track A guarantees those responses do not change. The fixes can ship before, during or after Spec 16.
 
@@ -43,7 +43,7 @@ The other T-1 findings are handled in Spec 16 as backend fixes: B-20 (menu item 
 3. A positive amount SHALL keep the `+` prefix and the green style. A negative amount SHALL keep the red style and show the minus sign (`PHP -150.00`), exactly as intended today.
 4. `formatPHP` SHALL NOT change. Its other callers already receive numbers (verified against the T-1 fixtures).
 
-### Requirement 4: POS cart is cleared when the branch changes (F-3) *(proposed 2026-10-17, awaiting approval)*
+### Requirement 4: POS cart is cleared when the branch changes (F-3) *(approved 2026-10-17)*
 
 **User Story:** As a manager who works in more than one branch, I want the POS cart to empty when I switch branch, so that I never check out another branch's items or student.
 
