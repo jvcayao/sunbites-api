@@ -440,7 +440,7 @@ Directory: `app/Http/Requests/Kitchen/` unless noted. "=" means copy the rules v
 |---|---|---|
 | `StudentController::index` | `deleted`, `search`, `grade`, `status`, `type`, `month`, `payment_status`, `year` → each `['nullable']` | `$v = $request->validated();` then `$v['deleted'] ?? null` etc. Keep truthiness checks exactly (`if ($v['deleted'] ?? null)`, `($v['type'] ?? null) && ($v['type'] ?? null) !== 'all'`) |
 | `UserManagementController::index` | `search`, `role`, `status` → `['nullable']` | same pattern |
-| `Kitchen\MealPlannerController::show` | `month`, `week` → `['nullable']` | `$v['month'] ?? SchoolMonth::June->value`, `(int) ($v['week'] ?? 1)` |
+| `Kitchen\MealPlannerController::show` | `month`, `week` → `['nullable']` | `$request->input('month', SchoolMonth::June->value)`, `(int) $request->input('week', 1)`, unchanged, as §4.2.1 says. *(Corrected 2026-10-17 during T-7: `??` would turn an empty value into `'june'`/`1`, while `input()` returns `null`/`0` today.)* |
 | `BranchMonthlyAmountController::index` | `year` → `['nullable']` | `$request->integer('year') ?: now()->year` (unchanged) |
 | `ReminderController::eligibleParents` | `page` → `['nullable']` | `$request->integer('page', 1)` (unchanged) |
 
