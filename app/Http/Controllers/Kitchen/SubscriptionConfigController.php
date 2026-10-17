@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\UpdateSubscriptionConfigRequest;
 use App\Models\BranchSubscriptionConfig;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class SubscriptionConfigController extends Controller
 {
@@ -24,14 +24,9 @@ class SubscriptionConfigController extends Controller
         return response()->json($this->formatConfig($config));
     }
 
-    public function update(Request $request): JsonResponse
+    public function update(UpdateSubscriptionConfigRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'meal_daily_limit' => ['required', 'integer', 'min:0', 'max:10'],
-            'snack_daily_limit' => ['required', 'integer', 'min:0', 'max:10'],
-            'drink_daily_limit' => ['required', 'integer', 'min:0', 'max:10'],
-            'extra_daily_limit' => ['required', 'integer', 'min:0', 'max:10'],
-        ]);
+        $validated = $request->validated();
 
         $config = BranchSubscriptionConfig::forBranch(app('active_branch')->id);
         $config->update($validated);

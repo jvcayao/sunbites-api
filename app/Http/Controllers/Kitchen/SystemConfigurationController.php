@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\UpdateSystemConfigurationRequest;
 use App\Models\SystemConfiguration;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class SystemConfigurationController extends Controller
 {
@@ -14,17 +14,11 @@ class SystemConfigurationController extends Controller
         return response()->json(SystemConfiguration::orderBy('key')->get());
     }
 
-    public function update(Request $request, string $key): JsonResponse
+    public function update(UpdateSystemConfigurationRequest $request, string $key): JsonResponse
     {
-        $config = SystemConfiguration::where('key', $key)->firstOrFail();
+        $config = $request->configuration();
 
-        $rules = match ($config->type) {
-            'integer' => ['value' => ['required', 'integer', 'min:0']],
-            'decimal' => ['value' => ['required', 'numeric', 'min:0']],
-            default => ['value' => ['required', 'string', 'max:255']],
-        };
-
-        $validated = $request->validate($rules);
+        $validated = $request->validated();
         $config->update(['value' => (string) $validated['value']]);
 
         return response()->json($config);

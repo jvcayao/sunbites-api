@@ -211,16 +211,16 @@
     - Tests, precedence: updating another student's contact with invalid email → 404 `"Contact does not belong to this student."`. `StudentContactTest` unchanged.
     - _Requirements: 3.3_
 
-- [ ] 6. Staff, branches, configuration *(design §4.2.1; hazard H7)*
-  - [ ] 6.1 Kitchen auth requests
+- [x] 6. Staff, branches, configuration *(design §4.2.1; hazard H7)*
+  - [x] 6.1 Kitchen auth requests
     - Create `StaffLoginRequest`, `SendStaffResetLinkRequest`, `ResetStaffPasswordRequest` (keep `$request->only(...)`, H7) and `SwitchBranchRequest`.
     - Tests: fixtures unchanged; `StaffAuthTest`/`AuthTest` unchanged; plus a test that password reset still succeeds, which proves `password_confirmation` reaches the broker.
     - _Requirements: 3.1, 3.7_
-  - [ ] 6.2 User management requests
+  - [x] 6.2 User management requests
     - Create `ListStaffUsersRequest` (permissive), `StoreStaffUserRequest`/`UpdateStaffUserRequest` sharing the `App\Http\Requests\Kitchen\Concerns\StaffUserRules` trait, `UploadUserPhotoRequest` and `AssignUserBranchRequest`.
     - Tests: fixtures unchanged; `UserManagementTest` unchanged; precedence: a manager uploading a photo for a user the policy denies with no file → 403.
     - _Requirements: 3.1, 3.4, 3.6_
-  - [ ] 6.3 Branch and configuration requests
+  - [x] 6.3 Branch and configuration requests
     - Create `UpdateBranchRequest`, `UpdateSystemConfigurationRequest` (memoised `configuration()`, 404 before 422), `UpdateSubscriptionConfigRequest`, and `ListBranchMonthlyAmountsRequest`/`StoreBranchMonthlyAmountRequest`/`UpdateBranchMonthlyAmountRequest`.
     - Tests: fixtures unchanged, plus `PUT /system-configurations/unknown_key` with an empty body → 404 `{"message":"Not found."}`.
     - _Requirements: 3.1, 3.3_

@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ResetStaffPasswordRequest;
+use App\Http\Requests\Kitchen\SendStaffResetLinkRequest;
+use App\Http\Requests\Kitchen\StaffLoginRequest;
+use App\Http\Requests\Kitchen\SwitchBranchRequest;
 use App\Mail\StaffResetPasswordMail;
 use App\Models\Branch;
 use App\Models\User;
@@ -14,16 +18,11 @@ use Illuminate\Support\Facades\Password;
 
 class AuthController extends Controller
 {
-    public function login(Request $request): JsonResponse
+    public function login(StaffLoginRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string'],
-        ]);
+        $user = User::where('email', $request->validated('email'))->first();
 
-        $user = User::where('email', $request->email)->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password) || ! $user->is_active) {
+        if (! $user || ! Hash::check($request->validated('password'), $user->password) || ! $user->is_active) {
             return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
@@ -73,10 +72,8 @@ class AuthController extends Controller
         ]);
     }
 
-    public function sendResetEmail(Request $request): JsonResponse
+    public function sendResetEmail(SendStaffResetLinkRequest $request): JsonResponse
     {
-        $request->validate(['email' => ['required', 'email']]);
-
         $user = User::where('email', $request->email)->first();
 
         if ($user && $user->is_active) {
@@ -91,12 +88,9 @@ class AuthController extends Controller
         return response()->json(['message' => 'If an account with this email exists, you will receive an email shortly.']);
     }
 
-    public function setBranch(Request $request): JsonResponse
+    public function setBranch(SwitchBranchRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'branch_id' => ['required', 'integer', 'exists:branches,id'],
-            'from_branch_id' => ['nullable', 'integer', 'exists:branches,id'],
-        ]);
+        $validated = $request->validated();
 
         $user = $request->user();
         $branch = Branch::find($validated['branch_id']);
@@ -117,14 +111,8 @@ class AuthController extends Controller
         return response()->json(['id' => $branch->id, 'name' => $branch->name, 'slug' => $branch->slug]);
     }
 
-    public function resetPassword(Request $request): JsonResponse
+    public function resetPassword(ResetStaffPasswordRequest $request): JsonResponse
     {
-        $request->validate([
-            'token' => ['required'],
-            'email' => ['required', 'email'],
-            'password' => ['required', \Illuminate\Validation\Rules\Password::defaults(), 'confirmed'],
-        ]);
-
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password) {

@@ -4,15 +4,16 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListBranchMonthlyAmountsRequest;
+use App\Http\Requests\Kitchen\StoreBranchMonthlyAmountRequest;
+use App\Http\Requests\Kitchen\UpdateBranchMonthlyAmountRequest;
 use App\Models\BranchMonthlyAmount;
 use App\Models\SystemConfiguration;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class BranchMonthlyAmountController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListBranchMonthlyAmountsRequest $request): JsonResponse
     {
         $year = $request->integer('year') ?: now()->year;
         $branchId = app('active_branch')->id;
@@ -38,14 +39,9 @@ class BranchMonthlyAmountController extends Controller
         return response()->json($months);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreBranchMonthlyAmountRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'school_month' => ['required', Rule::enum(SchoolMonth::class)],
-            'year' => ['required', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-            'days' => ['required', 'integer', 'min:0', 'max:31'],
-            'amount' => ['nullable', 'numeric', 'min:0', Rule::prohibitedIf($request->integer('days') === 0)],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $amount = isset($validated['amount'])
@@ -67,12 +63,9 @@ class BranchMonthlyAmountController extends Controller
         return response()->json($record, $record->wasRecentlyCreated ? 201 : 200);
     }
 
-    public function update(Request $request, BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
+    public function update(UpdateBranchMonthlyAmountRequest $request, BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
     {
-        $validated = $request->validate([
-            'days' => ['required', 'integer', 'min:0', 'max:31'],
-            'amount' => ['nullable', 'numeric', 'min:0', Rule::prohibitedIf($request->integer('days') === 0)],
-        ]);
+        $validated = $request->validated();
 
         $amount = isset($validated['amount'])
             ? (float) $validated['amount']
