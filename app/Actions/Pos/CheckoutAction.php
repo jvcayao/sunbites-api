@@ -51,6 +51,12 @@ class CheckoutAction
         $menuItemIds = collect($input['items'])->pluck('pos_menu_item_id')->unique()->values();
         $menuItems = PosMenuItem::with('inventoryItems')->findMany($menuItemIds)->keyBy('id');
 
+        if ($menuItems->count() !== $menuItemIds->count()) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'One or more items are not available in this branch. Clear the cart and add them again.',
+            ], 422));
+        }
+
         // Pre-checkout: ensure every cart item has at least one inventory mapping
         foreach ($input['items'] as $cartItem) {
             /** @var PosMenuItem $menuItem */

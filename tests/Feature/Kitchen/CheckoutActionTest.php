@@ -68,6 +68,24 @@ class CheckoutActionTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
+    /**
+     * Validation checks the id exists in any branch; the menu load only finds the active branch (B-24).
+     */
+    public function test_menu_item_from_another_branch_returns_422_with_its_message(): void
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $otherBranchItem = PosMenuItem::factory()->create(['branch_id' => $otherBranch->id]);
+        $this->mapToInventory($otherBranchItem, InventoryItem::factory()->create(['branch_id' => $otherBranch->id, 'quantity' => 50]));
+
+        $response = $this->asStaff($this->cashier)->postJson('/api/v1/pos/checkout', $this->cart(['payment_method' => 'cash', 'amount_tendered' => 500], $otherBranchItem));
+
+        $response->assertUnprocessable()->assertExactJson([
+            'message' => 'One or more items are not available in this branch. Clear the cart and add them again.',
+        ]);
+        $this->assertDatabaseCount('orders', 0);
+        $this->assertDatabaseCount('inventory_logs', 0);
+    }
+
     public function test_item_without_inventory_mapping_returns_422_with_its_message(): void
     {
         $unmapped = PosMenuItem::factory()->create(['branch_id' => $this->branch->id]);

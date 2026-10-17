@@ -58,6 +58,17 @@ class CheckoutContractTest extends ContractTestCase
         $this->assertContract($response, self::ROUTE, '422-walk-in-subscription');
     }
 
+    public function test_checkout_of_an_other_branch_item_matches_contract(): void
+    {
+        $response = $this->asCashier()->postJson('/api/v1/pos/checkout', [
+            'items' => [['pos_menu_item_id' => $this->scenario->branchBMenuItem->id, 'quantity' => 1]],
+            'payment_method' => 'cash',
+            'amount_tendered' => 200,
+        ]);
+
+        $this->assertContract($response, self::ROUTE, '422-other-branch-item');
+    }
+
     public function test_checkout_of_an_unmapped_item_matches_contract(): void
     {
         $unmapped = PosMenuItem::factory()->create([
