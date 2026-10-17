@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\InventoryLogType;
 use App\Exports\InventoryReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\InventoryLogResource;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
 use Illuminate\Http\JsonResponse;
@@ -36,12 +37,8 @@ class InventoryReportController extends Controller
         $belowThreshold = $items->filter(fn ($item) => $item->quantity > 0 && $item->quantity <= $item->restock_threshold)->count();
         $overStock = $items->filter(fn ($item) => $item->overstock_threshold !== null && (float) $item->quantity > (float) $item->overstock_threshold)->count();
 
-        $logQuery = InventoryLog::query()
-            ->join('inventory_items', 'inventory_logs.inventory_item_id', '=', 'inventory_items.id')
-            ->where('inventory_items.branch_id', $branchId)
-            ->where('inventory_items.is_archived', false)
+        $logQuery = InventoryLog::forActiveItemsInBranch($branchId)
             ->with('adjustedBy:id,first_name,last_name')
-            ->select('inventory_logs.*')
             ->latest('inventory_logs.created_at');
 
         if (! empty($validated['from'])) {
@@ -83,18 +80,7 @@ class InventoryReportController extends Controller
                 'updated_at' => $item->updated_at?->toDateTimeString(),
             ]),
             'logs' => [
-                'data' => collect($paginatedLogs->items())->map(fn (InventoryLog $log) => [
-                    'id' => $log->id,
-                    'item_name_snapshot' => $log->item_name_snapshot,
-                    'type' => $log->type->value,
-                    'type_label' => $log->type->label(),
-                    'quantity_change' => $log->quantity_change,
-                    'stock_after' => $log->stock_after,
-                    'reason' => $log->reason,
-                    'adjusted_by' => $log->adjustedBy?->full_name,
-                    'order_id' => $log->order_id,
-                    'created_at' => $log->created_at,
-                ]),
+                'data' => InventoryLogResource::collection($paginatedLogs->items()),
                 'meta' => [
                     'current_page' => $paginatedLogs->currentPage(),
                     'last_page' => $paginatedLogs->lastPage(),
@@ -121,12 +107,8 @@ class InventoryReportController extends Controller
             ->orderBy('name')
             ->get();
 
-        $logQuery = InventoryLog::query()
-            ->join('inventory_items', 'inventory_logs.inventory_item_id', '=', 'inventory_items.id')
-            ->where('inventory_items.branch_id', $branchId)
-            ->where('inventory_items.is_archived', false)
+        $logQuery = InventoryLog::forActiveItemsInBranch($branchId)
             ->with('adjustedBy:id,first_name,last_name')
-            ->select('inventory_logs.*')
             ->latest('inventory_logs.created_at');
 
         if (! empty($validated['from'])) {

@@ -225,21 +225,21 @@
     - Tests: fixtures unchanged, plus `PUT /system-configurations/unknown_key` with an empty body → 404 `{"message":"Not found."}`.
     - _Requirements: 3.1, 3.3_
 
-- [ ] 7. Inventory, menu, meal planner *(design §4.3.1, §4.4, §4.6; hazards H5, H6)*
-  - [ ] 7.1 Inventory controller
+- [x] 7. Inventory, menu, meal planner *(design §4.3.1, §4.4, §4.6; hazards H5, H6)*
+  - [x] 7.1 Inventory controller
     - `InventoryController` uses `InventoryStockService::adjust()`/`recordInitialStock()`. Create `StoreInventoryItemRequest`, `UpdateInventoryItemRequest`, `AdjustInventoryRequest` and `ListInventoryHistoryRequest`.
     - Tests: fixtures unchanged; `InventoryTest` unchanged; the activity rows for adjust are identical in count and description (assert against the `activity_log` table).
     - _Requirements: 2.3, 3.1_
-  - [ ] 7.2 Inventory resources and shared scope
+  - [x] 7.2 Inventory resources and shared scope
     - Create `InventoryItemResource` and `InventoryLogResource` replacing `formatItem`/`formatLog` and the report's log map.
     - Add the `InventoryLog::forActiveItemsInBranch` `#[Scope]` (design §4.6), used in 3 places. Do not change `buildDiscrepancySection`.
     - Tests: fixtures unchanged; `InventoryReportTest` unchanged.
     - _Requirements: 5.1, 7.5_
-  - [ ] 7.3 Menu item and ingredient resources
+  - [x] 7.3 Menu item and ingredient resources
     - Create `PosMenuItemResource` (with `resolveInventoryStatus`), `SavePosMenuItemRequest`, `InventoryIngredientResource` and `AttachIngredientRequest`.
     - Tests: fixtures unchanged; `PosMenuItemTest` and `InventoryIngredientTest` unchanged.
     - _Requirements: 3.1, 5.1_
-  - [ ] 7.4 Meal planner requests
+  - [x] 7.4 Meal planner requests
     - Create `ShowMealPlanRequest` (permissive), `UpdateMealPlanRequest`, `ResetMealPlanWeekRequest` and `UpdateMealPlanWeekVisibilityRequest`.
     - Tests: fixtures unchanged; `MealPlannerTest` unchanged.
     - _Requirements: 3.1, 3.6_

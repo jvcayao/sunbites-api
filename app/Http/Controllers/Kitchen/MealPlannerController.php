@@ -5,18 +5,20 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\DayOfWeek;
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ResetMealPlanWeekRequest;
+use App\Http\Requests\Kitchen\ShowMealPlanRequest;
+use App\Http\Requests\Kitchen\UpdateMealPlanRequest;
+use App\Http\Requests\Kitchen\UpdateMealPlanWeekVisibilityRequest;
 use App\Models\MealPlannerWeekVisibility;
 use App\Models\WeeklyMealPlan;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rules\Enum;
 
 class MealPlannerController extends Controller
 {
     /**
      * @var array<string, array{ulam: string, vegetables: string, fruit: string, soup: string, snacks: string}>
      */
-    private const DEFAULT_WEEK = [
+    private const array DEFAULT_WEEK = [
         'monday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
         'tuesday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
         'wednesday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
@@ -24,7 +26,7 @@ class MealPlannerController extends Controller
         'friday' => ['ulam' => '', 'vegetables' => '', 'fruit' => '', 'soup' => '', 'snacks' => ''],
     ];
 
-    public function show(Request $request): JsonResponse
+    public function show(ShowMealPlanRequest $request): JsonResponse
     {
         $month = $request->input('month', SchoolMonth::June->value);
         $week = (int) $request->input('week', 1);
@@ -54,19 +56,9 @@ class MealPlannerController extends Controller
         ]);
     }
 
-    public function update(Request $request): JsonResponse
+    public function update(UpdateMealPlanRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['required', new Enum(SchoolMonth::class)],
-            'week' => ['required', 'integer', 'min:1', 'max:4'],
-            'rows' => ['required', 'array', 'size:5'],
-            'rows.*.day' => ['required', new Enum(DayOfWeek::class)],
-            'rows.*.ulam' => ['nullable', 'string', 'max:255'],
-            'rows.*.vegetables' => ['nullable', 'string', 'max:255'],
-            'rows.*.fruit' => ['nullable', 'string', 'max:255'],
-            'rows.*.soup' => ['nullable', 'string', 'max:255'],
-            'rows.*.snacks' => ['nullable', 'string', 'max:255'],
-        ]);
+        $validated = $request->validated();
 
         if (! app()->bound('active_branch')) {
             return response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422);
@@ -91,12 +83,9 @@ class MealPlannerController extends Controller
         return response()->json(['message' => "Week {$validated['week']} of {$monthLabel} menu saved."]);
     }
 
-    public function reset(Request $request): JsonResponse
+    public function reset(ResetMealPlanWeekRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['required', new Enum(SchoolMonth::class)],
-            'week' => ['required', 'integer', 'min:1', 'max:4'],
-        ]);
+        $validated = $request->validated();
 
         if (! app()->bound('active_branch')) {
             return response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422);
@@ -119,13 +108,9 @@ class MealPlannerController extends Controller
         return response()->json(['message' => 'Week reset to default pattern.']);
     }
 
-    public function updateWeekVisibility(Request $request): JsonResponse
+    public function updateWeekVisibility(UpdateMealPlanWeekVisibilityRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['required', new Enum(SchoolMonth::class)],
-            'week' => ['required', 'integer', 'min:1', 'max:4'],
-            'visible_to_parents' => ['required', 'boolean'],
-        ]);
+        $validated = $request->validated();
 
         if (! app()->bound('active_branch')) {
             return response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422);

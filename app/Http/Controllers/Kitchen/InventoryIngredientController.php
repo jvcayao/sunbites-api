@@ -3,10 +3,11 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\AttachIngredientRequest;
+use App\Http\Resources\InventoryIngredientResource;
 use App\Models\InventoryItem;
 use App\Models\PosMenuItem;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class InventoryIngredientController extends Controller
 {
@@ -14,20 +15,12 @@ class InventoryIngredientController extends Controller
     {
         $ingredients = $item->inventoryItems()->get();
 
-        return response()->json($ingredients->map(fn (InventoryItem $invItem) => [
-            'inventory_item_id' => $invItem->id,
-            'name' => $invItem->name,
-            'unit' => $invItem->unit,
-            'quantity_used' => $invItem->pivot->quantity_used,
-        ]));
+        return response()->json(InventoryIngredientResource::collection($ingredients));
     }
 
-    public function attach(Request $request, PosMenuItem $item): JsonResponse
+    public function attach(AttachIngredientRequest $request, PosMenuItem $item): JsonResponse
     {
-        $validated = $request->validate([
-            'inventory_item_id' => ['required', 'integer', 'exists:inventory_items,id'],
-            'quantity_used' => ['required', 'numeric', 'min:0.01', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
 
@@ -42,15 +35,7 @@ class InventoryIngredientController extends Controller
 
         $updatedIngredients = $item->inventoryItems()->get();
 
-        return response()->json(
-            $updatedIngredients->map(fn (InventoryItem $invItem) => [
-                'inventory_item_id' => $invItem->id,
-                'name' => $invItem->name,
-                'unit' => $invItem->unit,
-                'quantity_used' => $invItem->pivot->quantity_used,
-            ]),
-            201
-        );
+        return response()->json(InventoryIngredientResource::collection($updatedIngredients), 201);
     }
 
     public function detach(PosMenuItem $item, InventoryItem $inventoryItem): JsonResponse

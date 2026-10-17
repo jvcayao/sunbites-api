@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Enums\InventoryLogType;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -47,5 +49,20 @@ class InventoryLog extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    /**
+     * Logs of the branch's items that are not archived. `InventoryLog` has no branch scope of
+     * its own, so the branch comes from the joined item.
+     *
+     * @param  Builder<InventoryLog>  $query
+     */
+    #[Scope]
+    protected function forActiveItemsInBranch(Builder $query, int $branchId): void
+    {
+        $query->join('inventory_items', 'inventory_logs.inventory_item_id', '=', 'inventory_items.id')
+            ->where('inventory_items.branch_id', $branchId)
+            ->where('inventory_items.is_archived', false)
+            ->select('inventory_logs.*');
     }
 }
