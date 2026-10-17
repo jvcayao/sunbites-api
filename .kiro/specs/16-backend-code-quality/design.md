@@ -24,8 +24,7 @@ The refactor has two tracks:
 | Track B | B-17, B-18 (cross-branch monthly amounts and feedback, found during T-1) | **Approved** 2026-10-12 |
 | Track B | B-19 (inventory export crash after the `maatwebsite/excel` update, found during T-1) | **Approved** 2026-10-12 |
 | Track B | B-20 (sold menu item delete 500), B-21 (portal dashboard credit badge), both found during T-1 | **Approved** 2026-10-17 |
-| Track B | B-22 (pre-registration birthday shifted one day per save) | Proposed 2026-10-17, awaiting approval |
-| Track B | B-23 (make the 403/404 bodies in `bootstrap/app.php` effective; found during T-2) | Proposed 2026-10-17, awaiting approval |
+| Track B | B-22 (pre-registration birthday shifted one day per save), B-23 (make the 403/404 bodies in `bootstrap/app.php` effective; found during T-2) | **Approved** 2026-10-17 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.35.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09 after `composer update`)
@@ -1092,7 +1091,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **Fixtures:** `get__api_v1_portal_dashboard@ok.json` gains `"credit_balance": "number"` in `students[]`.
 - **FE impact:** positive, with no FE change. The badge appears for students who owe credit. §13.3 smoke test: the portal dashboard for a parent whose student owes credit.
 
-### 5.20 B-22 *(proposed 2026-10-17, awaiting approval; do not implement until approved)*: Pre-registration birthday shown blank, and moved back one day on every save
+### 5.20 B-22 *(approved 2026-10-17)*: Pre-registration birthday shown blank, and moved back one day on every save
 
 - **Defect:**
   - `PreRegistration` casts `birthday` as `date` (L50). `Kitchen\PreRegistrationController::show` and `update` return `$preRegistration->toArray()`, which serialises the date as a UTC timestamp.
@@ -1115,8 +1114,9 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - **Round trip:** PATCH with the `birthday` value from `show` plus a changed `first_name`, and the stored birthday stays `2016-02-14` (`$preRegistration->fresh()->birthday->toDateString()`).
   - Before the fix, both fail: the first gets `2016-02-13T16:00:00.000000Z`, and the second stores `2016-02-13`.
 - **FE impact:** positive, with no FE change. The POS date input shows the birthday, and saving keeps it. The POS has no other use of a pre-registration birthday.
+- **Later tasks:** T-12 (the `PreRegistration` accessor) and T-16 (model attributes) must keep `'birthday' => 'date:Y-m-d'`. The B-22 fixtures (`string`, not `string:iso8601_micro`) catch a revert.
 
-### 5.21 B-23 *(proposed 2026-10-17, awaiting approval; do not implement until approved)*: Make the API's 403/404 bodies match `bootstrap/app.php`
+### 5.21 B-23 *(approved 2026-10-17)*: Make the API's 403/404 bodies match `bootstrap/app.php`
 
 - **Defect** (found by the implementer during T-2, verified by the spec owner in the framework source):
   - `bootstrap/app.php` L55-61 intends 403 `{"message":"Forbidden."}` for `AuthorizationException` and 404 `{"message":"Not found."}` for `ModelNotFoundException`. **Neither branch ever runs.**
@@ -1168,7 +1168,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (39 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (41 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD
