@@ -124,8 +124,8 @@
     - Tests: `tests/Unit/PolicyResolutionTest.php` (extends `Tests\TestCase`; needs Gate) asserts `Gate::getPolicyFor(Order::class)` is an `OrderPolicy` (likewise `User` and `Student`); the suite and fixtures are unchanged.
     - _Requirements: 4.5_
 
-- [ ] 3. POS domain: checkout, void, stock *(design §4.3.1–4.3.3, §4.2.1/4.2.2 rows for CheckoutController and TransactionController; hazards H1, H3, H5, H10)*
-  - [ ] 3.1 Create `InventoryStockService`
+- [x] 3. POS domain: checkout, void, stock *(design §4.3.1–4.3.3, §4.2.1/4.2.2 rows for CheckoutController and TransactionController; hazards H1, H3, H5, H10)*
+  - [x] 3.1 Create `InventoryStockService`
     - Create `app/Services/InventoryStockService.php` with the four methods and the exact write styles in design §4.3.1 (query builder for sale, Eloquent for restock and adjust).
     - Tests: `tests/Feature/Kitchen/InventoryStockServiceTest.php` covers:
       - sale deduction writes the stale-quantity value (reproduce H10: two cart lines sharing an item end at `start - 1`, not `start - 2`). This test is **deleted by B-03**, which is allowed there.
@@ -134,11 +134,11 @@
       - adjust add/deduct clamps at 0 and writes a log
       - initial stock writes an `'Initial stock'` log
     - _Requirements: 2.3_
-  - [ ] 3.2 Create `CheckoutRequest`
+  - [x] 3.2 Create `CheckoutRequest`
     - Create `app/Http/Requests/Kitchen/CheckoutRequest.php` with the 12 rules copied verbatim.
     - Tests: covered by fixtures (the `422-validation` variant); add one test sending `payment_method=bitcoin` and asserting the same `errors.payment_method` message as before the move.
     - _Requirements: 3.1, 3.2_
-  - [ ] 3.3 Create `CheckoutAction` and slim the controller
+  - [x] 3.3 Create `CheckoutAction` and slim the controller
     - Create `app/Actions/Pos/CheckoutAction.php` per design §4.3.2 (order of steps 1–10, every message verbatim; walk-in guards as `HttpResponseException`, others `abort`). Reduce `CheckoutController::store` to the 3-line body shown in the design.
     - Tests: include a cashier checkout **without** a discount that succeeds (proves the discount check stays conditional). `tests/Feature/Kitchen/CheckoutActionTest.php` has one test per guard message (walk-in wallet, walk-in subscription, unmapped item, out of stock, discount 403, not enrolled, non-subscription student, ineligible item, daily limit, insufficient balance, credit limit exceeded), plus:
       - loyalty points
@@ -146,7 +146,7 @@
       - `pos.order_created` and `pos.discount_applied` activity rows
     - All `PosCheckoutTest`, `PosInsufficientFundsTest`, `SubscriptionCheckoutTest` and `PosWalletLockTest` tests pass unchanged.
     - _Requirements: 2.1, 2.2, 2.5, 2.6_
-  - [ ] 3.4 Create `VoidOrderRequest` and `VoidOrderAction`
+  - [x] 3.4 Create `VoidOrderRequest` and `VoidOrderAction`
     - `app/Http/Requests/Kitchen/VoidOrderRequest.php` has the already-voided guard in `prepareForValidation()` (design §4.2.2) plus `void_reason` required|string|max:500.
     - `app/Actions/Pos/VoidOrderAction.php` per design §4.3.3. The controller method keeps `#[Authorize('void', 'order')]` from T-2.
     - Tests: `tests/Feature/Kitchen/VoidOrderActionTest.php` covers:
@@ -158,7 +158,7 @@
       - **precedence:** an already-voided order with a missing `void_reason` returns 422 `"Order is already voided."`, not a validation error
     - `PosVoidTest` and `CreditVoidReversalTest` pass unchanged.
     - _Requirements: 2.1, 2.5, 3.3_
-  - [ ] 3.5 Form Requests for the remaining POS endpoints
+  - [x] 3.5 Form Requests for the remaining POS endpoints
     - `ListTransactionsRequest`, `InlineReloadRequest` and `StudentLookupRequest` per the design §4.2.1 table.
     - Tests: fixtures unchanged.
     - _Requirements: 3.1_

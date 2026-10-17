@@ -6,19 +6,16 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\MenuCategory;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\StudentLookupRequest;
 use App\Models\BranchSubscriptionConfig;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class StudentLookupController extends Controller
 {
-    public function lookup(Request $request): JsonResponse
+    public function lookup(StudentLookupRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'type' => ['required', 'in:qr,search'],
-            'value' => ['required', 'string', 'max:255'],
-        ]);
+        $validated = $request->validated();
 
         return match ($validated['type']) {
             'qr' => $this->lookupByQr($validated['value']),
@@ -60,11 +57,7 @@ class StudentLookupController extends Controller
 
     private function lookupBySearch(string $query): JsonResponse
     {
-        $students = Student::where(function ($q) use ($query) {
-            $q->where('first_name', 'like', "%{$query}%")
-                ->orWhere('last_name', 'like', "%{$query}%")
-                ->orWhere('student_number', 'like', "%{$query}%");
-        })
+        $students = Student::whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$query}%")
             ->orderBy('last_name')
             ->limit(8)
             ->get();
