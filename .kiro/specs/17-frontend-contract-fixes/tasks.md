@@ -7,8 +7,9 @@
 - Follow `~/sunbites-api/.claude/rules/frontend/frontend-standards.md` and `.claude/rules/testing.md`. Load the `react-component-expert` guidance for component edits.
 - **Make exactly the edits in `design.md`.** If anything there does not match the code you find, STOP and report to the user. Do not improvise.
 - **Branches:**
-  - Before you start in a repo, run `git status --porcelain` and `git branch --show-current`. **If the working tree is not clean, STOP and ask the user.** On 2026-10-17 the POS was on `bump-latest-upgrade` with a modified `package-lock.json`. That is the user's work in progress: do not stash, commit, discard or carry it.
+  - Before you start in a repo, run `git status --porcelain` and `git branch --show-current`. **If the working tree is not clean, STOP and ask the user.** Never stash, commit, discard or carry the user's uncommitted work. *(2026-10-23: the POS lockfile refresh was committed by the user's decision as `fa7e677` on `bump-latest-upgrade-pos`, so the POS tree is clean.)*
   - Once the tree is clean: `git fetch origin && git switch -c <branch> origin/staging`.
+  - **Then run `npm ci`**, so `node_modules` matches that branch's `package-lock.json`. In the POS, the installed tree matches the refreshed lock on `bump-latest-upgrade-pos`, not `staging`'s. Tests must run against the lock the PR ships. When you finish in a repo, tell the user they need `npm ci` again after switching back to their own branch.
 - **Verification (each repo, all must pass):** `npm run type-check`, `npm run lint`, `npm test`.
 - **Commits:** one per fix, `type(scope): description` under 72 characters. **No `Co-Authored-By`, no "Generated with" line, no AI attribution of any kind.** Never push, open or merge a PR, amend, rebase or force anything. The user pushes and opens each PR to `staging`.
 - Stop after each task and report: the branch, the commit hash, the test output (passed/total), the files changed, and the smoke-test steps from design §4.
