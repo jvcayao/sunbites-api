@@ -849,8 +849,11 @@ GET/POST/PATCH/DELETE staff/notifications*
 
 - **Verified:** the POS `(auth)/branch/page.tsx` calls `GET /branches` and `POST /auth/branch` without a branch. `(kitchen)/layout.tsx` and `(pos)/layout.tsx` redirect to `/branch` when `activeBranch` is null, so every other call carries `X-Branch-Id` (`lib/api/client.ts:36`).
 - Remove the now-dead `if (! app()->bound('active_branch'))` blocks in `MealPlannerController` (3×). `FeedbackController::index`/`ParentController::index` `if (app()->bound(...))` become unconditional.
+- **Middleware order:** append `'branch.required'` **after** `auth:sanctum` and `ability:staff` in the group, so an unauthenticated request still gets 401, not 422. The role matrix 401 checks enforce this.
 - **Fixtures:** new `422-no-branch` variant on one representative route per controller.
-- **FE impact:** none if the verification above holds. **Deploy to staging and smoke-test login → branch select → dashboard before production.**
+- **Existing tests (pre-authorised named edits, decided 2026-10-23):** an existing test may fail only because one of its requests to a **non-allowlisted** kitchen route is sent without `X-Branch-Id`. In that case, add the header to that request, or to the file's existing request helper, with the test's existing branch. The assertions stay unchanged. List every such edit in the commit body.
+  - **STOP instead** if an existing test is *about* behaviour without a branch: for example, it expects 200 or data with no header, or it asserts the old `MealPlannerController` 422. Also STOP if an allowlisted route starts failing.
+- **FE impact:** none if the verification above holds. The POS client already handles this exact 422 (`lib/api/client.ts:51-53` checks `status === 422` and a message that includes "No active branch"). **Deploy to staging and smoke-test login → branch select → dashboard before production.**
 
 ### 5.3 B-03: Stock race
 
