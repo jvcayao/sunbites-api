@@ -501,7 +501,7 @@
   - Failing test first (`tests/Feature/Portal/DashboardCreditBalanceTest.php`): `credit_balance` is 37.5 for a student who owes, and 0 for one who does not.
   - Fixture: `get__api_v1_portal_dashboard@ok.json` gains `students[].credit_balance`.
   - _Requirements: 10.21_
-- [ ] B-22. *(approved 2026-10-17)* Pre-registration birthday *(design §5.20; HANDOFF §6, right after B-09)*
+- [x] B-22. *(approved 2026-10-17)* Pre-registration birthday *(design §5.20; HANDOFF §6, right after B-09)*
   - Failing test first (`tests/Feature/Kitchen/PreRegistrationBirthdayTest.php`, app timezone Asia/Manila): `show` returns `2016-02-14`, and a PATCH round trip keeps it.
   - Fixtures: the four pre-registration show/patch fixtures listed in design §5.20.
   - _Requirements: 10.22_

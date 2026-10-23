@@ -47,7 +47,7 @@ class PreRegistration extends Model
     {
         return [
             'status' => PreRegistrationStatus::class,
-            'birthday' => 'date',
+            'birthday' => 'date:Y-m-d',
             'acknowledged_at' => 'datetime',
             'processed_at' => 'datetime',
             'expires_at' => 'datetime',
