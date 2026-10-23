@@ -6,20 +6,16 @@ use App\Enums\DayOfWeek;
 use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ShowPortalMealPlanRequest;
 use App\Models\MealPlannerWeekVisibility;
 use App\Models\WeeklyMealPlan;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class MealPlannerController extends Controller
 {
-    public function show(Request $request): JsonResponse
+    public function show(ShowPortalMealPlanRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'branch_id' => ['nullable', 'integer', 'exists:branches,id'],
-            'month' => ['nullable', 'string'],
-            'week' => ['nullable', 'integer', 'min:1', 'max:4'],
-        ]);
+        $validated = $request->validated();
 
         $parent = $request->user();
 

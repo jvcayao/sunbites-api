@@ -196,4 +196,19 @@ class ProfileTest extends TestCase
             ->assertJsonPath('parent.profile_photo_url', fn ($v) => $v !== null)
             ->assertJsonMissingPath('parent.profile_photo_path');
     }
+
+    /**
+     * A wrong current password returns the errors-only 422 envelope, with no `message`
+     * (Spec 16 T-11.1, Req 1.3).
+     */
+    public function test_wrong_current_password_returns_the_errors_only_422_envelope(): void
+    {
+        $response = $this->asParent()->postJson('/api/v1/portal/profile/change-password', [
+            'current_password' => 'WrongPassword1!',
+            'password' => 'NewPassword2!',
+            'password_confirmation' => 'NewPassword2!',
+        ]);
+
+        $response->assertUnprocessable()->assertExactJson(['errors' => ['current_password' => ['Current password is incorrect.']]]);
+    }
 }

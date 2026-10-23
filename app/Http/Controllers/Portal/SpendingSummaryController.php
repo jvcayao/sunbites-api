@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Portal;
 
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ShowSpendingSummaryRequest;
 use App\Models\OrderItem;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +15,9 @@ use Illuminate\Support\Facades\DB;
 class SpendingSummaryController extends Controller
 {
     #[Authorize('view', 'student')]
-    public function show(Request $request, Student $student): JsonResponse
+    public function show(ShowSpendingSummaryRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'months' => ['nullable', 'integer', 'min:1', 'max:24'],
-        ]);
+        $validated = $request->validated();
 
         $months = $validated['months'] ?? 6;
 

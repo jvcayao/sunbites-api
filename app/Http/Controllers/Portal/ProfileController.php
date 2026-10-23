@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ChangeParentPasswordRequest;
+use App\Http\Requests\Portal\UpdateParentProfileRequest;
+use App\Http\Requests\Portal\UploadParentPhotoRequest;
 use App\Models\ParentUser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rules\Password;
 
 class ProfileController extends Controller
 {
@@ -17,14 +19,9 @@ class ProfileController extends Controller
         return response()->json($this->parentData($request->user()));
     }
 
-    public function update(Request $request): JsonResponse
+    public function update(UpdateParentProfileRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'first_name' => ['sometimes', 'string', 'max:100'],
-            'last_name' => ['sometimes', 'string', 'max:100'],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
-            'address' => ['sometimes', 'nullable', 'string', 'max:255'],
-        ]);
+        $validated = $request->validated();
 
         $parent = $request->user();
         $parent->update($validated);
@@ -32,12 +29,9 @@ class ProfileController extends Controller
         return response()->json($this->parentData($parent));
     }
 
-    public function changePassword(Request $request): JsonResponse
+    public function changePassword(ChangeParentPasswordRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'current_password' => ['required', 'string'],
-            'password' => ['required', 'string', Password::defaults(), 'confirmed'],
-        ]);
+        $validated = $request->validated();
 
         $parent = $request->user();
 
@@ -56,12 +50,8 @@ class ProfileController extends Controller
         return response()->json(['message' => 'Password changed successfully.']);
     }
 
-    public function uploadPhoto(Request $request): JsonResponse
+    public function uploadPhoto(UploadParentPhotoRequest $request): JsonResponse
     {
-        $request->validate([
-            'photo' => ['required', 'file', 'mimes:jpeg,png,webp', 'max:2048'],
-        ]);
-
         $parent = $request->user();
         $oldPath = $parent->profile_photo_path;
 

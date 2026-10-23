@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\UploadPortalStudentPhotoRequest;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,12 +22,8 @@ class StudentPhotoController extends Controller
     }
 
     #[Authorize('view', 'student')]
-    public function store(Request $request, Student $student): JsonResponse
+    public function store(UploadPortalStudentPhotoRequest $request, Student $student): JsonResponse
     {
-        $request->validate([
-            'photo' => ['required', 'file', 'mimes:jpeg,png,webp', 'max:5120'],
-        ]);
-
         $oldPath = $student->photo_path;
 
         $path = $request->file('photo')->store('photos/students', 'private');

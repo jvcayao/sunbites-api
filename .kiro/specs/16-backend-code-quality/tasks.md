@@ -306,16 +306,16 @@
     - Tests: fixtures unchanged.
     - _Requirements: 3.1_
 
-- [ ] 11. Portal *(design §4.2.1 Portal rows; hazards H4, H7, H13)*
-  - [ ] 11.1 Portal auth and profile requests
+- [x] 11. Portal *(design §4.2.1 Portal rows; hazards H4, H7, H13)*
+  - [x] 11.1 Portal auth and profile requests
     - Create `ParentLoginRequest`, `ParentForgotPasswordRequest`, `ResetParentPasswordRequest` (keep `only()`, `min:8`), `UpdateParentProfileRequest`, `ChangeParentPasswordRequest` and `UploadParentPhotoRequest`.
     - Tests: fixtures unchanged; `PortalAuthTest` and `ProfileTest` unchanged.
     - _Requirements: 3.1_
-  - [ ] 11.2 Portal feedback request
+  - [x] 11.2 Portal feedback request
     - Create `StoreFeedbackRequest` with the memoised `linkedStudents()` and the guard in design §4.2.2.
     - Tests, precedence: a parent with no linked students sending an empty body → 422 `"You have no linked students."`. `FeedbackTest` unchanged.
     - _Requirements: 3.3, 3.5_
-  - [ ] 11.3 Remaining portal requests
+  - [x] 11.3 Remaining portal requests
     - Create `ListStudentActivityRequest`, `ShowSpendingSummaryRequest`, `UploadPortalStudentPhotoRequest` (`max:5120`), `ListPortalWalletRequest`, `SetWalletAlertRequest` and `ShowPortalMealPlanRequest`.
     - Tests: fixtures unchanged, plus a precedence test for each `#[Authorize]` + request pair (an unlinked parent with invalid input → 403).
     - _Requirements: 3.1, 3.4_

@@ -3,22 +3,17 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ListStudentActivityRequest;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class ActivityController extends Controller
 {
     #[Authorize('view', 'student')]
-    public function index(Request $request, Student $student): JsonResponse
+    public function index(ListStudentActivityRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'payment_method' => ['nullable', 'string', 'in:cash,wallet'],
-        ]);
+        $validated = $request->validated();
 
         $query = $student->orders()
             ->whereNull('voided_at')

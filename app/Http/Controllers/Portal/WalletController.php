@@ -3,23 +3,19 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ListPortalWalletRequest;
+use App\Http\Requests\Portal\SetWalletAlertRequest;
 use App\Models\Student;
 use Bavix\Wallet\Models\Transaction;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class WalletController extends Controller
 {
     #[Authorize('view', 'student')]
-    public function index(Request $request, Student $student): JsonResponse
+    public function index(ListPortalWalletRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'type' => ['nullable', 'string', 'in:deposit,withdraw'],
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
-        ]);
+        $validated = $request->validated();
 
         $perPage = $validated['per_page'] ?? 20;
 
@@ -53,11 +49,9 @@ class WalletController extends Controller
     }
 
     #[Authorize('view', 'student')]
-    public function setAlert(Request $request, Student $student): JsonResponse
+    public function setAlert(SetWalletAlertRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'threshold' => ['required', 'numeric', 'min:0', 'max:100000'],
-        ]);
+        $validated = $request->validated();
 
         $request->user()->students()->updateExistingPivot($student->id, [
             'wallet_alert_threshold' => $validated['threshold'],

@@ -231,4 +231,53 @@ class AuthorizeAttributeTest extends TestCase
 
         return $this;
     }
+
+    // Spec 16 T-11.3: #[Authorize] (the `can` middleware) runs before the Form Request, so an
+    // unlinked parent sending invalid input gets 403, not a validation 422.
+
+    public function test_unlinked_parent_viewing_a_wallet_with_invalid_input_returns_403(): void
+    {
+        $student = $this->student();
+
+        $response = $this->asUnlinkedParent()->getJson("/api/v1/portal/students/{$student->id}/wallet?per_page=0");
+
+        $response->assertForbidden()->assertExactJson(self::FORBIDDEN);
+    }
+
+    public function test_unlinked_parent_setting_a_wallet_alert_with_invalid_input_returns_403(): void
+    {
+        $student = $this->student();
+
+        $response = $this->asUnlinkedParent()->patchJson("/api/v1/portal/students/{$student->id}/wallet/alert", ['threshold' => -1]);
+
+        $response->assertForbidden()->assertExactJson(self::FORBIDDEN);
+    }
+
+    public function test_unlinked_parent_uploading_a_photo_with_invalid_input_returns_403(): void
+    {
+        Storage::fake('private');
+        $student = $this->student();
+
+        $response = $this->asUnlinkedParent()->postJson("/api/v1/portal/students/{$student->id}/photo", []);
+
+        $response->assertForbidden()->assertExactJson(self::FORBIDDEN);
+    }
+
+    public function test_unlinked_parent_viewing_spending_with_invalid_input_returns_403(): void
+    {
+        $student = $this->student();
+
+        $response = $this->asUnlinkedParent()->getJson("/api/v1/portal/students/{$student->id}/spending-summary?months=99");
+
+        $response->assertForbidden()->assertExactJson(self::FORBIDDEN);
+    }
+
+    public function test_unlinked_parent_viewing_activity_with_invalid_input_returns_403(): void
+    {
+        $student = $this->student();
+
+        $response = $this->asUnlinkedParent()->getJson("/api/v1/portal/students/{$student->id}/activity?per_page=0");
+
+        $response->assertForbidden()->assertExactJson(self::FORBIDDEN);
+    }
 }

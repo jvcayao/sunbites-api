@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers\Portal;
 
-use App\Enums\FeedbackCategory;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\StoreFeedbackRequest;
 use App\Models\Feedback;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class FeedbackController extends Controller
 {
@@ -38,27 +37,12 @@ class FeedbackController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreFeedbackRequest $request): JsonResponse
     {
         $parent = $request->user();
+        $linkedStudents = $request->linkedStudents();
 
-        $linkedStudents = $parent->students()->get(['students.id', 'branch_id']);
-        $linkedStudentIds = $linkedStudents->pluck('id')->all();
-
-        if ($linkedStudents->isEmpty()) {
-            return response()->json(['message' => 'You have no linked students.'], 422);
-        }
-
-        // Sanitize before validating so the length rules apply to what is
-        // actually stored — see Controller::sanitizeText().
-        $request->merge(['message' => $this->sanitizeText($request->input('message'))]);
-
-        $validated = $request->validate([
-            'student_id' => ['nullable', 'integer', Rule::in($linkedStudentIds)],
-            'category' => ['required', Rule::enum(FeedbackCategory::class)],
-            'rating' => ['required', 'integer', 'min:1', 'max:5'],
-            'message' => ['required', 'string', 'min:10', 'max:2000'],
-        ]);
+        $validated = $request->validated();
 
         $studentId = $validated['student_id'] ?? null;
 

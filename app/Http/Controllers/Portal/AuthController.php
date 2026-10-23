@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ParentForgotPasswordRequest;
+use App\Http\Requests\Portal\ParentLoginRequest;
+use App\Http\Requests\Portal\ResetParentPasswordRequest;
 use App\Mail\ParentResetPasswordMail;
 use App\Models\ParentUser;
 use Illuminate\Http\JsonResponse;
@@ -13,13 +16,8 @@ use Illuminate\Support\Facades\Password;
 
 class AuthController extends Controller
 {
-    public function login(Request $request): JsonResponse
+    public function login(ParentLoginRequest $request): JsonResponse
     {
-        $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string'],
-        ]);
-
         $parent = ParentUser::where('email', $request->email)->first();
 
         if (! $parent) {
@@ -68,10 +66,8 @@ class AuthController extends Controller
         return response()->json(['message' => 'Logged out.']);
     }
 
-    public function forgotPassword(Request $request): JsonResponse
+    public function forgotPassword(ParentForgotPasswordRequest $request): JsonResponse
     {
-        $request->validate(['email' => ['required', 'email']]);
-
         $parent = ParentUser::where('email', $request->email)->first();
 
         if ($parent) {
@@ -84,14 +80,8 @@ class AuthController extends Controller
         ]);
     }
 
-    public function resetPassword(Request $request): JsonResponse
+    public function resetPassword(ResetParentPasswordRequest $request): JsonResponse
     {
-        $request->validate([
-            'token' => ['required', 'string'],
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
-
         $status = Password::broker('parents')->reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (ParentUser $parent, string $password) {

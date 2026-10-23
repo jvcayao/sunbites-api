@@ -523,4 +523,18 @@ class FeedbackTest extends TestCase
             ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
         );
     }
+
+    /**
+     * The no-linked-students guard runs before validation, so it wins over the empty body's
+     * validation errors (Spec 16 T-11.2, H4).
+     */
+    public function test_parent_without_linked_students_sending_an_empty_body_gets_the_no_linked_students_422(): void
+    {
+        $unlinkedParent = ParentUser::factory()->create();
+        $token = $unlinkedParent->createToken('portal-token', ['parent'])->plainTextToken;
+
+        $response = $this->withToken($token)->postJson('/api/v1/portal/feedback', []);
+
+        $response->assertUnprocessable()->assertExactJson(['message' => 'You have no linked students.']);
+    }
 }
