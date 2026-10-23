@@ -305,3 +305,10 @@ Next step per §6: <id> (waiting for "proceed")
 | Approved decisions | design §1.1: Q1–Q7 all approved; all 15 Track B items approved (B-06 merged into B-05) |
 
 **Start with step 1 (T-1) only when the user tells you to.**
+
+## 11. PR description notes (spec owner; add to the single PR to `staging`)
+
+- **Commit-body correction:** `50224cc` (B-02) says `application-info` ran before the code. It ran afterwards, with identical output (13.38.0 / PHP 8.5 / mysql). Commits are never amended, so the correction lives here.
+- **Dependency commits on this branch:** `5b5d5e3` (Laravel 13.37.0) and `880d4c0` (13.38.0, a PHP security patch). Both were verified by the full MySQL and SQLite gates with the contract fixtures unchanged.
+- **Data check after deploy (B-22):** pre-registration birthdays edited in production before B-22 may be one or more days early, and so may the students approved from them. Pre-registrations are not audit-logged, so this is a manual check.
+- **Staging smoke tests:** the design §13.3 list, plus login → branch select → dashboard (B-02), References → Inventory → Archived/Unarchive (B-16) and Reports → Inventory → Export (B-19).
