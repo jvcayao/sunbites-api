@@ -57,6 +57,18 @@ class AuthContractTest extends ContractTestCase
         $this->assertContract($response, 'POST api/v1/portal/auth/login', '401-disabled');
     }
 
+    public function test_disabled_parent_login_with_a_wrong_password_matches_contract(): void
+    {
+        $this->scenario->parent->update(['disabled_at' => now()]);
+
+        $response = $this->postJson('/api/v1/portal/auth/login', [
+            'email' => $this->scenario->parent->email,
+            'password' => 'WrongPassword1',
+        ]);
+
+        $this->assertContract($response, 'POST api/v1/portal/auth/login', '422-disabled-wrong-password');
+    }
+
     public function test_parent_logout_matches_contract(): void
     {
         $response = $this->scenario->asParent($this->scenario->parent)->postJson('/api/v1/portal/auth/logout');

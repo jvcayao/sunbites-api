@@ -457,7 +457,7 @@
   - Failing test: checkout response `order.cashier.name` equals the cashier's full name.
   - Fixtures: the 4 listed in the design.
   - _Requirements: 10.7_
-- [ ] B-08. Portal login disclosure *(design §5.7; after T-11.1)*
+- [x] B-08. Portal login disclosure *(design §5.7; after T-11.1)*
   - Failing test: a disabled parent with a wrong password gets 422 `"Invalid credentials."`; with the right password gets 401 `account_disabled`; an unactivated parent still gets `account_not_activated`.
   - Fixtures: as listed in the design.
   - _Requirements: 10.8_

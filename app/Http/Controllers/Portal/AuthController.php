@@ -31,15 +31,17 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Check the password before the disabled state, so a wrong password never reveals
+        // that the account exists but is disabled.
+        if (! Hash::check($request->password, $parent->password ?? '')) {
+            return response()->json(['message' => 'Invalid credentials.'], 422);
+        }
+
         if ($parent->isDisabled()) {
             return response()->json([
                 'message' => 'Account access has been disabled.',
                 'error' => 'account_disabled',
             ], 401);
-        }
-
-        if (! Hash::check($request->password, $parent->password ?? '')) {
-            return response()->json(['message' => 'Invalid credentials.'], 422);
         }
 
         $token = $parent->createToken('portal-token', ['parent'])->plainTextToken;
