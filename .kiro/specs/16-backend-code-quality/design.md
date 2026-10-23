@@ -1031,7 +1031,10 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 ### 5.15 B-17 *(approved 2026-10-12)*: Cross-branch branch monthly amounts
 
 - **Defect:** `BranchMonthlyAmount` has no `HasBranch` trait, and `BranchMonthlyAmountController::update`/`destroy` (route group `role:admin|manager|supervisor`) do not check the branch. Staff in branch A can change or delete branch B's monthly fee overrides by id.
-- **Fix:** in `update` and `destroy`, throw `(new ModelNotFoundException)->setModel(BranchMonthlyAmount::class)` unless `$branchMonthlyAmount->branch_id === app('active_branch')->id`. This renders 404 `{"message":"Not found."}`.
+- **Fix:** throw `(new ModelNotFoundException)->setModel(BranchMonthlyAmount::class)` unless `$branchMonthlyAmount->branch_id === app('active_branch')->id`. Since B-23 this renders 404 `{"message":"Not found."}`.
+  - **`update`:** *(placement clarified 2026-10-23)* put the check in `UpdateBranchMonthlyAmountRequest::prepareForValidation()`, reading the record with `$this->route('branchMonthlyAmount')`. That way 404 wins over 422 for another branch's record sent with an invalid body (H4), the same as B-18.
+  - **`destroy`:** has no Form Request, so the check is the first statement of `BranchMonthlyAmountController::destroy()`.
+  - **Tests:** a branch-A supervisor gets 404 on `PUT` and on `DELETE` of a branch-B row, and the row is unchanged or not deleted. Also, `PUT` with an invalid body on a branch-B row still gets 404, not 422.
 - **Fixtures:** the `other-branch` variants recorded in T-1 change from 200 to 404.
 - **FE impact:** none. The POS edits only rows from `GET /branch-monthly-amounts`, which is filtered by the active branch.
 
