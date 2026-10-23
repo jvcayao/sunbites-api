@@ -222,7 +222,7 @@ Notes on the order:
 ## 7. Track-specific rules
 
 **Track A (T-1 … T-19, plus C-1):**
-- Zero behaviour change. The fixture digest stays unchanged after T-1 (design §4.1.7). Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-01 (Arrange-only branch links), B-04 (deletions), B-05 (`BillingReportTest` seeds).
+- Zero behaviour change. The fixture digest stays unchanged after T-1 (design §4.1.7). Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-01 (Arrange-only branch links), B-16 (two Act lines in `InventoryTest`), B-04 (deletions), B-05 (`BillingReportTest` seeds).
 - T-1 creates fixtures in **record mode**: MySQL gate first, then SQLite overrides only where shapes differ (design §4.1.2). Contract tests use `app.debug = false`. Recording happens **only** in T-1. The fixtures are gitignored, so the T-1 commit holds the harness and the tests, not the fixtures (T-1.8).
 
 **Track B (B-xx):**

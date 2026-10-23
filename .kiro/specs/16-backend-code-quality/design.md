@@ -1027,6 +1027,10 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - `components/pos/menu-mgmt-tab.tsx:442` and `app/(kitchen)/reports/inventory/page.tsx:539` already filter `!is_archived`, so they are unaffected.
   - `components/pos/inventory-tab.tsx:300` uses `/pos/inventory`, so it is unaffected.
 - Do B-01's unarchive fix (drop `withoutBranch()`) first or in the same PR, because B-16 makes the unarchive endpoint reachable from the UI.
+- **Existing tests (named edits, decided 2026-10-23 after the implementer's STOP):** `tests/Feature/InventoryTest.php` checks the "active list" through `GET /references/inventory`, which B-16 deliberately changes to include archived items. Change one line in each test's Act, from `GET /api/v1/references/inventory` to `GET /api/v1/pos/inventory` (the active-only list after B-16), and leave the assertions unchanged:
+  - `test_archive_item_hides_from_active_list`: its `assertNotContains` would otherwise fail
+  - `test_unarchive_item_shows_in_active_list`: its list assertion would otherwise pass whether or not unarchive worked
+- **Fixtures:** none changed. The scenario's archived row has the same shape as the active rows.
 
 ### 5.15 B-17 *(approved 2026-10-12)*: Cross-branch branch monthly amounts
 

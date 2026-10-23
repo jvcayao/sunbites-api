@@ -252,7 +252,7 @@ A Track A change and a Track B change are never combined in one PR.
 - **Observability:** Sentry + Flare integration unchanged.
 - **Tooling (non-negotiable):** Laravel Boost + `laravel-best-practices` on every PHP task, `testing-best-practices` on every test change, and a final `laravel-simplifier` pass over all backend changes (Req 12).
 - **Test environment:** never run config/route/event caching locally during this work (hazard H18).
-- **Existing tests:** never edited, except the edits named in `tasks.md` ground rules (T-12.3, T-17.1, B-01, B-04, B-05).
+- **Existing tests:** never edited, except the edits named in `tasks.md` ground rules (T-12.3, T-17.1, B-01, B-04, B-05, B-16).
 - **Frontend integration:** every commit is checked against the FE integration matrix in design §13. After the single PR merges to `staging`, the full page checklist (design §13.3) is run on staging before promoting to `main`.
 - **Delivery (Q3, updated 2026-10-09):** all work is committed on the **current branch `bump-laravel-13-latest`** (no new branch); start commit `3454977`; one commit per task group and per approved Track B item; `type(scope): description` subjects with no AI attribution trailers; the user opens and merges the single PR, preferably **without squash** so each area stays revertible (design §6).
 - **Code style:** Pint through Sail after every backend task (`.claude/rules/backend/laravel-pint.md`); PHP 8.3-compatible syntax only (`composer.json` `php: ^8.3`); hazard H16 (Carbon mutability) applies to every date-loop edit.
