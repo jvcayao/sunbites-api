@@ -54,10 +54,10 @@ class PaymentReminderService
             ->orderBy('first_name');
 
         if ($search) {
-            $like = '%'.mb_strtolower($search).'%';
+            $term = mb_strtolower($search);
             $query->where(fn ($q) => $q
-                ->whereRaw('lower(first_name) like ?', [$like])
-                ->orWhereRaw('lower(last_name) like ?', [$like])
+                ->whereContainsLiteral('lower(first_name)', $term)
+                ->whereContainsLiteral('lower(last_name)', $term, 'or')
             );
         }
 

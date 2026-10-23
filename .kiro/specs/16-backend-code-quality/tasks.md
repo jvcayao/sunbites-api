@@ -463,7 +463,7 @@
 - [x] B-09. Atomic pre-registration writes *(design §5.8; after T-8)*
   - Failing test: force `createMany` to throw (a contact payload violating a DB constraint, or a DB listener) and assert the parent record is rolled back.
   - _Requirements: 10.9_
-- [ ] B-10. LIKE wildcards *(design §5.9; after T-10)*
+- [x] B-10. LIKE wildcards *(design §5.9; after T-10)*
   - Add the macro and apply it at every listed site.
   - Failing tests: a search for `50%` does not match `500`, and a search for `a_b` does not match `axb`, on both MySQL and SQLite.
   - _Requirements: 10.10_

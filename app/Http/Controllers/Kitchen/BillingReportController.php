@@ -132,11 +132,11 @@ class BillingReportController extends Controller
                 }
             }))
             ->when(isset($validated['search']), function ($q) use ($validated) {
-                $like = '%'.mb_strtolower($validated['search']).'%';
-                $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($like) {
-                    $inner->whereRaw('lower(first_name) like ?', [$like])
-                        ->orWhereRaw('lower(last_name) like ?', [$like])
-                        ->orWhereRaw('lower(student_number) like ?', [$like]);
+                $term = mb_strtolower($validated['search']);
+                $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($term) {
+                    $inner->whereContainsLiteral('lower(first_name)', $term)
+                        ->whereContainsLiteral('lower(last_name)', $term, 'or')
+                        ->whereContainsLiteral('lower(student_number)', $term, 'or');
                 }));
             });
     }

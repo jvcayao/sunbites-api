@@ -352,4 +352,20 @@ class UserManagementTest extends TestCase
         $response->assertOk();
         $this->assertFalse($user->fresh()->branches->contains($this->branch));
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = User::factory()->create(['first_name' => 'Staff500', 'last_name' => 'Reyes', 'email' => 'n1@example.com']);
+        User::factory()->create(['first_name' => 'Staffaxb', 'last_name' => 'Reyes', 'email' => 'n2@example.com']);
+        $underscore = User::factory()->create(['first_name' => 'Staffa_b', 'last_name' => 'Reyes', 'email' => 'n3@example.com']);
+        $idsFor = fn (string $term): array => collect($this->withToken($this->adminToken())->getJson('/api/v1/users?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

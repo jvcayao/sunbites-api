@@ -6,6 +6,7 @@ use App\Listeners\AuthEventSubscriber;
 use App\Models\PreRegistration;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,31 @@ class AppServiceProvider extends ServiceProvider
         Event::subscribe(AuthEventSubscriber::class);
 
         $this->bindCrossBranchRouteModels();
+
+        $this->registerSearchMacros();
+    }
+
+    /**
+     * Search macros on the query builder; Eloquent builders forward to them. `whereContainsLiteral`
+     * matches `$term` anywhere in `$column` with `%`, `_` and `!` taken literally (`ESCAPE '!'`
+     * behaves the same on MySQL and SQLite). `whereAnyContainsLiteral` groups it over several
+     * columns like `whereAny`. Column names are literals from code, never input.
+     */
+    private function registerSearchMacros(): void
+    {
+        Builder::macro('whereContainsLiteral', function (string $column, string $term, string $boolean = 'and') {
+            $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term);
+
+            return $this->whereRaw("{$column} LIKE ? ESCAPE '!'", ["%{$escaped}%"], $boolean);
+        });
+
+        Builder::macro('whereAnyContainsLiteral', function (array $columns, string $term, string $boolean = 'and') {
+            return $this->where(function ($query) use ($columns, $term) {
+                foreach ($columns as $column) {
+                    $query->whereContainsLiteral($column, $term, 'or');
+                }
+            }, boolean: $boolean);
+        });
     }
 
     /**

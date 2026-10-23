@@ -525,4 +525,28 @@ class ReminderTest extends TestCase
                 && $notification->dueDate->toDateString() === '2027-01-31',
         );
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_eligible_parents_search_matches_percent_and_underscore_literally(): void
+    {
+        $parentOwing = function (string $firstName, string $email): ParentUser {
+            $student = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
+            StudentMonthlyPayment::create(['student_id' => $student->id, 'school_month' => 'june', 'year' => 2026, 'amount' => 2970, 'status' => 'unpaid']);
+            $parent = ParentUser::factory()->create(['first_name' => $firstName, 'last_name' => 'Reyes', 'email' => $email]);
+            $parent->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id, 'wallet_alert_threshold' => 0]);
+
+            return $parent;
+        };
+        $fiveHundred = $parentOwing('Rosa500', 'p1@example.com');
+        $parentOwing('Rosaaxb', 'p2@example.com');
+        $underscore = $parentOwing('Rosaa_b', 'p3@example.com');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reminders/eligible-parents?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

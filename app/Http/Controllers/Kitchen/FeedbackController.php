@@ -23,16 +23,16 @@ class FeedbackController extends Controller
         $query->where('branch_id', app('active_branch')->id);
 
         if (! empty($validated['search'])) {
-            $search = '%'.mb_strtolower($validated['search']).'%';
+            $search = mb_strtolower($validated['search']);
 
-            $query->where(fn ($q) => $q->whereRaw('lower(message) like ?', [$search])
+            $query->where(fn ($q) => $q->whereContainsLiteral('lower(message)', $search)
                 ->orWhereHas('student', fn ($student) => $student
-                    ->whereRaw('lower(first_name) like ?', [$search])
-                    ->orWhereRaw('lower(last_name) like ?', [$search])
-                    ->orWhereRaw('lower(student_number) like ?', [$search]))
+                    ->whereContainsLiteral('lower(first_name)', $search)
+                    ->whereContainsLiteral('lower(last_name)', $search, 'or')
+                    ->whereContainsLiteral('lower(student_number)', $search, 'or'))
                 ->orWhereHas('parent', fn ($parent) => $parent
-                    ->whereRaw('lower(first_name) like ?', [$search])
-                    ->orWhereRaw('lower(last_name) like ?', [$search])));
+                    ->whereContainsLiteral('lower(first_name)', $search)
+                    ->whereContainsLiteral('lower(last_name)', $search, 'or')));
         }
 
         if (isset($validated['is_read'])) {

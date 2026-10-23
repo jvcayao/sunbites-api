@@ -57,7 +57,7 @@ class StudentLookupController extends Controller
 
     private function lookupBySearch(string $query): JsonResponse
     {
-        $students = Student::whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$query}%")
+        $students = Student::whereAnyContainsLiteral(['first_name', 'last_name', 'student_number'], $query)
             ->orderBy('last_name')
             ->limit(8)
             ->get();

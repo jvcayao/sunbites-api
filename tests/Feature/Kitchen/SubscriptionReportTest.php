@@ -377,4 +377,21 @@ class SubscriptionReportTest extends TestCase
             ['payment_status' => $row['payment_status'], 'year' => $row['subscription_monthly_status']['year'], 'meals_used' => $row['subscription_monthly_status']['categories']['meal']['used']],
         );
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        BranchSubscriptionConfig::factory()->create(['branch_id' => $this->branch->id]);
+        $fiveHundred = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana500', 'last_name' => 'Reyes', 'student_number' => 'N-0001']);
+        Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaaxb', 'last_name' => 'Reyes', 'student_number' => 'N-0002']);
+        $underscore = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaa_b', 'last_name' => 'Reyes', 'student_number' => 'N-0003']);
+        $idsFor = fn (string $term): array => collect($this->asManager()->getJson('/api/v1/reports/subscription?'.http_build_query($this->reportParams(['search' => $term])))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

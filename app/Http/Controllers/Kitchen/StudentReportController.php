@@ -163,11 +163,11 @@ class StudentReportController extends Controller
     private function applySearch(Builder $query, string $term): void
     {
         $query->where(function ($q) use ($term) {
-            $q->where('first_name', 'like', "%{$term}%")
-                ->orWhere('last_name', 'like', "%{$term}%")
-                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
-                ->orWhere('student_number', 'like', "%{$term}%")
-                ->orWhere('section', 'like', "%{$term}%");
+            $q->whereContainsLiteral('first_name', $term)
+                ->whereContainsLiteral('last_name', $term, 'or')
+                ->whereContainsLiteral("CONCAT(first_name, ' ', last_name)", $term, 'or')
+                ->whereContainsLiteral('student_number', $term, 'or')
+                ->whereContainsLiteral('section', $term, 'or');
         });
     }
 

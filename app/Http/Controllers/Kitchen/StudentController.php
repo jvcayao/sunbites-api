@@ -35,10 +35,7 @@ class StudentController extends Controller
             'monthlyPayments',
             'wallet',
         ])
-            ->when($filters['search'] ?? null, function ($q, $search) {
-                $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search);
-                $q->whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$escaped}%");
-            })
+            ->when($filters['search'] ?? null, fn ($q, $search) => $q->whereAnyContainsLiteral(['first_name', 'last_name', 'student_number'], $search))
             ->when($filters['grade'] ?? null, fn ($q, $grade) => $q->where('grade_level', $grade));
 
         if (! ($filters['deleted'] ?? null)) {

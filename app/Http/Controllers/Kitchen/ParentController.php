@@ -45,10 +45,10 @@ class ParentController extends Controller
         );
 
         if (! empty($validated['search'])) {
-            $search = '%'.mb_strtolower($validated['search']).'%';
-            $query->where(fn ($q) => $q->whereRaw('lower(first_name) like ?', [$search])
-                ->orWhereRaw('lower(last_name) like ?', [$search])
-                ->orWhereRaw('lower(email) like ?', [$search])
+            $search = mb_strtolower($validated['search']);
+            $query->where(fn ($q) => $q->whereContainsLiteral('lower(first_name)', $search)
+                ->whereContainsLiteral('lower(last_name)', $search, 'or')
+                ->whereContainsLiteral('lower(email)', $search, 'or')
             );
         }
 

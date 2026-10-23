@@ -37,9 +37,9 @@ class PreRegistrationController extends Controller
         }
 
         if (! empty($validated['search'])) {
-            $like = '%'.mb_strtolower($validated['search']).'%';
-            $query->where(fn ($q) => $q->whereRaw('lower(first_name) like ?', [$like])
-                ->orWhereRaw('lower(last_name) like ?', [$like])
+            $term = mb_strtolower($validated['search']);
+            $query->where(fn ($q) => $q->whereContainsLiteral('lower(first_name)', $term)
+                ->whereContainsLiteral('lower(last_name)', $term, 'or')
             );
         }
 

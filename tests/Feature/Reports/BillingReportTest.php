@@ -508,4 +508,25 @@ class BillingReportTest extends TestCase
             'amount' => 800.00,
         ]);
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $paymentFor = fn (string $firstName, string $studentNumber): StudentMonthlyPayment => $this->unpaidPayment(
+            Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => $firstName, 'last_name' => 'Reyes', 'student_number' => $studentNumber]),
+            'june',
+            2026,
+        );
+        $fiveHundred = $paymentFor('Ana500', 'N-0001');
+        $paymentFor('Anaaxb', 'N-0002');
+        $underscore = $paymentFor('Anaa_b', 'N-0003');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reports/billing?'.http_build_query(['year' => 2026, 'school_month' => 'june', 'search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

@@ -21,7 +21,7 @@ class ActivityLogController extends Controller
             ->when(isset($validated['date_to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['date_to']))
             ->when(isset($validated['user_id']), fn ($q) => $q->where('causer_id', $validated['user_id'])->where('causer_type', User::class))
             ->when(isset($validated['log_name']), fn ($q) => $q->where('log_name', $validated['log_name']))
-            ->when(isset($validated['search']), fn ($q) => $q->where('description', 'like', "%{$validated['search']}%"))
+            ->when(isset($validated['search']), fn ($q) => $q->whereContainsLiteral('description', $validated['search']))
             ->latest();
 
         $logs = $query->paginate($perPage);

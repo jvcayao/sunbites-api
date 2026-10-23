@@ -9,7 +9,6 @@ use App\Http\Requests\Kitchen\ListCreditReportRequest;
 use App\Models\CreditTransaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
 
 class CreditReportController extends Controller
 {
@@ -64,11 +63,9 @@ class CreditReportController extends Controller
             ->where('branch_id', $branchId)
             ->when(isset($validated['date_from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['date_from']))
             ->when(isset($validated['date_to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['date_to']))
-            ->when(isset($validated['search']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where(
-                DB::raw("CONCAT(first_name, ' ', last_name)"),
-                'like',
-                "%{$validated['search']}%",
-            )->orWhere('student_number', 'like', "%{$validated['search']}%")));
+            ->when(isset($validated['search']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq
+                ->whereContainsLiteral("CONCAT(first_name, ' ', last_name)", $validated['search'])
+                ->whereContainsLiteral('student_number', $validated['search'], 'or')));
     }
 
     /**

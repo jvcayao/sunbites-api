@@ -176,4 +176,24 @@ class CreditReportTest extends TestCase
         $response->assertOk();
         $this->assertEquals(300.0, $response->json('summary.net_outstanding'));
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $chargeFor = fn (string $firstName, string $studentNumber): CreditTransaction => $this->createCreditTransaction(
+            Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => $firstName, 'last_name' => 'Reyes', 'student_number' => $studentNumber]),
+            CreditTransactionType::Charged,
+        );
+        $fiveHundred = $chargeFor('Ana500', 'N-0001');
+        $chargeFor('Anaaxb', 'N-0002');
+        $underscore = $chargeFor('Anaa_b', 'N-0003');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reports/credits?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

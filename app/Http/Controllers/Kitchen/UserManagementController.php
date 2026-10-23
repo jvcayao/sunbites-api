@@ -28,7 +28,7 @@ class UserManagementController extends Controller
 
         $users = User::withTrashed()
             ->with(['roles', 'branches'])
-            ->when($filters['search'] ?? null, fn ($q, $search) => $q->whereAny(['first_name', 'last_name', 'email'], 'like', "%{$search}%"))
+            ->when($filters['search'] ?? null, fn ($q, $search) => $q->whereAnyContainsLiteral(['first_name', 'last_name', 'email'], $search))
             ->when($filters['role'] ?? null, fn ($q, $role) => $q->role($role))
             ->when($filters['status'] ?? null, function ($q, $status) {
                 if ($status === 'active') {

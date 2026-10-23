@@ -29,7 +29,7 @@ class SubscriptionReportController extends Controller
         $students = Student::where('branch_id', $branch->id)
             ->where('student_type', 'subscription')
             ->when($gradeLevel, fn ($q) => $q->where('grade_level', $gradeLevel))
-            ->when($search, fn ($q) => $q->whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$search}%"))
+            ->when($search, fn ($q) => $q->whereAnyContainsLiteral(['first_name', 'last_name', 'student_number'], $search))
             ->when($status === 'not_recorded', fn ($q) => $q->whereDoesntHave('monthlyPayments', fn ($pq) => $pq
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $calendarYear)

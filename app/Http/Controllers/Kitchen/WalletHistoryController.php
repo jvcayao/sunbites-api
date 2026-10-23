@@ -64,7 +64,7 @@ class WalletHistoryController extends Controller
             ->where('status', '!=', OrderStatus::Voided)
             ->when($search, fn ($q) => $q->whereHas(
                 'items',
-                fn ($iq) => $iq->where('name', 'like', "%{$search}%")
+                fn ($iq) => $iq->whereContainsLiteral('name', $search)
             ))
             ->with('items:id,order_id,name')
             ->orderByDesc('created_at')
@@ -99,7 +99,7 @@ class WalletHistoryController extends Controller
             ->whereNull('transactions.deleted_at');
 
         if ($search) {
-            $matchingUserIds = User::whereAny(['first_name', 'last_name'], 'like', "%{$search}%")
+            $matchingUserIds = User::whereAnyContainsLiteral(['first_name', 'last_name'], $search)
                 ->pluck('id')
                 ->toArray();
 

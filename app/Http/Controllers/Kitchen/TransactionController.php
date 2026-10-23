@@ -30,7 +30,7 @@ class TransactionController extends Controller
 
         if (! empty($validated['student_search'])) {
             $search = $validated['student_search'];
-            $query->whereHas('student', fn ($q) => $q->whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$search}%"));
+            $query->whereHas('student', fn ($q) => $q->whereAnyContainsLiteral(['first_name', 'last_name', 'student_number'], $search));
         }
 
         $perPage = $validated['per_page'] ?? 25;

@@ -250,4 +250,50 @@ class WalletHistoryTest extends TestCase
 
         $response->assertNotFound();
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_purchases_search_matches_percent_and_underscore_literally(): void
+    {
+        $cashier = User::factory()->create();
+        $menuItem = PosMenuItem::factory()->create(['branch_id' => $this->branch->id]);
+        $orderWithItem = function (string $itemName) use ($cashier, $menuItem): Order {
+            $order = Order::factory()->create(['student_id' => $this->student->id, 'branch_id' => $this->branch->id, 'cashier_id' => $cashier->id]);
+            OrderItem::factory()->create(['order_id' => $order->id, 'name' => $itemName, 'pos_menu_item_id' => $menuItem->id]);
+
+            return $order;
+        };
+        $fiveHundred = $orderWithItem('Rice500');
+        $orderWithItem('Riceaxb');
+        $underscore = $orderWithItem('Ricea_b');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson("/api/v1/reports/wallet/{$this->student->id}/history?".http_build_query(['type' => 'purchases', 'search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_topups_staff_search_matches_percent_and_underscore_literally(): void
+    {
+        $staffNamed = function (string $firstName): User {
+            $staff = User::factory()->create(['first_name' => $firstName, 'last_name' => 'Reyes']);
+            $this->student->deposit(10000, ['performed_by' => $staff->id]);
+
+            return $staff;
+        };
+        $staffNamed('Staff500');
+        $staffNamed('Staffaxb');
+        $staffNamed('Staffa_b');
+        $staffFor = fn (string $term): array => collect($this->asAdmin()->getJson("/api/v1/reports/wallet/{$this->student->id}/history?".http_build_query(['type' => 'topups', 'search' => $term]))->assertOk()->json('data'))->pluck('added_by')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => ['Staffa_b Reyes'], '500' => ['Staff500 Reyes']],
+            ['50%' => $staffFor('50%'), 'a_b' => $staffFor('a_b'), '500' => $staffFor('500')],
+        );
+    }
 }

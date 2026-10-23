@@ -507,4 +507,20 @@ class FeedbackTest extends TestCase
             'branch_id' => $otherBranch->id,
         ]);
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_kitchen_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = $this->createFeedback(['message' => 'Order 500 was late.']);
+        $this->createFeedback(['message' => 'Order axb was late.']);
+        $underscore = $this->createFeedback(['message' => 'Order a_b was late.']);
+        $idsFor = fn (string $term): array => collect($this->asManager()->getJson('/api/v1/references/feedback?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }
