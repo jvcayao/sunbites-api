@@ -444,7 +444,7 @@
   - Remove the routes, both controllers and both test files (approved deletion).
   - Tests: route coverage count becomes 163 (update the test and remove the two fixture sets); `POST api/v1/portal/pre-registrations` returns 404/405.
   - _Requirements: 10.5_
-- [ ] B-05. School year *(design §5.5; after T-9 and T-10)*
+- [x] B-05. School year *(design §5.5; after T-9 and T-10)*
   - Add the `SchoolMonth` helpers and fix `PaymentReminderService`, `BillingReportController` (index and export) and `SubscriptionReportController`.
   - Failing tests at `travelTo('2027-01-20')`, as listed in design §5.5; existing June tests pass.
   - Apply the permitted `BillingReportTest` edit described in design §5.5 (seed calendar year; add frozen-clock variants).

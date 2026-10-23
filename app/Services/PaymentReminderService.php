@@ -16,14 +16,15 @@ use Illuminate\Support\Collection;
 /**
  * Who owes subscription payments in a branch, and the reminders sent to them.
  *
- * Every query is limited to the given branch's subscription students. A school year runs June
- * to March, so January–March of school year Y fall in calendar year Y + 1.
+ * Every query is limited to the given branch's subscription students. A payment's `year` is the
+ * calendar year of its month. A school year runs June to March, so the `school_year` filter (the
+ * year the school year starts) covers June–December of that year and January–March of the next.
  */
 class PaymentReminderService
 {
     /**
      * Base query: parents with unpaid monthly payments for subscription students in this branch.
-     * Optionally scoped to a specific school month and/or school year.
+     * Optionally scoped to a specific school month and/or school year (the year it starts).
      *
      * @return Builder<ParentUser>
      */
@@ -41,7 +42,12 @@ class PaymentReminderService
                 ->whereHas('monthlyPayments', fn ($q2) => $q2
                     ->where('status', '!=', 'paid')
                     ->when($schoolMonth, fn ($q3) => $q3->where('school_month', $schoolMonth))
-                    ->when($schoolYear, fn ($q3) => $q3->where('year', $schoolYear))
+                    ->when($schoolYear, fn ($q3) => $schoolMonth
+                        ? $q3->where('year', SchoolMonth::from($schoolMonth)->calendarYearFor($schoolYear))
+                        : $q3->where(fn ($q) => $q
+                            ->where(fn ($a) => $a->whereIn('school_month', SchoolMonth::firstHalfValues())->where('year', $schoolYear))
+                            ->orWhere(fn ($b) => $b->whereIn('school_month', SchoolMonth::secondHalfValues())->where('year', $schoolYear + 1))
+                        ))
                 )
             )
             ->orderBy('last_name')
@@ -72,10 +78,7 @@ class PaymentReminderService
         return $parent->students
             ->flatMap(fn ($s) => $s->monthlyPayments)
             ->filter(function ($p) use ($now) {
-                $monthNum = $p->school_month->toMonthNumber();
-                $calYear = $monthNum >= 6 ? $p->year : $p->year + 1;
-
-                return Carbon::create($calYear, $monthNum, 1)->startOfMonth()->lte($now);
+                return Carbon::create($p->year, $p->school_month->toMonthNumber(), 1)->startOfMonth()->lte($now);
             })
             ->map(fn ($p) => ['school_month' => $p->school_month->value, 'year' => $p->year])
             ->unique(fn ($p) => $p['school_month'].'_'.$p['year'])
@@ -85,10 +88,8 @@ class PaymentReminderService
     public function dueDate(SchoolMonth $schoolMonth, int $year): Carbon
     {
         $monthNumber = $schoolMonth->toMonthNumber();
-        // Jan–Mar fall in the next calendar year (school year runs June–March)
-        $calendarYear = $monthNumber >= 6 ? $year : $year + 1;
 
-        return Carbon::create($calendarYear, $monthNumber, 1)->endOfMonth();
+        return Carbon::create($year, $monthNumber, 1)->endOfMonth();
     }
 
     /**
@@ -145,9 +146,8 @@ class PaymentReminderService
 
             $hasOverdue = $periods->contains(function ($p) use ($now) {
                 $monthNum = SchoolMonth::from($p['school_month'])->toMonthNumber();
-                $calYear = $monthNum >= 6 ? $p['year'] : $p['year'] + 1;
 
-                return Carbon::create($calYear, $monthNum, 1)->startOfMonth()->lt($now);
+                return Carbon::create($p['year'], $monthNum, 1)->startOfMonth()->lt($now);
             });
 
             $totalSendCount = $reminders->sum('send_count');

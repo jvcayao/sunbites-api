@@ -43,7 +43,7 @@ class PaymentReminderServiceTest extends TestCase
 
     public function test_unpaid_periods_leave_out_months_that_have_not_started(): void
     {
-        $this->parentOwing([['june', 2026], ['october', 2026], ['november', 2026], ['january', 2026]]);
+        $this->parentOwing([['june', 2026], ['october', 2026], ['november', 2026], ['january', 2027]]);
         $parent = $this->reminders->parentsWithUnpaidPayments($this->branch)->sole();
 
         $periods = $this->reminders->unpaidPeriods($parent);
@@ -51,10 +51,10 @@ class PaymentReminderServiceTest extends TestCase
         $this->assertSame(['june_2026', 'october_2026'], $periods->map(fn (array $period): string => $period['school_month'].'_'.$period['year'])->sort()->values()->all());
     }
 
-    public function test_due_date_is_the_month_end_with_january_to_march_in_the_next_calendar_year(): void
+    public function test_due_date_is_the_end_of_the_payment_month(): void
     {
         $june = $this->reminders->dueDate(SchoolMonth::June, 2026);
-        $january = $this->reminders->dueDate(SchoolMonth::January, 2026);
+        $january = $this->reminders->dueDate(SchoolMonth::January, 2027);
 
         $this->assertSame(['2026-06-30', '2027-01-31'], [$june->toDateString(), $january->toDateString()]);
     }

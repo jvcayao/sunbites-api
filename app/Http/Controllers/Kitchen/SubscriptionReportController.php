@@ -19,7 +19,8 @@ class SubscriptionReportController extends Controller
         $validated = $request->validated();
 
         $monthEnum = SchoolMonth::from($validated['month']);
-        $year = (int) $validated['year'];
+        // `year` is the year the school year starts; payments and orders use the month's calendar year.
+        $calendarYear = $monthEnum->calendarYearFor((int) $validated['year']);
         $branch = app('active_branch');
         $status = $validated['status'] ?? null;
         $gradeLevel = $validated['grade_level'] ?? null;
@@ -31,11 +32,11 @@ class SubscriptionReportController extends Controller
             ->when($search, fn ($q) => $q->whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$search}%"))
             ->when($status === 'not_recorded', fn ($q) => $q->whereDoesntHave('monthlyPayments', fn ($pq) => $pq
                 ->where('school_month', $monthEnum->value)
-                ->where('year', $year)
+                ->where('year', $calendarYear)
             ))
             ->when(in_array($status, ['paid', 'unpaid']), fn ($q) => $q->whereHas('monthlyPayments', fn ($pq) => $pq
                 ->where('school_month', $monthEnum->value)
-                ->where('year', $year)
+                ->where('year', $calendarYear)
                 ->where('status', $status)
             ))
             ->orderBy('last_name')
@@ -50,7 +51,7 @@ class SubscriptionReportController extends Controller
             ->where('orders.branch_id', $branch->id)
             ->where('orders.payment_method', 'subscription')
             ->where('orders.status', 'completed')
-            ->whereYear('orders.created_at', $year)
+            ->whereYear('orders.created_at', $calendarYear)
             ->whereMonth('orders.created_at', $monthEnum->toMonthNumber())
             ->whereIn('orders.student_id', $studentIds)
             ->select('orders.student_id', 'pos_menu_items.category', DB::raw('SUM(order_items.quantity) as total'))
@@ -61,14 +62,14 @@ class SubscriptionReportController extends Controller
 
         $paymentRecords = StudentMonthlyPayment::whereIn('student_id', $studentIds)
             ->where('school_month', $monthEnum->value)
-            ->where('year', $year)
+            ->where('year', $calendarYear)
             ->get()
             ->keyBy('student_id');
 
         $config = BranchSubscriptionConfig::forBranch($branch->id);
         $days = config('sunbites.school_months')[$monthEnum->value]['days'];
 
-        $data = $students->through(function (Student $student) use ($monthEnum, $year, $usageRows, $paymentRecords, $config, $days) {
+        $data = $students->through(function (Student $student) use ($monthEnum, $calendarYear, $usageRows, $paymentRecords, $config, $days) {
             $usage = $usageRows->get($student->id, collect());
             $payment = $paymentRecords->get($student->id);
 
@@ -98,7 +99,7 @@ class SubscriptionReportController extends Controller
                 'payment_status' => $paymentStatus,
                 'subscription_monthly_status' => [
                     'month' => $monthEnum->value,
-                    'year' => $year,
+                    'year' => $calendarYear,
                     'categories' => $categories,
                 ],
             ];
@@ -108,12 +109,12 @@ class SubscriptionReportController extends Controller
             ->where('student_type', 'non_subscription')
             ->whereHas('monthlyPayments', fn ($q) => $q
                 ->where('school_month', $monthEnum->value)
-                ->where('year', $year)
+                ->where('year', $calendarYear)
                 ->where('status', 'paid')
             )
             ->with(['monthlyPayments' => fn ($q) => $q
                 ->where('school_month', $monthEnum->value)
-                ->where('year', $year)
+                ->where('year', $calendarYear)
                 ->where('status', 'paid'),
             ])
             ->get(['id', 'first_name', 'last_name', 'student_number', 'grade_level', 'section'])

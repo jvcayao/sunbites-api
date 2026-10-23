@@ -36,6 +36,44 @@ enum SchoolMonth: string
         };
     }
 
+    /** Calendar year in which this month falls for the school year starting in June of $schoolYearStart. */
+    public function calendarYearFor(int $schoolYearStart): int
+    {
+        return $this->toMonthNumber() >= 6 ? $schoolYearStart : $schoolYearStart + 1;
+    }
+
+    /**
+     * The months that fall in the calendar year the school year starts in (June–December).
+     *
+     * @return list<string>
+     */
+    public static function firstHalfValues(): array
+    {
+        return [
+            self::June->value,
+            self::July->value,
+            self::August->value,
+            self::September->value,
+            self::October->value,
+            self::November->value,
+            self::December->value,
+        ];
+    }
+
+    /**
+     * The months that fall in the calendar year after the school year starts (January–March).
+     *
+     * @return list<string>
+     */
+    public static function secondHalfValues(): array
+    {
+        return [
+            self::January->value,
+            self::February->value,
+            self::March->value,
+        ];
+    }
+
     public static function fromMonthNumber(int $month): ?self
     {
         return match ($month) {

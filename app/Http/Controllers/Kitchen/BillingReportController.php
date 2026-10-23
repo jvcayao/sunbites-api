@@ -89,16 +89,31 @@ class BillingReportController extends Controller
         return Excel::download(new BillingReportExport($payments, $summary), $filename);
     }
 
+    /**
+     * The `year` filter is the year the school year starts, while a payment's `year` is the calendar
+     * year of its month: January–March of school year Y are stored as Y + 1.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return Builder<StudentMonthlyPayment>
+     */
     private function buildQuery(array $validated): Builder
     {
         $branchId = app('active_branch')->id;
         $studentIds = Student::where('branch_id', $branchId)->pluck('id');
         $status = $validated['status'] ?? null;
         $filteringByDate = isset($validated['recorded_from']) || isset($validated['recorded_to']);
+        $schoolYear = (int) $validated['year'];
 
         return StudentMonthlyPayment::whereIn('student_id', $studentIds)
-            ->where('year', $validated['year'])
-            ->when(isset($validated['school_month']), fn ($q) => $q->where('school_month', $validated['school_month']))
+            ->when(
+                isset($validated['school_month']),
+                fn ($q) => $q->where('year', SchoolMonth::from($validated['school_month'])->calendarYearFor($schoolYear))
+                    ->where('school_month', $validated['school_month']),
+                fn ($q) => $q->where(fn ($q) => $q
+                    ->where(fn ($a) => $a->whereIn('school_month', SchoolMonth::firstHalfValues())->where('year', $schoolYear))
+                    ->orWhere(fn ($b) => $b->whereIn('school_month', SchoolMonth::secondHalfValues())->where('year', $schoolYear + 1))
+                ),
+            )
             ->when(
                 $status === 'voided',
                 fn ($q) => $q->where('status', 'voided'),

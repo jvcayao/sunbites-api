@@ -350,4 +350,31 @@ class SubscriptionReportTest extends TestCase
 
         $response->assertUnprocessable();
     }
+
+    public function test_january_of_school_year_2026_reads_january_2027_orders_and_payment(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        BranchSubscriptionConfig::factory()->create(['branch_id' => $this->branch->id]);
+        $student = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id]);
+        $cashier = User::factory()->create();
+        $order = Order::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'subscription',
+            'status' => 'completed',
+            'created_at' => '2027-01-05 12:00:00',
+        ]);
+        OrderItem::factory()->create(['order_id' => $order->id, 'pos_menu_item_id' => $this->createMealItem()->id, 'quantity' => 2]);
+        StudentMonthlyPayment::create(['student_id' => $student->id, 'school_month' => 'january', 'year' => 2027, 'amount' => 2970, 'status' => 'paid']);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/subscription?'.http_build_query(['month' => 'january', 'year' => 2026]));
+
+        $response->assertOk();
+        $row = collect($response->json('data'))->firstWhere('id', $student->id);
+        $this->assertSame(
+            ['payment_status' => 'paid', 'year' => 2027, 'meals_used' => 2],
+            ['payment_status' => $row['payment_status'], 'year' => $row['subscription_monthly_status']['year'], 'meals_used' => $row['subscription_monthly_status']['categories']['meal']['used']],
+        );
+    }
 }

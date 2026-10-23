@@ -107,13 +107,35 @@ class BillingReportTest extends TestCase
 
     public function test_default_school_month_and_year_filters_to_current_school_period(): void
     {
+        $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    public function test_default_school_month_and_year_filters_to_current_school_period_in_january(): void
+    {
+        $this->travelTo('2027-01-20');
+
+        $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    public function test_default_school_month_and_year_filters_to_current_school_period_in_october(): void
+    {
+        $this->travelTo('2026-10-15');
+
+        $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    /**
+     * Payment `year` is the calendar year, as EnrollmentService writes it (Spec 16 B-05).
+     */
+    private function assertDefaultFiltersToCurrentSchoolPeriod(): void
+    {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
         // Current period payment — should appear
         StudentMonthlyPayment::create([
             'student_id' => $student->id,
             'school_month' => strtolower(now()->format('F')),
-            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'year' => now()->year,
             'status' => 'unpaid',
             'amount' => 800.00,
         ]);
@@ -123,7 +145,7 @@ class BillingReportTest extends TestCase
         StudentMonthlyPayment::create([
             'student_id' => $student->id,
             'school_month' => $otherMonth,
-            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'year' => now()->year,
             'status' => 'unpaid',
             'amount' => 800.00,
         ]);
@@ -444,5 +466,46 @@ class BillingReportTest extends TestCase
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
+    }
+
+    // --- School year (Spec 16 B-05): `year` is the school-year start, payment year the calendar year ---
+
+    public function test_january_of_school_year_2026_is_the_january_2027_payment(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $january2027 = $this->unpaidPayment($student, 'january', 2027);
+        $this->unpaidPayment($student, 'january', 2026);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?year=2026&school_month=january');
+
+        $response->assertOk();
+        $this->assertSame([$january2027->id], collect($response->json('data'))->pluck('id')->all());
+    }
+
+    public function test_all_months_of_school_year_2025_run_from_june_2025_to_march_2026(): void
+    {
+        $this->travelTo('2026-04-15 09:00:00');
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $june2025 = $this->unpaidPayment($student, 'june', 2025);
+        $march2026 = $this->unpaidPayment($student, 'march', 2026);
+        $this->unpaidPayment($student, 'march', 2025);
+        $this->unpaidPayment($student, 'june', 2026);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?year=2025');
+
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing([$june2025->id, $march2026->id], collect($response->json('data'))->pluck('id')->all());
+    }
+
+    private function unpaidPayment(Student $student, string $schoolMonth, int $year): StudentMonthlyPayment
+    {
+        return StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => $schoolMonth,
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
     }
 }
