@@ -152,6 +152,7 @@ class ParentManagementTest extends TestCase
     {
         $cashier = User::factory()->create();
         $cashier->assignRole('cashier');
+        $cashier->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
         Sanctum::actingAs($cashier, ['staff']);
 
