@@ -441,7 +441,7 @@
   - Failing test: two cart lines sharing one inventory item deduct both units (replaces the H10 test from T-3.1, which is deleted here). Also: an ordered-lock query is issued (assert via the query log); adjust inside a transaction.
   - Fixtures: none.
   - _Requirements: 10.4_
-- [ ] B-04. Remove unused portal pre-registration routes *(design §5.4; before T-11)*
+- [x] B-04. Remove unused portal pre-registration routes *(design §5.4; before T-11)*
   - Remove the routes, both controllers and both test files (approved deletion).
   - Tests: route coverage count becomes 163 (update the test and remove the two fixture sets); `POST api/v1/portal/pre-registrations` returns 404/405.
   - _Requirements: 10.5_

@@ -12,7 +12,7 @@ class RouteCoverageTest extends ContractTestCase
      * Spec 16 B-04 removes the two unused portal pre-registration routes (163). Any other
      * change to this number is an added or removed endpoint, which must be deliberate.
      */
-    private const int EXPECTED_API_ROUTE_COUNT = 165;
+    private const int EXPECTED_API_ROUTE_COUNT = 163;
 
     /**
      * Coverage reads only route definitions and fixture files, so no scenario is built.
