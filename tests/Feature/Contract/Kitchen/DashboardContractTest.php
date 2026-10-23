@@ -13,6 +13,13 @@ class DashboardContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/dashboard');
     }
 
+    public function test_dashboard_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/dashboard');
+
+        $this->assertContract($response, 'GET api/v1/dashboard', '422-no-branch');
+    }
+
     public function test_updating_staff_status_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->postJson('/api/v1/dashboard/staff-status', [

@@ -14,6 +14,13 @@ class AnnouncementContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/announcements');
     }
 
+    public function test_announcement_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/announcements');
+
+        $this->assertContract($response, 'GET api/v1/announcements', '422-no-branch');
+    }
+
     public function test_sending_an_announcement_matches_contract(): void
     {
         Notification::fake();

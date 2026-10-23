@@ -14,6 +14,14 @@ class SubscriptionDowngradeContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/students/{student}/subscription-downgrade-preview');
     }
 
+    public function test_downgrade_preview_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)
+            ->getJson("/api/v1/students/{$this->scenario->subscriptionStudent->id}/subscription-downgrade-preview");
+
+        $this->assertContract($response, 'GET api/v1/students/{student}/subscription-downgrade-preview', '422-no-branch');
+    }
+
     public function test_downgrade_preview_for_a_non_subscription_student_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)

@@ -13,6 +13,13 @@ class InventoryReportContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/reports/inventory');
     }
 
+    public function test_inventory_report_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/reports/inventory');
+
+        $this->assertContract($response, 'GET api/v1/reports/inventory', '422-no-branch');
+    }
+
     public function test_inventory_report_with_an_unknown_type_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->getJson('/api/v1/reports/inventory?type=unknown');

@@ -172,6 +172,16 @@ class ContractScenario
     }
 
     /**
+     * Authenticates a staff member without the X-Branch-Id header, as before a branch is chosen.
+     */
+    public function asStaffWithoutBranch(User $user): TestCase
+    {
+        Sanctum::actingAs($user, ['staff']);
+
+        return $this->test;
+    }
+
+    /**
      * Authenticates a parent on the `parents` guard. The portal sends no branch header.
      */
     public function asParent(ParentUser $parent): TestCase

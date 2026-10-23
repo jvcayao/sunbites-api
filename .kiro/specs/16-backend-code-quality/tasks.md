@@ -429,7 +429,7 @@
   - Fixtures: the T-1 `other-branch` variants for these routes change from 200 to 404 (staff-status: 422); no new variants (design §5.1).
   - **Named edits to existing tests (Arrange only, decided 2026-10-23; no assertion changes):** design §5.1 *Existing tests*.
   - _Requirements: 10.2_
-- [ ] B-02. Branch header required *(design §5.2; after T-6 at minimum. Actual slot: after T-7, T-9, B-01 and B-16, per `HANDOFF.md` §6)*
+- [x] B-02. Branch header required *(design §5.2; after T-6 at minimum. Actual slot: after T-7, T-9, B-01 and B-16, per `HANDOFF.md` §6)*
   - Create `EnsureActiveBranch` via `make:middleware`, register the alias, apply it to the group with the exact allowlist, and remove the dead `MealPlannerController` checks.
   - Failing tests: a branch-scoped list without a header returns 422 with the exact message; each allowlisted route works without a header; the matrix test still passes.
   - Fixtures: new `422-no-branch` variants.

@@ -13,6 +13,13 @@ class TransactionContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/pos/transactions');
     }
 
+    public function test_transaction_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)->getJson('/api/v1/pos/transactions');
+
+        $this->assertContract($response, 'GET api/v1/pos/transactions', '422-no-branch');
+    }
+
     public function test_transaction_list_with_an_unknown_payment_method_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->cashier)->getJson('/api/v1/pos/transactions?payment_method=bitcoin');

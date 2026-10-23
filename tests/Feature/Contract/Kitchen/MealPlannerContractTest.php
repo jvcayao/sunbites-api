@@ -15,6 +15,13 @@ class MealPlannerContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/references/meal-planner');
     }
 
+    public function test_meal_plan_week_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)->getJson('/api/v1/references/meal-planner?month=june&week=1');
+
+        $this->assertContract($response, 'GET api/v1/references/meal-planner', '422-no-branch');
+    }
+
     public function test_meal_plan_week_hidden_from_parents_matches_contract(): void
     {
         MealPlannerWeekVisibility::create([

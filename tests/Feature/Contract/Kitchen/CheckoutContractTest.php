@@ -23,6 +23,17 @@ class CheckoutContractTest extends ContractTestCase
         $this->assertContract($response, self::ROUTE);
     }
 
+    public function test_cash_walk_in_checkout_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)->postJson('/api/v1/pos/checkout', $this->cart([
+            'payment_method' => 'cash',
+            'amount_tendered' => 200,
+            'notes' => 'No onions',
+        ]));
+
+        $this->assertContract($response, self::ROUTE, '422-no-branch');
+    }
+
     public function test_wallet_checkout_for_a_student_matches_contract(): void
     {
         Mail::fake();

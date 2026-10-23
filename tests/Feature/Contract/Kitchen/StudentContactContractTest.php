@@ -16,6 +16,13 @@ class StudentContactContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/students/{student}/contacts');
     }
 
+    public function test_contact_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson($this->contactsUrl());
+
+        $this->assertContract($response, 'GET api/v1/students/{student}/contacts', '422-no-branch');
+    }
+
     public function test_other_branch_contact_list_matches_contract(): void
     {
         $response = $this->asSupervisor()->getJson("/api/v1/students/{$this->scenario->branchBStudent->id}/contacts");

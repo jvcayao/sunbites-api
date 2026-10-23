@@ -60,10 +60,6 @@ class MealPlannerController extends Controller
     {
         $validated = $request->validated();
 
-        if (! app()->bound('active_branch')) {
-            return response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422);
-        }
-
         $branchId = app('active_branch')->id;
 
         foreach ($validated['rows'] as $row) {
@@ -87,10 +83,6 @@ class MealPlannerController extends Controller
     {
         $validated = $request->validated();
 
-        if (! app()->bound('active_branch')) {
-            return response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422);
-        }
-
         $branchId = app('active_branch')->id;
 
         foreach (DayOfWeek::cases() as $day) {
@@ -111,10 +103,6 @@ class MealPlannerController extends Controller
     public function updateWeekVisibility(UpdateMealPlanWeekVisibilityRequest $request): JsonResponse
     {
         $validated = $request->validated();
-
-        if (! app()->bound('active_branch')) {
-            return response()->json(['message' => 'No active branch selected. Please set a branch first.'], 422);
-        }
 
         $branchId = app('active_branch')->id;
 

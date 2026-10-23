@@ -13,6 +13,13 @@ class StudentReportContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/reports/students', mapPaths: ['summary.grade_breakdown', 'summary.status_breakdown']);
     }
 
+    public function test_student_report_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/reports/students');
+
+        $this->assertContract($response, 'GET api/v1/reports/students', '422-no-branch');
+    }
+
     public function test_student_report_with_an_unknown_payment_status_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->getJson('/api/v1/reports/students?payment_status=unknown');

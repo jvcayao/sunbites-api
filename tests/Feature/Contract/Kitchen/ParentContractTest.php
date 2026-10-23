@@ -15,6 +15,13 @@ class ParentContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/references/parents');
     }
 
+    public function test_parent_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->manager)->getJson('/api/v1/references/parents');
+
+        $this->assertContract($response, 'GET api/v1/references/parents', '422-no-branch');
+    }
+
     public function test_parent_list_with_an_unknown_status_matches_contract(): void
     {
         $response = $this->asManager()->getJson('/api/v1/references/parents?status=unknown');

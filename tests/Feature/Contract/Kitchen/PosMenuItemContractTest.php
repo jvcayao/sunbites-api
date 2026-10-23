@@ -15,6 +15,13 @@ class PosMenuItemContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/pos/menu-items');
     }
 
+    public function test_menu_item_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)->getJson('/api/v1/pos/menu-items');
+
+        $this->assertContract($response, 'GET api/v1/pos/menu-items', '422-no-branch');
+    }
+
     public function test_creating_a_menu_item_matches_contract(): void
     {
         $response = $this->asManager()->postJson('/api/v1/pos/menu-items', $this->menuItem());

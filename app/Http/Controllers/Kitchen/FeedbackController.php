@@ -20,9 +20,7 @@ class FeedbackController extends Controller
         $query = Feedback::with(['parent:id,first_name,last_name,email', 'student:id,first_name,last_name,student_number'])
             ->latest('created_at');
 
-        if (app()->bound('active_branch')) {
-            $query->where('branch_id', app('active_branch')->id);
-        }
+        $query->where('branch_id', app('active_branch')->id);
 
         if (! empty($validated['search'])) {
             $search = '%'.mb_strtolower($validated['search']).'%';

@@ -16,6 +16,13 @@ class WalletContractTest extends ContractTestCase
         $this->assertContract($response, 'POST api/v1/students/{student}/wallet/top-up');
     }
 
+    public function test_topping_up_a_wallet_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->postJson($this->studentUrl('/wallet/top-up'), $this->topUp());
+
+        $this->assertContract($response, 'POST api/v1/students/{student}/wallet/top-up', '422-no-branch');
+    }
+
     public function test_topping_up_a_wallet_without_input_matches_contract(): void
     {
         $response = $this->asSupervisor()->postJson($this->studentUrl('/wallet/top-up'), []);

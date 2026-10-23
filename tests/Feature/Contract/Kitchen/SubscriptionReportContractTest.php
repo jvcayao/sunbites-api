@@ -13,6 +13,13 @@ class SubscriptionReportContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/reports/subscription', mapPaths: ['data[].subscription_monthly_status.categories']);
     }
 
+    public function test_subscription_report_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/reports/subscription?month=october&year=2026');
+
+        $this->assertContract($response, 'GET api/v1/reports/subscription', '422-no-branch');
+    }
+
     public function test_subscription_report_without_a_period_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->getJson('/api/v1/reports/subscription');

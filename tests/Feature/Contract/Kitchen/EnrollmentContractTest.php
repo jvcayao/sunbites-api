@@ -14,6 +14,13 @@ class EnrollmentContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/enrollment', mapPaths: ['school_month_defaults']);
     }
 
+    public function test_enrollment_form_data_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/enrollment');
+
+        $this->assertContract($response, 'GET api/v1/enrollment', '422-no-branch');
+    }
+
     public function test_enrolling_a_subscription_student_matches_contract(): void
     {
         Mail::fake();

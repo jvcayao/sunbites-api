@@ -14,6 +14,14 @@ class InventoryIngredientContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/references/menu-items/{item}/ingredients');
     }
 
+    public function test_ingredient_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)
+            ->getJson("/api/v1/references/menu-items/{$this->scenario->menuItem->id}/ingredients");
+
+        $this->assertContract($response, 'GET api/v1/references/menu-items/{item}/ingredients', '422-no-branch');
+    }
+
     public function test_other_branch_ingredient_list_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)

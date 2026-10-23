@@ -13,6 +13,13 @@ class SubscriptionConfigContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/pos/subscription-config');
     }
 
+    public function test_subscription_config_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->manager)->getJson('/api/v1/pos/subscription-config');
+
+        $this->assertContract($response, 'GET api/v1/pos/subscription-config', '422-no-branch');
+    }
+
     public function test_updating_subscription_config_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->manager)->putJson('/api/v1/pos/subscription-config', [

@@ -13,6 +13,13 @@ class WalletReportContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/reports/wallet');
     }
 
+    public function test_wallet_report_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->manager)->getJson('/api/v1/reports/wallet');
+
+        $this->assertContract($response, 'GET api/v1/reports/wallet', '422-no-branch');
+    }
+
     public function test_wallet_report_with_an_unknown_sort_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->manager)->getJson('/api/v1/reports/wallet?sort=unknown');

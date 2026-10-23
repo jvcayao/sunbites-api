@@ -15,6 +15,13 @@ class PreRegistrationContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/pre-registrations');
     }
 
+    public function test_pre_registration_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/pre-registrations');
+
+        $this->assertContract($response, 'GET api/v1/pre-registrations', '422-no-branch');
+    }
+
     public function test_pre_registration_list_with_an_unknown_status_matches_contract(): void
     {
         $response = $this->asSupervisor()->getJson('/api/v1/pre-registrations?status=unknown');

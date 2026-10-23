@@ -13,6 +13,13 @@ class BranchMonthlyAmountContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/branch-monthly-amounts');
     }
 
+    public function test_monthly_amount_list_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/branch-monthly-amounts?year=2026');
+
+        $this->assertContract($response, 'GET api/v1/branch-monthly-amounts', '422-no-branch');
+    }
+
     public function test_creating_a_monthly_amount_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->postJson('/api/v1/branch-monthly-amounts', [

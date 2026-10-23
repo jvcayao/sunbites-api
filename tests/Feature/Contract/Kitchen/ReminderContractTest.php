@@ -14,6 +14,13 @@ class ReminderContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/reminders/bell-count');
     }
 
+    public function test_reminder_bell_count_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)->getJson('/api/v1/reminders/bell-count');
+
+        $this->assertContract($response, 'GET api/v1/reminders/bell-count', '422-no-branch');
+    }
+
     public function test_eligible_parents_match_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->getJson('/api/v1/reminders/eligible-parents');

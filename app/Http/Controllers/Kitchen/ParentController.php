@@ -41,10 +41,8 @@ class ParentController extends Controller
             default => null,
         };
 
-        if (app()->bound('active_branch')) {
-            $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
-            );
-        }
+        $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
+        );
 
         if (! empty($validated['search'])) {
             $search = '%'.mb_strtolower($validated['search']).'%';

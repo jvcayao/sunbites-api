@@ -155,7 +155,7 @@ class ParentManagementTest extends TestCase
 
         Sanctum::actingAs($cashier, ['staff']);
 
-        $this->getJson('/api/v1/references/parents')->assertForbidden();
+        $this->withHeaders(['X-Branch-Id' => $this->branch->id])->getJson('/api/v1/references/parents')->assertForbidden();
     }
 
     public function test_parent_list_only_returns_parents_in_active_branch(): void

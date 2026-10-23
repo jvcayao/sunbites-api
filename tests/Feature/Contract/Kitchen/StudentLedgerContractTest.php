@@ -14,6 +14,14 @@ class StudentLedgerContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/students/{student}/ledger');
     }
 
+    public function test_student_ledger_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)
+            ->getJson("/api/v1/students/{$this->scenario->subscriptionStudent->id}/ledger");
+
+        $this->assertContract($response, 'GET api/v1/students/{student}/ledger', '422-no-branch');
+    }
+
     public function test_student_ledger_with_an_unknown_entry_type_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->cashier)

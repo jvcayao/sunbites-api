@@ -15,6 +15,13 @@ class WalletHistoryContractTest extends ContractTestCase
         $this->assertContract($response, self::ROUTE);
     }
 
+    public function test_top_up_history_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->manager)->getJson($this->historyUrl('topups'));
+
+        $this->assertContract($response, self::ROUTE, '422-no-branch');
+    }
+
     public function test_purchase_history_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->manager)->getJson($this->historyUrl('purchases'));

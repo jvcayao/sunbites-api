@@ -22,6 +22,19 @@ class CreditContractTest extends ContractTestCase
         $this->assertContract($response, 'POST api/v1/students/{student}/credit/settle');
     }
 
+    public function test_settling_credit_by_gcash_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)
+            ->postJson("/api/v1/students/{$this->scenario->subscriptionStudent->id}/credit/settle", [
+                'amount' => 20,
+                'payment_method' => 'gcash',
+                'reference_number' => 'GC555777',
+                'note' => 'Paid at the counter',
+            ]);
+
+        $this->assertContract($response, 'POST api/v1/students/{student}/credit/settle', '422-no-branch');
+    }
+
     public function test_settling_credit_without_input_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->cashier)

@@ -20,6 +20,16 @@ class StudentLookupContractTest extends ContractTestCase
         $this->assertContract($response, 'POST api/v1/pos/students/lookup', mapPaths: self::STATUS_MAPS);
     }
 
+    public function test_qr_lookup_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->cashier)->postJson('/api/v1/pos/students/lookup', [
+            'type' => 'qr',
+            'value' => $this->scenario->subscriptionStudent->qr_code,
+        ]);
+
+        $this->assertContract($response, 'POST api/v1/pos/students/lookup', '422-no-branch');
+    }
+
     public function test_search_lookup_matches_contract(): void
     {
         $response = $this->asCashier()->postJson('/api/v1/pos/students/lookup', ['type' => 'search', 'value' => 'Dela']);

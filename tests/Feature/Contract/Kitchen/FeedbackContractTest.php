@@ -14,6 +14,13 @@ class FeedbackContractTest extends ContractTestCase
         $this->assertContract($response, 'GET api/v1/references/feedback');
     }
 
+    public function test_feedback_inbox_without_a_branch_matches_contract(): void
+    {
+        $response = $this->scenario->asStaffWithoutBranch($this->scenario->supervisor)->getJson('/api/v1/references/feedback');
+
+        $this->assertContract($response, 'GET api/v1/references/feedback', '422-no-branch');
+    }
+
     public function test_feedback_inbox_with_an_invalid_page_size_matches_contract(): void
     {
         $response = $this->scenario->asStaff($this->scenario->supervisor)->getJson('/api/v1/references/feedback?per_page=0');
