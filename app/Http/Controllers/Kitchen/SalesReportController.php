@@ -43,7 +43,25 @@ class SalesReportController extends Controller
         $orders = $query->paginate($perPage);
 
         return response()->json([
-            'data' => $orders->items(),
+            'data' => collect($orders->items())->map(fn (Order $o) => [
+                ...$o->attributesToArray(),
+                'items' => $o->items->toArray(),
+                'student' => $o->student ? [
+                    'id' => $o->student->id,
+                    'first_name' => $o->student->first_name,
+                    'last_name' => $o->student->last_name,
+                    'full_name' => $o->student->full_name,
+                    'student_number' => $o->student->student_number,
+                    'grade_level' => $o->student->grade_level,
+                    'section' => $o->student->section,
+                ] : null,
+                'cashier' => $o->cashier ? [
+                    'id' => $o->cashier->id,
+                    'first_name' => $o->cashier->first_name,
+                    'last_name' => $o->cashier->last_name,
+                    'full_name' => $o->cashier->full_name,
+                ] : null,
+            ]),
             'meta' => $this->paginationMeta($orders),
             'summary' => [
                 'total_revenue' => $totalRevenue,

@@ -41,13 +41,25 @@ class BillingReportController extends Controller
 
         $payments = $query->paginate($perPage);
 
-        $payments->getCollection()->each(function ($payment): void {
-            $payment->student?->append('full_name');
-            $payment->recorder?->append('full_name');
-        });
-
         return response()->json([
-            'data' => $payments->items(),
+            'data' => collect($payments->items())->map(fn (StudentMonthlyPayment $p) => [
+                ...$p->attributesToArray(),
+                'student' => $p->student ? [
+                    'id' => $p->student->id,
+                    'first_name' => $p->student->first_name,
+                    'last_name' => $p->student->last_name,
+                    'full_name' => $p->student->full_name,
+                    'student_number' => $p->student->student_number,
+                    'grade_level' => $p->student->grade_level,
+                    'section' => $p->student->section,
+                ] : null,
+                'recorder' => $p->recorder ? [
+                    'id' => $p->recorder->id,
+                    'first_name' => $p->recorder->first_name,
+                    'last_name' => $p->recorder->last_name,
+                    'full_name' => $p->recorder->full_name,
+                ] : null,
+            ]),
             'meta' => $this->paginationMeta($payments),
             'summary' => [
                 'total_subscribers' => $totalSubscribers,

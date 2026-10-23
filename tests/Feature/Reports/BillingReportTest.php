@@ -529,4 +529,44 @@ class BillingReportTest extends TestCase
             ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
         );
     }
+
+    /**
+     * Rows carry only the student and recorder fields the report shows, not their personal data
+     * (Spec 16 B-12, B-13).
+     */
+    public function test_rows_carry_only_the_student_and_recorder_fields_the_report_shows(): void
+    {
+        $recorder = User::factory()->create(['first_name' => 'Rhea', 'last_name' => 'Santos', 'daily_rate' => 500, 'phone' => '09170000000', 'birthday' => '1990-01-01']);
+        $student = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana', 'last_name' => 'Reyes']);
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => 2026,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_by' => $recorder->id,
+            'recorded_at' => now(),
+        ]);
+
+        $row = $this->asAdmin()->getJson('/api/v1/reports/billing?year=2026&school_month=june')->assertOk()->json('data.0');
+
+        $keys = fn (array $object): array => collect(array_keys($object))->sort()->values()->all();
+        $this->assertSame(
+            [
+                'student' => ['first_name', 'full_name', 'grade_level', 'id', 'last_name', 'section', 'student_number'],
+                'recorder' => ['first_name', 'full_name', 'id', 'last_name'],
+                'recorder full_name' => 'Rhea Santos',
+                'sensitive keys present' => [],
+            ],
+            [
+                'student' => $keys($row['student']),
+                'recorder' => $keys($row['recorder']),
+                'recorder full_name' => $row['recorder']['full_name'],
+                'sensitive keys present' => array_values(array_intersect(
+                    [...array_keys($row['student']), ...array_keys($row['recorder'])],
+                    ['qr_code', 'daily_rate', 'phone', 'birthday', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'],
+                )),
+            ],
+        );
+    }
 }
