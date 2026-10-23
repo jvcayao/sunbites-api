@@ -436,4 +436,75 @@ class FeedbackTest extends TestCase
     {
         $this->getJson('/api/v1/references/feedback')->assertUnauthorized();
     }
+
+    // --- Kitchen: another branch's feedback (Spec 16 B-18) ---
+
+    public function test_replying_to_another_branchs_feedback_returns_404_and_sends_nothing(): void
+    {
+        Mail::fake();
+        $feedback = $this->feedbackInAnotherBranch();
+
+        $response = $this->asSupervisor()->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+            'reply' => 'Thank you, we will look into this with the kitchen team.',
+        ]);
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $feedback->refresh();
+        $this->assertNull($feedback->admin_reply);
+        $this->assertNull($feedback->replied_at);
+        $this->assertFalse($feedback->is_read);
+        Mail::assertNothingQueued();
+    }
+
+    public function test_replying_to_another_branchs_feedback_with_an_invalid_reply_returns_404_not_422(): void
+    {
+        Mail::fake();
+        $feedback = $this->feedbackInAnotherBranch();
+
+        $response = $this->asSupervisor()->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+            'reply' => '<br><br>',
+        ]);
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+    }
+
+    public function test_marking_another_branchs_feedback_read_returns_404_and_leaves_it_unread(): void
+    {
+        $feedback = $this->feedbackInAnotherBranch();
+
+        $response = $this->asSupervisor()->patchJson("/api/v1/references/feedback/{$feedback->id}/mark-read");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertFalse($feedback->fresh()->is_read);
+    }
+
+    /**
+     * A supervisor, the lowest role the kitchen feedback routes allow, working in this branch.
+     */
+    private function asSupervisor(): static
+    {
+        $supervisor = User::factory()->create();
+        $supervisor->assignRole('supervisor');
+        $supervisor->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+
+        Sanctum::actingAs($supervisor, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
+    }
+
+    /**
+     * Unread feedback from this parent about a child enrolled in another branch.
+     */
+    private function feedbackInAnotherBranch(): Feedback
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+
+        return $this->createFeedback([
+            'student_id' => Student::factory()->create(['branch_id' => $otherBranch->id])->id,
+            'branch_id' => $otherBranch->id,
+        ]);
+    }
 }

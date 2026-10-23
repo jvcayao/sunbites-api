@@ -7,6 +7,7 @@ use App\Http\Requests\Kitchen\ListFeedbackRequest;
 use App\Http\Requests\Kitchen\ReplyFeedbackRequest;
 use App\Mail\FeedbackReplyMail;
 use App\Models\Feedback;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Mail;
 
@@ -96,6 +97,10 @@ class FeedbackController extends Controller
 
     public function markRead(Feedback $feedback): JsonResponse
     {
+        if ($feedback->branch_id !== app('active_branch')->id) {
+            throw (new ModelNotFoundException)->setModel(Feedback::class);
+        }
+
         $feedback->update(['is_read' => true]);
 
         return response()->json(['message' => 'Feedback marked as read.']);
