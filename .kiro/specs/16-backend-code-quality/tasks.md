@@ -7,7 +7,7 @@
 - **Non-negotiable tooling (Req 12, design §12):**
   - **Before any PHP work:** activate `laravel-best-practices` and read its mapped rule files (design §12.1).
   - **Before any test work:** activate `testing-best-practices`.
-  - **Domain skills:** `laravel-excel` (exports), `laravel-permission-development` (roles), `fortify-development` (T-17.1).
+  - **Domain skills:** `laravel-excel` (exports), `laravel-permission-development` (roles), `fortify-development` (T-17.1), `activitylog-development` (any activity-log work, H5).
   - **Boost:** confirm the Laravel Boost MCP is connected (`vendor/bin/sail up -d`); run `application-info` at PR start and `search-docs` before using any Laravel or package API. Use `database-schema`/`database-query` before model, enum or raw-SQL changes (design §12.2). **Do not proceed without Boost.**
   - **Tooling log:** the PR description includes one block per commit listing skills, rule files read, and each `search-docs` query with the section used.
   - **Laravel Pint (non-negotiable, `.claude/rules/backend/laravel-pint.md`):** every backend task ends with `vendor/bin/sail bin pint --dirty --format agent` before it is reported done or committed. Before pushing the branch, `vendor/bin/sail bin pint --format agent` must report no changes (CI runs `pint --test`).

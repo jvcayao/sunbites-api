@@ -73,6 +73,7 @@ Re-read #7 (§3 hazards) and #8 (ground rules) at the start of **every** step.
   - `laravel-excel` when touching `app/Exports/` (T-10, T-12.3).
   - `laravel-permission-development` for roles and `role:` middleware (T-1.6, T-2, B-01, B-02).
   - `fortify-development` for T-17.
+  - `activitylog-development` for any task that touches `LogsActivity`, `activity()` or activity rows (H5). Boost added it with 13.38.0, and `CLAUDE.md` now requires it for activity-log work.
 - **Boost:**
   - `search-docs`: run it **before** writing code that uses any Laravel or package API (Form Request hooks, `#[Authorize]`, `#[Scope]`, `#[UsePolicy]`, model attributes, `#[Tries]`/`#[Backoff]`, `ShouldQueueAfterCommit`, `JsonResource`, enum casts, `whereAny`, `lockForUpdate`, Sanctum tokens, Spatie roles, maatwebsite exports). Scope it with `packages`.
   - `database-schema`: run it before model, cast, enum or raw-SQL work.

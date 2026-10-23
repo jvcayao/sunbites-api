@@ -1307,6 +1307,7 @@ Verified on 2026-10-09:
 | Tasks touching `app/Exports/` (T-10.x, T-12.3) | `laravel-excel` | Export behaviour and `Excel::fake()` usage |
 | Tasks touching roles or `role:` middleware (T-1.6, T-2, B-01, B-02) | `laravel-permission-development` | Spatie role and guard semantics (roles are seeded on guard `web`; `User::getDefaultGuardName()`) |
 | T-17.1 | `fortify-development` | Fortify route and feature removal |
+| Tasks touching `LogsActivity`, `activity()` or activity rows (H5): T-9, T-11, T-12, T-14, T-16, and any Track B item that writes activity | `activitylog-development` | Added by Boost with 13.38.0 (`880d4c0`); `CLAUDE.md` now says to activate it for any activity-log work |
 
 The skill's own first rule, *"Consistency First: the best choice is the one the codebase already uses"*, agrees with this spec. Where a skill rule would change behaviour protected by §3 (e.g. unifying rule sets, H13), §3 wins, and the PR notes the conflict.
 
@@ -1485,6 +1486,8 @@ vendor/bin/sail bin pint --format agent                 # reports no changes (CI
 Any unexpected hit is fixed in the T-18 commit, behaviour-identically. If it cannot be fixed that way, list it as an exception with its reason.
 
 ### 14.5 Complete Laravel 13.35 attribute inventory
+
+*Re-checked on 13.38.0 (2026-10-23): no attribute class was added after 13.35.0. Every class under `Illuminate/**/Attributes/` is in the table below.*
 
 Source: every class under `vendor/laravel/framework/src/Illuminate/**/Attributes/` in the installed 13.35.0 (listed 2026-10-09). The article *"PHP Attributes in Laravel 13: A Comprehensive Guide"* (msaied.com) was cross-checked. It covers the Eloquent model attributes (`Fillable`, `Guarded`, `Unguarded`, `Hidden`, `Visible`, `Appends`, `Touches`, `Table`, `Connection`) and the queue attributes (`Tries`, `Timeout`, `Backoff`), states that attributes are optional and that properties remain supported, and is fully consistent with the table below. Each attribute's applicability was verified with `rg` against `app/`, `database/factories` and `tests/`.
 
