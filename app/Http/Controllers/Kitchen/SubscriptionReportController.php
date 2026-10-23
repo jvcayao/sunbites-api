@@ -5,25 +5,18 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\MenuCategory;
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ShowSubscriptionReportRequest;
 use App\Models\BranchSubscriptionConfig;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class SubscriptionReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ShowSubscriptionReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'month' => ['required', Rule::enum(SchoolMonth::class)],
-            'year' => ['required', 'integer', 'min:2020', 'max:2099'],
-            'status' => ['sometimes', Rule::in(['paid', 'unpaid', 'not_recorded'])],
-            'grade_level' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'search' => ['sometimes', 'nullable', 'string', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $monthEnum = SchoolMonth::from($validated['month']);
         $year = (int) $validated['year'];
@@ -35,11 +28,7 @@ class SubscriptionReportController extends Controller
         $students = Student::where('branch_id', $branch->id)
             ->where('student_type', 'subscription')
             ->when($gradeLevel, fn ($q) => $q->where('grade_level', $gradeLevel))
-            ->when($search, fn ($q) => $q->where(function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                    ->orWhere('last_name', 'like', "%{$search}%")
-                    ->orWhere('student_number', 'like', "%{$search}%");
-            }))
+            ->when($search, fn ($q) => $q->whereAny(['first_name', 'last_name', 'student_number'], 'like', "%{$search}%"))
             ->when($status === 'not_recorded', fn ($q) => $q->whereDoesntHave('monthlyPayments', fn ($pq) => $pq
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $year)

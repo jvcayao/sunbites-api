@@ -296,6 +296,25 @@ class SubscriptionReportTest extends TestCase
         $this->assertNotContains($nonSub->id, $ids);
     }
 
+    public function test_search_matches_first_name_last_name_or_student_number_of_the_branchs_subscribers_only(): void
+    {
+        BranchSubscriptionConfig::factory()->create(['branch_id' => $this->branch->id]);
+        $byFirstName = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Zoraida']);
+        $byLastName = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'last_name' => 'Zorilla']);
+        $byStudentNumber = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'student_number' => 'Zor-0001']);
+        Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana', 'last_name' => 'Cruz']);
+        Student::factory()->nonSubscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Zoraida']);
+        Student::factory()->subscription()->enrolled()->create(['branch_id' => Branch::factory()->create(['is_active' => true])->id, 'first_name' => 'Zoraida']);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/subscription?'.http_build_query($this->reportParams(['search' => 'Zor'])));
+
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing(
+            [$byFirstName->id, $byLastName->id, $byStudentNumber->id],
+            collect($response->json('data'))->pluck('id')->all(),
+        );
+    }
+
     public function test_report_requires_authentication(): void
     {
         $response = $this->getJson('/api/v1/reports/subscription?'.http_build_query($this->reportParams()));

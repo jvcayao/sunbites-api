@@ -5,26 +5,21 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\InventoryLogType;
 use App\Exports\InventoryReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportInventoryReportRequest;
+use App\Http\Requests\Kitchen\ShowInventoryReportRequest;
 use App\Http\Resources\InventoryLogResource;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rules\Enum;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class InventoryReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ShowInventoryReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date'],
-            'type' => ['nullable', new Enum(InventoryLogType::class)],
-            'item_id' => ['nullable', 'integer', 'exists:inventory_items,id'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
 
@@ -92,12 +87,9 @@ class InventoryReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportInventoryReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date'],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
         $branchId = $branch->id;

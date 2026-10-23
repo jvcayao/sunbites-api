@@ -6,18 +6,16 @@ use App\Enums\CreditSettlementMethod;
 use App\Enums\CreditTransactionType;
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ShowDailySummaryRequest;
 use App\Models\CreditTransaction;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class DailySummaryController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ShowDailySummaryRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'date' => ['nullable', 'date'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $date = $validated['date'] ?? now()->toDateString();

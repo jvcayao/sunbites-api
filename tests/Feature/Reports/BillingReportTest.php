@@ -203,6 +203,17 @@ class BillingReportTest extends TestCase
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
+    /**
+     * The export has no per_page rule, so a value over the list's max:100 is still accepted (H8).
+     */
+    public function test_export_ignores_a_per_page_above_the_list_limit(): void
+    {
+        $response = $this->asManager()->getJson('/api/v1/reports/billing/export?per_page=500');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
     public function test_grade_level_filter_works(): void
     {
         $grade1Student = Student::factory()->create([

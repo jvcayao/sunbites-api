@@ -3,23 +3,16 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListActivityLogsRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Spatie\Activitylog\Models\Activity;
 
 class ActivityLogController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListActivityLogsRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
-            'user_id' => ['nullable', 'integer', 'exists:users,id'],
-            'log_name' => ['nullable', 'string', 'max:100'],
-            'search' => ['nullable', 'string', 'max:255'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $perPage = $validated['per_page'] ?? 25;
 

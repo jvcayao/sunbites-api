@@ -173,6 +173,17 @@ class SalesReportTest extends TestCase
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
+    /**
+     * The export has no per_page rule, so a value over the list's max:100 is still accepted (H8).
+     */
+    public function test_export_ignores_a_per_page_above_the_list_limit(): void
+    {
+        $response = $this->asManager()->getJson('/api/v1/reports/sales/export?per_page=500');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
     public function test_voided_orders_excluded_from_sales_report(): void
     {
         Order::factory()->create([

@@ -5,25 +5,17 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\CreditSettlementMethod;
 use App\Enums\CreditTransactionType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListCreditReportRequest;
 use App\Models\CreditTransaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class CreditReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListCreditReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
-            'type' => ['nullable', 'string', Rule::enum(CreditTransactionType::class)],
-            'payment_method' => ['nullable', 'string', Rule::enum(CreditSettlementMethod::class)],
-            'search' => ['nullable', 'string', 'max:255'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $perPage = $validated['per_page'] ?? 25;

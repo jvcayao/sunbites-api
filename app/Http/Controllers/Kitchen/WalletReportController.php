@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Exports\WalletReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListWalletReportRequest;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -15,15 +16,9 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class WalletReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListWalletReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
-            'has_credit' => ['nullable', 'boolean'],
-            'sort' => ['nullable', 'in:name,credit'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $dateFrom = $validated['date_from'] ?? now()->startOfMonth()->toDateString();

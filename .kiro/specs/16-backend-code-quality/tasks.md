@@ -292,16 +292,16 @@
     - Tests: precedence: a reply of `"<br><br>"` → 422 on `reply` (`min:5` applied to sanitised text); fixtures unchanged.
     - _Requirements: 3.1, 3.5_
 
-- [ ] 10. Reports *(design §4.2.1, §4.6; hazards H1, H8)*
-  - [ ] 10.1 Sales report
+- [x] 10. Reports *(design §4.2.1, §4.6; hazards H1, H8)*
+  - [x] 10.1 Sales report
     - Create `ExportSalesReportRequest` and `ListSalesReportRequest extends` it, and add the private `filteredOrders()` builder.
     - Tests: fixtures unchanged; `SalesReportTest` unchanged; `GET /reports/sales/export?per_page=500` still returns 200 (H8).
     - _Requirements: 3.1, 7.5_
-  - [ ] 10.2 Billing and student reports
+  - [x] 10.2 Billing and student reports
     - Create `ExportBillingReportRequest`/`ListBillingReportRequest` and `ExportStudentReportRequest`/`ListStudentReportRequest`.
     - Tests: fixtures unchanged, plus the same export `per_page` test.
     - _Requirements: 3.1_
-  - [ ] 10.3 Remaining report requests
+  - [x] 10.3 Remaining report requests
     - Create `ShowInventoryReportRequest`, `ExportInventoryReportRequest`, `ShowSubscriptionReportRequest`, `ListWalletReportRequest`, `ListCreditReportRequest`, `ShowDailySummaryRequest`, `ListActivityLogsRequest` and `ShowAnalyticsRequest`.
     - Tests: fixtures unchanged.
     - _Requirements: 3.1_

@@ -166,6 +166,17 @@ class StudentReportTest extends TestCase
         $this->assertStringNotContainsString('tin_number', $content);
     }
 
+    /**
+     * The export has no per_page rule, so a value over the list's max:100 is still accepted (H8).
+     */
+    public function test_export_ignores_a_per_page_above_the_list_limit(): void
+    {
+        $response = $this->asManager()->getJson('/api/v1/reports/students/export?per_page=500');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
     public function test_search_by_first_name_returns_matching_students(): void
     {
         Student::factory()->create([

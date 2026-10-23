@@ -4,25 +4,19 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ShowAnalyticsRequest;
 use App\Models\Student;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class AnalyticsController extends Controller
 {
     private ?bool $isSqliteDriver = null;
 
-    public function index(Request $request): JsonResponse
+    public function index(ShowAnalyticsRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'from_month' => ['required', 'string', Rule::enum(SchoolMonth::class)],
-            'from_year' => ['required', 'integer', 'min:2020', 'max:2099'],
-            'to_month' => ['required', 'string', Rule::enum(SchoolMonth::class)],
-            'to_year' => ['required', 'integer', 'min:2020', 'max:2099'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $start = Carbon::create($validated['from_year'], SchoolMonth::from($validated['from_month'])->toMonthNumber(), 1)->startOfMonth();

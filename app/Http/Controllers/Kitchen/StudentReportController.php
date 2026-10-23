@@ -5,28 +5,19 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\SchoolMonth;
 use App\Exports\StudentsExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportStudentReportRequest;
+use App\Http\Requests\Kitchen\ListStudentReportRequest;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StudentReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListStudentReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'status' => ['nullable', 'string'],
-            'grade' => ['nullable', 'string'],
-            'type' => ['nullable', 'string'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'payment_from' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'payment_to' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $yearStart = $this->schoolYearStart();
@@ -86,17 +77,9 @@ class StudentReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportStudentReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate([
-            'status' => ['nullable', 'string'],
-            'grade' => ['nullable', 'string'],
-            'type' => ['nullable', 'string'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'payment_from' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'payment_to' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
 

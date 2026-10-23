@@ -5,22 +5,20 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\SchoolMonth;
 use App\Exports\BillingReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportBillingReportRequest;
+use App\Http\Requests\Kitchen\ListBillingReportRequest;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BillingReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListBillingReportRequest $request): JsonResponse
     {
-        $validated = $request->validate(array_merge($this->filterRules(), [
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]));
+        $validated = $request->validated();
 
         $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
         $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
@@ -60,9 +58,9 @@ class BillingReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportBillingReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate($this->filterRules());
+        $validated = $request->validated();
 
         $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
         $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
@@ -89,20 +87,6 @@ class BillingReportController extends Controller
         $filename = "billing-report-{$branch->slug}-{$year}.xlsx";
 
         return Excel::download(new BillingReportExport($payments, $summary), $filename);
-    }
-
-    private function filterRules(): array
-    {
-        return [
-            'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
-            'school_month' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'grade_level' => ['nullable', 'string'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'recorded_by' => ['nullable', 'integer', 'exists:users,id'],
-            'recorded_from' => ['nullable', 'date'],
-            'recorded_to' => ['nullable', 'date'],
-        ];
     }
 
     private function buildQuery(array $validated): Builder
