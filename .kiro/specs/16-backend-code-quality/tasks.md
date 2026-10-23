@@ -448,6 +448,7 @@
   - Add the `SchoolMonth` helpers and fix `PaymentReminderService`, `BillingReportController` (index and export) and `SubscriptionReportController`.
   - Failing tests at `travelTo('2027-01-20')`, as listed in design §5.5; existing June tests pass.
   - Apply the permitted `BillingReportTest` edit described in design §5.5 (seed calendar year; add frozen-clock variants).
+  - Apply the permitted `PaymentReminderServiceTest` edits (T-9's `+1` pins) described in design §5.5.
   - Fixtures: none (shapes unchanged).
   - _Requirements: 10.6_
 - [x] B-07. Receipt cashier name *(design §5.6; after T-3)*
