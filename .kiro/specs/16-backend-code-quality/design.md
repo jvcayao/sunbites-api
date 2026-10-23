@@ -823,6 +823,14 @@ Each subsection gives the behaviour before and after, the fixtures it changes, a
 - **`InventoryController::unarchive`:** replace `InventoryItem::withoutBranch()` with `InventoryItem::query()`.
 - **`UpdateStaffStatusRequest`:** `'user_id' => ['required', Rule::exists('branch_user', 'user_id')->where('branch_id', app('active_branch')->id)]`. This gives a 422 validation error.
 - **Fixtures:** the `other-branch` variants recorded in T-1 for the parent routes, `PATCH references/inventory/{item}/unarchive` and `POST dashboard/staff-status` change from today's 200 to 404 (staff-status: 422). No new variants. List each changed fixture in the commit body.
+- **Existing tests (named Arrange-only edits, decided 2026-10-23 after the implementer's STOP):** 10 existing tests created parents or staff with no link to the active branch, so B-01's rule fails them in Arrange. Fix the setup only; every assertion stays as it is.
+  - `tests/Feature/Kitchen/ParentAccountManagementTest.php`: link the parent to a student in `$this->branch` through a private helper in that file. This applies to the 8 failing tests:
+    - `test_admin_can_disable_an_active_parent`, `test_admin_can_enable_a_disabled_parent` and `test_enabling_an_already_enabled_parent_is_idempotent`
+    - `test_admin_can_soft_delete_a_parent`, `test_admin_can_restore_a_soft_deleted_parent` and `test_show_returns_is_disabled_and_deleted_at_fields`
+    - `test_show_resolves_soft_deleted_parent` and `test_disabling_an_already_disabled_parent_is_idempotent`
+    - also `test_restoring_a_non_deleted_parent_returns_404`, so that it tests the not-trashed `abort(404)` path again rather than the B-01 guard
+  - `tests/Feature/Reports/DashboardTest.php`: attach `$staffUser` to `$this->branch` (`branch_user`), as other tests do, in `test_staff_status_upsert_creates_record` and `test_staff_status_upsert_updates_existing_record`.
+  - **Why this is not a behaviour change:** the POS can only reach these records through lists that are already branch-scoped. `GET /parents` shows only parents with a child in the active branch, and the dashboard `staff_roster` comes from `$branch->users()`. Admins who use `access.any_branch` without a `branch_user` row are not in the roster, so the POS never sends them. A parent with no linked students at all is already hidden from the list, and B-01 makes it unreachable by id too.
 - **FE impact:** none. The POS only lists parents, inventory and roster users from the active branch (`references/parents`, `references/inventory`, dashboard roster).
 
 ### 5.2 B-02: Branch required

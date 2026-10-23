@@ -28,7 +28,7 @@
   - The first commit is the spec/steering/rules documents: `docs(spec16): add backend code quality spec, steering update and pint rule`.
   - After T-19, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
 - **Track A commits must not change any contract fixture:** the fixture digest (design §4.1.7) stays identical. Track B commits change only the fixtures listed in the task, proven by the per-file hash diff. **Fixtures are gitignored and are never committed:** never `git add -f` them.
-- **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), T-17.1 (`tests/TestCase.php` unused Fortify helper), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
+- **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), T-17.1 (`tests/TestCase.php` unused Fortify helper), B-01 (Arrange-only: branch links in `ParentAccountManagementTest` and `DashboardTest`, design §5.1), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
 - **`make:request` generates `authorize(): bool { return false; }`** (verified in the framework stub). Every Form Request in this spec MUST change it to `return true;`, since authorization lives in route middleware and `#[Authorize]`. Leaving `false` makes the endpoint return 403 for everyone. The contract suite catches this, but check it anyway.
 - **Create files with Artisan**, then fill them in:
   - `vendor/bin/sail artisan make:request Kitchen/ListActivityLogsRequest --no-interaction`
@@ -427,6 +427,7 @@
 - [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
   - Fixtures: the T-1 `other-branch` variants for these routes change from 200 to 404 (staff-status: 422); no new variants (design §5.1).
+  - **Named edits to existing tests (Arrange only, decided 2026-10-23; no assertion changes):** design §5.1 *Existing tests*.
   - _Requirements: 10.2_
 - [ ] B-02. Branch header required *(design §5.2; after T-6 at minimum. Actual slot: after T-7, T-9, B-01 and B-16, per `HANDOFF.md` §6)*
   - Create `EnsureActiveBranch` via `make:middleware`, register the alias, apply it to the group with the exact allowlist, and remove the dead `MealPlannerController` checks.
