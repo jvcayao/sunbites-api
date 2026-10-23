@@ -9,6 +9,7 @@ use App\Http\Requests\Kitchen\StoreBranchMonthlyAmountRequest;
 use App\Http\Requests\Kitchen\UpdateBranchMonthlyAmountRequest;
 use App\Models\BranchMonthlyAmount;
 use App\Models\SystemConfiguration;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 
 class BranchMonthlyAmountController extends Controller
@@ -78,6 +79,10 @@ class BranchMonthlyAmountController extends Controller
 
     public function destroy(BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
     {
+        if ($branchMonthlyAmount->branch_id !== app('active_branch')->id) {
+            throw (new ModelNotFoundException)->setModel(BranchMonthlyAmount::class);
+        }
+
         $branchMonthlyAmount->delete();
 
         return response()->json(['message' => 'Month config deleted.']);

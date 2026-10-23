@@ -484,7 +484,7 @@
   - Fixtures: none (row shape unchanged; only the set of rows grows). If the `ok` fixture's scenario has an archived item, its list shape stays identical.
   - Staging smoke test: References → Inventory shows the Archived section with the archived item, and Unarchive moves it back.
   - _Requirements: 10.16_
-- [ ] B-17. Cross-branch branch monthly amounts *(approved 2026-10-12; design §5.15; after T-6 and B-01)*
+- [x] B-17. Cross-branch branch monthly amounts *(approved 2026-10-12; design §5.15; after T-6 and B-01)*
   - Failing test: a branch-A supervisor `PUT`/`DELETE` on a branch-B `BranchMonthlyAmount` gets 404.
   - _Requirements: 10.17_
 - [ ] B-18. Cross-branch feedback *(approved 2026-10-12; design §5.16; after T-9 and B-01)*
