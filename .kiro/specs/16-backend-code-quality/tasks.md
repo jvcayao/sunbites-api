@@ -502,7 +502,7 @@
   - Failing test first (`tests/Feature/PosMenuItemDeleteTest.php`): a sold item gives 422 with the exact message, the item stays, and there is no `deleted` activity row; an unsold item still deletes.
   - Fixture: new `delete__api_v1_pos_menu_items_{item}@422-has-sales.json`.
   - _Requirements: 10.20_
-- [ ] B-21. *(approved 2026-10-17)* Portal dashboard credit *(design §5.19; HANDOFF §6, right after B-08)*
+- [x] B-21. *(approved 2026-10-17)* Portal dashboard credit *(design §5.19; HANDOFF §6, right after B-08)*
   - Failing test first (`tests/Feature/Portal/DashboardCreditBalanceTest.php`): `credit_balance` is 37.5 for a student who owes, and 0 for one who does not.
   - Fixture: `get__api_v1_portal_dashboard@ok.json` gains `students[].credit_balance`.
   - _Requirements: 10.21_
