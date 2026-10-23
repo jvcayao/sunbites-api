@@ -1107,7 +1107,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - The POS then sends back `"2016-02-14"`, which is stored correctly.
 - **Not chosen:** a frontend-only fix. `slice(0, 10)` gives the wrong day in Manila, and formatting in local time depends on the browser's timezone while every other consumer still gets the shifted value.
 - **Affected responses:** run `grep -l '"birthday": "string:iso8601_micro"' tests/Fixtures/contracts/*.json`.
-  - These four fixtures change `data.birthday` from `string:iso8601_micro` to `string`: `get__api_v1_pre_registrations_{preRegistration}@ok`, `…@other-branch`, `patch__api_v1_pre_registrations_{preRegistration}@ok` and `…@other-branch`.
+  - These four fixtures change `data.birthday` from `string:iso8601_micro` to `string:date` (the §4.1.1 token for a `Y-m-d` value): `get__api_v1_pre_registrations_{preRegistration}@ok`, `…@other-branch`, `patch__api_v1_pre_registrations_{preRegistration}@ok` and `…@other-branch`.
   - After the fix, the only matches left are `get__api_v1_reports_billing@ok.json` and `get__api_v1_reports_sales@ok.json`. Those are `Student`/`User` birthdays, which B-12 removes.
 - **Test** (failing first; new file `tests/Feature/Kitchen/PreRegistrationBirthdayTest.php`):
   - **Timezone setup:** in `setUp()`, after `parent::setUp()`, call `config(['app.timezone' => 'Asia/Manila'])` and `date_default_timezone_set('Asia/Manila')`. In `tearDown()`, call `date_default_timezone_set('UTC')` before `parent::tearDown()`, so later tests keep `phpunit.xml`'s UTC.
@@ -1115,7 +1115,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   - **Round trip:** PATCH with the `birthday` value from `show` plus a changed `first_name`, and the stored birthday stays `2016-02-14` (`$preRegistration->fresh()->birthday->toDateString()`).
   - Before the fix, both fail: the first gets `2016-02-13T16:00:00.000000Z`, and the second stores `2016-02-13`.
 - **FE impact:** positive, with no FE change. The POS date input shows the birthday, and saving keeps it. The POS has no other use of a pre-registration birthday.
-- **Later tasks:** T-12 (the `PreRegistration` accessor) and T-16 (model attributes) must keep `'birthday' => 'date:Y-m-d'`. The B-22 fixtures (`string`, not `string:iso8601_micro`) catch a revert.
+- **Later tasks:** T-12 (the `PreRegistration` accessor) and T-16 (model attributes) must keep `'birthday' => 'date:Y-m-d'`. The B-22 fixtures (`string:date`, not `string:iso8601_micro`) catch a revert.
 
 ### 5.21 B-23 *(approved 2026-10-17)*: Make the API's 403/404 bodies match `bootstrap/app.php`
 
