@@ -976,6 +976,38 @@ Apply it to the search clauses in:
 
 The `lower(...) like ?` searches (`ParentController`, `FeedbackController`, `PreRegistrationController`, `ReminderController`, `BillingReportController`) get the same escaping via `whereRaw("lower(col) LIKE ? ESCAPE '!'", …)`.
 
+- **Multi-column searches (decided 2026-10-23 after the implementer's STOP; reconciles §5.9 with §14.1 S3):** six listed sites became `whereAny([...], 'like', $pattern)` under S3, and `whereAny` cannot add `ESCAPE`. Register a second macro next to the first, in the same place, which reuses the first:
+  ```php
+  Builder::macro('whereAnyContainsLiteral', function (array $columns, string $term, string $boolean = 'and') {
+      return $this->where(function ($query) use ($columns, $term) {
+          foreach ($columns as $column) {
+              $query->whereContainsLiteral($column, $term, 'or');
+          }
+      }, boolean: $boolean);
+  });
+  ```
+  - It produces the same nested `( … OR … )` group as `whereAny`, plus `ESCAPE '!'`. Laravel drops the leading `or` inside a nested group.
+  - The six sites become one-liners, which keeps the spirit of S3:
+    - `TransactionController::index` (inside `whereHas('student')`)
+    - `StudentLookupController::lookupBySearch`
+    - `SubscriptionReportController`
+    - `WalletHistoryController::topups` (users)
+    - `UserManagementController::index`
+    - `StudentController::index`, whose backslash escaping is removed
+  - Each becomes `->whereAnyContainsLiteral([...same columns...], $term)`.
+- **Single-column and OR-chain sites** use `whereContainsLiteral` directly, keeping their current column order and `and`/`or` structure:
+  - `WalletHistoryController` items
+  - `ActivityLogController`
+  - `CreditReportController` (the `CONCAT(...)` expression and `student_number`)
+  - `StudentReportController::applySearch`
+- **The five `lower(col) like ?` sites:**
+  - Use `whereContainsLiteral('lower(col)', $loweredTerm)`, which produces exactly the SQL above.
+  - **Keep each site's existing lowering call** (`strtolower` or `mb_strtolower`, whichever it uses today) and only add the escaping.
+- **Out of scope:** `WalletHistoryController`'s `transactions.meta like "%\"performed_by\":{$userId}%"`. Its value is an integer id from code, not search input.
+- **Tests** (failing first, both drivers):
+  - One test per changed site, added to that site's existing feature test file, or a new file in the same domain folder if none exists.
+  - Each test: a `50%` search must not match `500`, an `a_b` search must not match `axb`, and a normal search still matches. That last check guards against breaking ordinary search.
+  - These are additions only; no existing test changes. If an existing test fails, STOP.
 - **Fixtures:** none.
 - **FE impact:** searches containing `%` or `_` now match literally.
 

@@ -403,6 +403,7 @@
     - Run every command in design §14.4.
     - Each must return its expected result. Fix any leftover behaviour-identically in this commit, or record it as an exception with its reason.
     - Paste the command output into the commit body.
+    - **Named edit (comment only):** `tests/Feature/Kitchen/PaymentReminderServiceTest.php` class docblock: remove the stale "January–March of school year Y fall in calendar year Y + 1 (hazard H11)" sentence. B-05 made payment `year` the calendar year.
     - **Named cleanup (unreachable code, behaviour-identical):** remove the opening `if (! app()->bound('active_branch')) { return true; }` in `Kitchen\MealPlannerController::isWeekVisibleToParents()`. Its only caller, `show()`, is behind `branch.required` since B-02, so the branch is always bound.
     - **Named edit (comment only):** correct the stale docblock on `tests/Feature/Contract/Kitchen/PosMenuItemContractTest::test_deleting_a_menu_item_matches_contract`. Since B-20, deleting a sold item returns 422 (`@422-has-sales`) instead of failing on the `order_items` foreign key. Change no code in that file.
     - Tests: full verification gate (both databases, fixture digest unchanged, role matrix, `vendor/bin/sail bin pint --format agent` reporting no changes).
