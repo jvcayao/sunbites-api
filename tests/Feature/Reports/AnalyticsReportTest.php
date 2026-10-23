@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
+use Database\Seeders\SystemConfigurationSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -330,6 +331,25 @@ class AnalyticsReportTest extends TestCase
         $credits = $response->json('credits.kpis');
         $this->assertSame(1, $credits['students_on_credit']);
         $this->assertSame(150.00, $credits['total_credit_balance']);
+    }
+
+    /**
+     * Near limit means within ₱50 of the credit limit set in System Settings (Spec 16 B-11).
+     */
+    public function test_near_limit_count_follows_the_credit_limit_set_in_system_settings(): void
+    {
+        $this->seed(SystemConfigurationSeeder::class);
+        Student::factory()->create(['branch_id' => $this->branch->id, 'credit_balance' => 60.00]);
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $nearLimitCount = fn (): int => $this->asManager()->getJson('/api/v1/reports/analytics?'.http_build_query($this->defaultParams()))->assertOk()->json('credits.kpis.near_limit_count');
+        $atTheSeededLimit = $nearLimitCount();
+        Sanctum::actingAs($admin, ['staff']);
+        $this->putJson('/api/v1/system-configurations/credit_limit', ['value' => 100])->assertOk();
+
+        $atALimitOf100 = $nearLimitCount();
+
+        $this->assertSame(['limit 300' => 0, 'limit 100' => 1], ['limit 300' => $atTheSeededLimit, 'limit 100' => $atALimitOf100]);
     }
 
     // ---------------------------------------------------------------------------

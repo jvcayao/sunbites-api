@@ -6,6 +6,7 @@ use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Kitchen\ShowAnalyticsRequest;
 use App\Models\Student;
+use App\Models\SystemConfiguration;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -433,7 +434,7 @@ class AnalyticsController extends Controller
         $studentsOnCredit = (int) ($aggregates->cnt ?? 0);
         $totalCreditBalance = round((float) ($aggregates->total ?? 0), 2);
         $avgCredit = $studentsOnCredit > 0 ? round($totalCreditBalance / $studentsOnCredit, 2) : 0.0;
-        $creditLimit = (float) config('sunbites.credit_limit', 300);
+        $creditLimit = (float) SystemConfiguration::getValue('credit_limit', config('sunbites.credit_limit', 300));
         $nearLimitCount = (clone $base)->where('credit_balance', '>=', $creditLimit - 50)->count();
 
         $distribution = [

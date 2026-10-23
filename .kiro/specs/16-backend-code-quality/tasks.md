@@ -467,7 +467,7 @@
   - Add the macro and apply it at every listed site.
   - Failing tests: a search for `50%` does not match `500`, and a search for `a_b` does not match `axb`, on both MySQL and SQLite.
   - _Requirements: 10.10_
-- [ ] B-11. Analytics credit limit *(design §5.10; after T-10)*
+- [x] B-11. Analytics credit limit *(design §5.10; after T-10)*
   - Failing test: set `credit_limit` to 100 in System Settings; a student with 60 credit counts as near the limit.
   - _Requirements: 10.11_
 - [ ] B-12 + B-13. Report row shapes *(design §5.11; after T-10)*
