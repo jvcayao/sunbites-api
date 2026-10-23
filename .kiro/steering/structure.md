@@ -12,6 +12,10 @@ inclusion: always
 app/
   Actions/                  ← single-purpose operations, execute() (DowngradeStudentSubscriptionAction)
     Parents/                ← Disable/Enable/Restore/SoftDelete parent actions
+    Pos/                    ← CheckoutAction, VoidOrderAction
+    PreRegistrations/       ← ApprovePreRegistrationAction
+    Students/               ← EnrollStudentAction
+    Wallet/                 ← VoidWalletTopUpAction
   Console/Commands/         ← CreateAdminUser, ExpirePreRegistrations, FixOrphanedSubscriptionPayments
   Enums/                    ← string-backed enums (PaymentMethod, OrderStatus, SchoolMonth, LedgerEntryType, …)
   Exports/                  ← maatwebsite/excel export classes (Sales, Students, Wallet, Inventory, Billing)
@@ -23,10 +27,12 @@ app/
       Public/               ← unauthenticated: branches, pre-registration, kiosk lookup
       Controller.php        ← base: paginationMeta(), sanitizeText()
     Middleware/             ← SetActiveBranch, CheckPermission, ForceConnectionClose
-    Requests/               ← Form Requests (SettleCredit, WaiveCredit, VoidWalletTopUp)
+    Requests/               ← Form Requests; shared at the root (SettleCredit, WaiveCredit, VoidWalletTopUp, StudentLedger)
       Concerns/             ← shared rule traits (ValidatesOutstandingCredit)
-      Public/               ← KioskLookupRequest
-    Resources/              ← OrderResource, OrderItemResource, StudentResource, UserResource
+      Kitchen/              ← kitchen endpoint requests (Concerns/StaffUserRules); migration still in progress under Spec 16
+      Public/               ← KioskLookupRequest, StorePublicPreRegistrationRequest
+    Resources/              ← Order, OrderItem, Student, User, CreditLedgerEntry, InventoryItem,
+                              InventoryLog, PosMenuItem, InventoryIngredient resources
   Jobs/                     ← WalletAlertJob
   Listeners/                ← AuthEventSubscriber (auth activity logging)
   Mail/                     ← queued mailables (welcome, reset, pre-reg, feedback reply, wallet alert)
@@ -34,11 +40,12 @@ app/
     Concerns/               ← HasBranch
     Scopes/                 ← BranchScope
   Notifications/            ← ShouldQueue + ShouldBroadcast notifications
-  Policies/                 ← in use: OrderPolicy, UserPolicy, ParentStudentPolicy (registered for Student)
-                              not in use: ReportPolicy (registered, never called), StudentPolicy (never referenced)
+  Policies/                 ← OrderPolicy, UserPolicy, ParentStudentPolicy; registered with #[UsePolicy]
+                              on Order, User and Student (the unused ReportPolicy/StudentPolicy were removed in Spec 16 T-2)
   Providers/                ← AppServiceProvider (only provider)
-  Services/                 ← CreditLedgerService, EnrollmentService, ParentProvisioningService,
-                              StudentDuplicateService, StudentLedgerQuery, LedgerEntryFormatter
+  Services/                 ← CreditLedgerService, EnrollmentService, InventoryStockService,
+                              ParentProvisioningService, RecaptchaVerifier, StudentDuplicateService,
+                              StudentLedgerQuery, LedgerEntryFormatter
 bootstrap/app.php           ← routing, middleware aliases, API exception rendering
 routes/
   api.php                   ← /api/health + /api/v1 mount + /api/v1/public group
@@ -52,8 +59,12 @@ resources/views/emails/     ← transactional email Blade templates only
 tests/
   Feature/
     Auth/  Foundation/  Kitchen/  Portal/  Public/  Reports/
+    Contract/               ← Spec 16 API contract tests (Kitchen/, Portal/, Public/, RouteCoverage, RoleAuthorizationMatrix)
     *.php                   ← older domain tests still at the root of Feature/
+  Support/Contract/         ← contract harness (ShapeExtractor, AssertsApiContract, ContractScenario)
+  Fixtures/contracts/       ← contract fixtures: gitignored, local only, skipped in CI
   Unit/
+.github/workflows/          ← ci.yml (PR: SQLite + MySQL 8.4 jobs), staging.yml, production.yml (deploy)
 .kiro/
   steering/                 ← product.md, tech.md, structure.md
   specs/NN-name/            ← requirements.md, design.md, tasks.md (+ HANDOFF.md)
@@ -136,6 +147,7 @@ __tests__/                  ← test-utils.tsx, mocks/handlers.ts, mocks/server.
 - **`app('active_branch')`** is the only sanctioned way to read the active branch in controllers; never read `X-Branch-Id` directly (exception: activity-log properties in `AuthController::login`)
 - **Wallet mutations** only through the `bavix/laravel-wallet` API
 - **Credit mutations** only through `CreditLedgerService`
+- **Stock changes** (after an item is created) only through `InventoryStockService`
 - **Frontend**: components never call `fetch` directly; always through `lib/api/`
 - **`lib/store/`** holds only cross-cutting client state; server state lives in the TanStack Query cache
 - **`EchoProvider`** is a Client Component rendered inside the authenticated layout, not the root layout

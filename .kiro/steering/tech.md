@@ -16,7 +16,7 @@ Versions below are the **installed** versions (`composer.lock`, `package.json`, 
 | Parent portal frontend | Next.js (App Router) | 16.2.6 |
 | React | React | 19.2 |
 | Database (local) | MySQL via Sail | 8.4 |
-| Database (CI tests) | SQLite | GitHub Actions `ci.yml` |
+| Database (CI tests) | SQLite + MySQL 8.4 | GitHub Actions `ci.yml`: `test` (SQLite) and `test-mysql` (MySQL 8.4 service container, Spec 16 C-1). `staging.yml` / `production.yml` gate deploys on SQLite only |
 | Container / local dev | Laravel Sail | 1.69 |
 | Hosting | Laravel Cloud | staging + production via `cloud deploy` |
 
@@ -77,7 +77,7 @@ Never mix guards:
 | `/api/v1/public/` | inline group in `routes/api.php` | none (throttled): branches, pre-registrations, kiosk lookup |
 | `/api/health` | `routes/api.php` | none (DB ping) |
 
-Role authorization lives in the route files as `role:` middleware groups. Controller-level `$this->authorize()` is used for policy checks (`OrderPolicy::void`, `UserPolicy`, `ParentStudentPolicy::view` on portal student routes).
+Role authorization lives in the route files as `role:` middleware groups. Policy checks use the `#[Authorize('ability', 'param')]` attribute on controller methods (15 methods: `OrderPolicy::void`, `UserPolicy` on user management, `ParentStudentPolicy::view` on portal student routes). Policies are registered on the models with `#[UsePolicy]` (`Order`, `User`, and `Student` → `ParentStudentPolicy`); `AppServiceProvider` has no `Gate::policy()` calls. The base `Controller` uses `AuthorizesRequests`.
 
 ### Branch Scoping
 
@@ -87,8 +87,13 @@ Models using `App\Models\Concerns\HasBranch` get `App\Models\Scopes\BranchScope`
 
 ### Code Organisation (backend)
 
-- **Actions** (`app/Actions/`, `app/Actions/Parents/`): single-purpose operations with an `execute()` method, e.g. `DowngradeStudentSubscriptionAction`.
-- **Services** (`app/Services/`): multi-method domain services. `CreditLedgerService` is the **only** writer of `credit_transactions` and `students.credit_balance`; `StudentLedgerQuery` + `LedgerEntryFormatter` build the unified ledger shared by kitchen and portal.
+- **Actions** (`app/Actions/`): single-purpose operations with an `execute()` method, grouped by domain: `Pos/` (`CheckoutAction`, `VoidOrderAction`), `Wallet/` (`VoidWalletTopUpAction`), `Students/` (`EnrollStudentAction`), `PreRegistrations/` (`ApprovePreRegistrationAction`), `Parents/` (disable/enable/restore/soft-delete), plus `DowngradeStudentSubscriptionAction`. Controllers stay thin: validate, call the action, return the response.
+- **Services** (`app/Services/`): multi-method domain services.
+  - `CreditLedgerService` is the **only** writer of `credit_transactions` and `students.credit_balance`.
+  - `InventoryStockService` makes every stock change after an item is created: sale deduction, void restock, manual adjustment and the initial-stock log. It locks the inventory rows with `lockForUpdate()` in id order (Spec 16 B-03).
+  - `StudentLedgerQuery` + `LedgerEntryFormatter` build the unified ledger shared by kitchen and portal. `RecaptchaVerifier` wraps the Google reCAPTCHA call for the public pre-registration form.
+- **Form Requests** (`app/Http/Requests/`): `Kitchen/` and `Public/` per consumer; shared ones at the root (`SettleCreditRequest`, `WaiveCreditRequest`, `VoidWalletTopUpRequest`, `StudentLedgerRequest`), and shared rule traits in `Concerns/` and `Kitchen/Concerns/`. `authorize()` returns `true` (authorization is in route middleware and `#[Authorize]`). Guards that must win over validation run in `prepareForValidation()` and throw `HttpResponseException` with the same body as before.
+- **API Resources** (`app/Http/Resources/`): `OrderResource`, `OrderItemResource`, `StudentResource`, `UserResource`, `CreditLedgerEntryResource`, `InventoryItemResource`, `InventoryLogResource`, `PosMenuItemResource`, `InventoryIngredientResource`. They are returned inside `response()->json([...])` or nested, so there is no automatic `data` wrapper.
 - **Enums** (`app/Enums/`): string-backed, TitleCase cases, `label()` helpers.
 - **Controller concerns** (`app/Http/Controllers/Concerns/`): shared code that both Kitchen and Portal need (they may not import each other).
 - Base `Controller` provides `paginationMeta()` and `sanitizeText()`.
@@ -123,7 +128,9 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 
 ### Exception Rendering
 
-`bootstrap/app.php` renders, for `api/*`: 401 `{"message":"Unauthenticated."}`, 403 `{"message":"Forbidden."}`, 404 `{"message":"Not found."}`, 422 `{"message":"Validation failed.","errors":{...}}`. `abort(code, 'text')` returns `{"message":"text"}`.
+`bootstrap/app.php` renders, for `api/*`: 401 `{"message":"Unauthenticated."}`, 403 `{"message":"Forbidden."}` for a policy or `#[Authorize]` denial, 404 `{"message":"Not found."}` for a missing route model or `firstOrFail()`, and 422 `{"message":"Validation failed.","errors":{...}}`.
+- Laravel converts `AuthorizationException` and `ModelNotFoundException` into HTTP exceptions before the renderable runs, so the 403/404 branches match `AccessDeniedHttpException` / `NotFoundHttpException` by `getPrevious()` (Spec 16 B-23). Before B-23 these returned `This action is unauthorized.` and `No query results for model […]`.
+- Everything else keeps its own text: `abort(code, 'text')` returns `{"message":"text"}`, and the `role:` middleware returns 403 `{"message":"User does not have the right roles."}`.
 
 ### Rate Limiters (`AppServiceProvider`)
 
@@ -139,7 +146,7 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 ### PHP
 - PHP 8.x features: constructor property promotion, readonly properties, enums, first-class attributes
 - Explicit return types and parameter types on all methods
-- Form Request classes for all validation. Existing inline `$request->validate()` (48 controller files) is being migrated under Spec 16, domain by domain, behind contract tests. Do not add new inline validation.
+- Form Request classes for all validation. Inline `$request->validate()` is being migrated under Spec 16, domain by domain, behind contract tests: 48 controller files at the start, 25 left after Spec 16 step 19 (B-22), with T-9 to T-11 covering the rest. Do not add new inline validation.
 - `$request->validated()` only, never `$request->all()`
 - Model casts via the `casts()` method; accessors via `Attribute::make()`
 
@@ -149,7 +156,9 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 ### Testing (backend)
 - `RefreshDatabase` on every Feature test; `actingAs($user, 'sanctum')` / `actingAs($parent, 'parents')`
 - Never mock Eloquent or the database layer
-- Tests must pass on **both** MySQL (production engine) and SQLite (CI's existing job). Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
+- Tests must pass on **both** MySQL (production engine) and SQLite. CI runs both on every PR (`ci.yml` jobs `test` and `test-mysql`). Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
+- **API contract tests** (Spec 16): `tests/Feature/Contract/` (one class per controller, plus `RouteCoverageTest` and `RoleAuthorizationMatrixTest`), and the harness in `tests/Support/Contract/`. They compare every API route's status and JSON shape with fixtures in `tests/Fixtures/contracts/`. Those fixtures are **gitignored and local only**, so fixture comparisons are skipped in CI and run only locally (design §4.1.7 of Spec 16)
+- The MySQL gate uses Sail's shared `testing` schema. Never run two MySQL test runs at once (for example from two Claude sessions): `RefreshDatabase` in one wipes the other's tables
 - `vendor/bin/sail artisan test` runs **SQLite** locally: Collision clears the `.env` variables, so the gitignored local `.env.testing` (`DB_CONNECTION=sqlite`) wins and the gitignored `testing` file in the repo root is used
 - Explicit MySQL and SQLite gates (call `vendor/bin/phpunit` directly; MySQL uses Sail's `testing` schema): see `.kiro/specs/16-backend-code-quality/design.md` §11.1
 
@@ -176,7 +185,11 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 
 Frontend URLs come from each app's `infrastructure/` docs; deployed values were not checked.
 
-Deploy: GitHub Actions `staging.yml` / `production.yml` run `cloud deploy "Sunbites API Prod" {staging|production}`. CI (`ci.yml`): PHP 8.5, `pint --test`, `php artisan test` on SQLite.
+CI and deploy (GitHub Actions):
+- `ci.yml`, on pull requests to `staging` or `main`. Job `test`: PHP 8.5, `pint --test`, then `php artisan test` on SQLite. Job `test-mysql` (Spec 16 C-1): `vendor/bin/phpunit` against a throwaway MySQL 8.4 service container, using no secrets.
+- `staging.yml`, on a push to `staging`: SQLite tests and Pint, then `cloud deploy "Sunbites API Prod" staging`.
+- `production.yml`, manual dispatch with the input `DEPLOY`: SQLite tests and Pint, then `cloud deploy "Sunbites API Prod" production`.
+- The deploy workflows do not run the MySQL job; MySQL coverage comes from `ci.yml` on the PR.
 
 ## Known Discrepancies (verified 2026-09-25; resolve or accept, then remove)
 
@@ -186,7 +199,7 @@ Deploy: GitHub Actions `staging.yml` / `production.yml` run `cloud deploy "Sunbi
 | D2 | Fortify is installed and registers session-based web routes (`/login`, `/logout`, `/forgot-password`, `/reset-password`, two-factor, email verification) that neither frontend uses; staff password reset is implemented in `Kitchen\AuthController` | `route:list --only-vendor`; `config/fortify.php` |
 | D3 | `withRouting(channels: ...)` also registers a top-level `GET/POST /broadcasting/auth` web route alongside the two scoped API ones | `route:list --only-vendor` |
 | D4 | `binafy/laravel-cart` is a dependency with no usage | grep of `app/`, `config/`, `database/` |
-| D5 | All existing test runs (local `artisan test` and CI) use SQLite; MySQL is only exercised by the explicit MySQL gate (`testing` schema). Spec 16 task C-1 adds a MySQL 8.4 job to `ci.yml` | `.env.testing` (local, gitignored), `phpunit.xml`, `.github/workflows/ci.yml`, Collision `TestCommand::clearEnv()` |
+| D5 | *(Partly resolved 2026-10-12 by Spec 16 C-1, `fd567a4`.)* `ci.yml` now runs the suite on MySQL 8.4 too (`test-mysql`). Still SQLite only: local `vendor/bin/sail artisan test` (Collision loads the gitignored `.env.testing`) and the test jobs in `staging.yml`/`production.yml` that gate deploys | `.env.testing` (local, gitignored), `.github/workflows/*.yml` |
 | D6 | `composer.json` `name` is still `laravel/react-starter-kit`; `dev`/`ci:check` scripts still call npm/Vite | `composer.json` |
 | D7 | POS staging domain is `staging-pos.sunbites.com.ph` in the POS docs, but the API CORS allow-list hard-codes `pos-staging.sunbites.com.ph`. Staging POS works only if `CORS_ALLOWED_ORIGINS` covers it; the deployed env was not checked | `config/cors.php`, `~/sunbites-pos/infrastructure/README.md` |
 | D8 | `payment_reminder_days` is seeded as a system configuration but is not read anywhere in `app/` | `database/seeders`, grep of `app/` |
