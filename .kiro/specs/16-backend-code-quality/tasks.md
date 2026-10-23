@@ -456,7 +456,7 @@
   - Failing test: a disabled parent with a wrong password gets 422 `"Invalid credentials."`; with the right password gets 401 `account_disabled`; an unactivated parent still gets `account_not_activated`.
   - Fixtures: as listed in the design.
   - _Requirements: 10.8_
-- [ ] B-09. Atomic pre-registration writes *(design §5.8; after T-8)*
+- [x] B-09. Atomic pre-registration writes *(design §5.8; after T-8)*
   - Failing test: force `createMany` to throw (a contact payload violating a DB constraint, or a DB listener) and assert the parent record is rolled back.
   - _Requirements: 10.9_
 - [ ] B-10. LIKE wildcards *(design §5.9; after T-10)*

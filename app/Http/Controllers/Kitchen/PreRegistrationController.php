@@ -15,6 +15,7 @@ use App\Models\SystemConfiguration;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 class PreRegistrationController extends Controller
@@ -112,12 +113,14 @@ class PreRegistrationController extends Controller
             $validated['notes'] = strip_tags($validated['notes']);
         }
 
-        $preRegistration->update(Arr::except($validated, ['contacts']));
+        DB::transaction(function () use ($preRegistration, $validated): void {
+            $preRegistration->update(Arr::except($validated, ['contacts']));
 
-        if (isset($validated['contacts'])) {
-            $preRegistration->contacts()->delete();
-            $preRegistration->contacts()->createMany($validated['contacts']);
-        }
+            if (isset($validated['contacts'])) {
+                $preRegistration->contacts()->delete();
+                $preRegistration->contacts()->createMany($validated['contacts']);
+            }
+        });
 
         return response()->json(['message' => 'Pre-registration updated.', 'data' => $preRegistration->fresh(['contacts'])]);
     }
