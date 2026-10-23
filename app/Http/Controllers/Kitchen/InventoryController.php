@@ -30,6 +30,19 @@ class InventoryController extends Controller
         return response()->json(InventoryItemResource::collection($items));
     }
 
+    /**
+     * The management list: every item of the branch, archived ones included.
+     */
+    public function indexForManagement(): JsonResponse
+    {
+        $items = InventoryItem::query()
+            ->with('menuItems')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json(InventoryItemResource::collection($items));
+    }
+
     public function store(StoreInventoryItemRequest $request): JsonResponse
     {
         $validated = $request->validated();

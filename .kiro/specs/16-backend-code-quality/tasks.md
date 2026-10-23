@@ -479,7 +479,7 @@
   - Failing test: `PATCH /students/{student}/status` with `{}` returns 422, not 500.
   - Fixture: new `422-missing-status`.
   - _Requirements: 10.14_
-- [ ] B-16. Archived inventory visible in POS references *(design §5.14; after T-7)*
+- [x] B-16. Archived inventory visible in POS references *(design §5.14; after T-7)*
   - Failing test: `GET /api/v1/references/inventory` includes an archived item with `is_archived: true`; `GET /api/v1/pos/inventory` still excludes it.
   - Fixtures: none (row shape unchanged; only the set of rows grows). If the `ok` fixture's scenario has an archived item, its list shape stays identical.
   - Staging smoke test: References → Inventory shows the Archived section with the archived item, and Unarchive moves it back.

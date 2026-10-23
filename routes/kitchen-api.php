@@ -99,7 +99,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     Route::middleware('role:admin|manager|supervisor')->group(function () {
         Route::get('/pos/inventory', [InventoryController::class, 'index']);
         Route::post('/pos/inventory/{item}/adjust', [InventoryController::class, 'adjust']);
-        Route::get('/references/inventory', [InventoryController::class, 'index']);
+        Route::get('/references/inventory', [InventoryController::class, 'indexForManagement']);
         Route::post('/references/inventory', [InventoryController::class, 'store']);
         // NOTE: /history must be defined before /{item} to avoid route conflict
         Route::get('/references/inventory/history', [InventoryController::class, 'history']);

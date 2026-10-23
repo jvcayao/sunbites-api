@@ -288,7 +288,7 @@ class InventoryTest extends TestCase
         $this->asUser($this->admin)->patchJson("/api/v1/references/inventory/{$item->id}/archive")
             ->assertOk();
 
-        $response = $this->asUser($this->admin)->getJson('/api/v1/references/inventory');
+        $response = $this->asUser($this->admin)->getJson('/api/v1/pos/inventory');
         $response->assertOk();
 
         $ids = array_column($response->json(), 'id');
@@ -302,11 +302,43 @@ class InventoryTest extends TestCase
         $this->asUser($this->admin)->patchJson("/api/v1/references/inventory/{$item->id}/unarchive")
             ->assertOk();
 
-        $response = $this->asUser($this->admin)->getJson('/api/v1/references/inventory');
+        $response = $this->asUser($this->admin)->getJson('/api/v1/pos/inventory');
         $response->assertOk();
 
         $ids = array_column($response->json(), 'id');
         $this->assertContains($item->id, $ids);
+    }
+
+    public function test_references_list_includes_the_branchs_archived_items(): void
+    {
+        $archived = $this->makeItem(['name' => 'Archived Item', 'is_archived' => true]);
+
+        $response = $this->asUser($this->manager)->getJson('/api/v1/references/inventory');
+
+        $response->assertOk();
+        $this->assertSame([$archived->id => true], collect($response->json())->pluck('is_archived', 'id')->all());
+    }
+
+    public function test_pos_list_leaves_out_archived_items(): void
+    {
+        $active = $this->makeItem(['name' => 'Active Item']);
+        $this->makeItem(['name' => 'Archived Item', 'is_archived' => true]);
+
+        $response = $this->asUser($this->manager)->getJson('/api/v1/pos/inventory');
+
+        $response->assertOk();
+        $this->assertSame([$active->id], array_column($response->json(), 'id'));
+    }
+
+    public function test_another_branchs_archived_item_is_in_neither_list(): void
+    {
+        InventoryItem::factory()->create(['branch_id' => Branch::factory()->create(['is_active' => true])->id, 'is_archived' => true]);
+
+        $references = $this->asUser($this->manager)->getJson('/api/v1/references/inventory');
+        $pos = $this->asUser($this->manager)->getJson('/api/v1/pos/inventory');
+
+        $this->assertSame([], $references->assertOk()->json());
+        $this->assertSame([], $pos->assertOk()->json());
     }
 
     public function test_unarchiving_an_item_from_another_branch_returns_404_and_keeps_it_archived(): void
