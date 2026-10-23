@@ -20,6 +20,7 @@
         "testing-best-practices",
         "tailwindcss-development",
         "laravel-excel",
+        "activitylog-development",
         "laravel-permission-development",
         "deploying-laravel-cloud"
     ]
