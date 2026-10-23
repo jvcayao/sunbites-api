@@ -424,7 +424,7 @@
 
 ## Track B (23 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17; one commit each; failing test first)
 
-- [ ] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
+- [x] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
   - Fixtures: the T-1 `other-branch` variants for these routes change from 200 to 404 (staff-status: 422); no new variants (design §5.1).
   - **Named edits to existing tests (Arrange only, decided 2026-10-23; no assertion changes):** design §5.1 *Existing tests*.

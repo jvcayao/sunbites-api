@@ -128,7 +128,7 @@ class InventoryController extends Controller
 
     public function unarchive(Request $request, int $item): JsonResponse
     {
-        $inventoryItem = InventoryItem::withoutBranch()
+        $inventoryItem = InventoryItem::query()
             ->where('id', $item)
             ->where('is_archived', true)
             ->firstOrFail();

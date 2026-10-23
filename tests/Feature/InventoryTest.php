@@ -309,6 +309,19 @@ class InventoryTest extends TestCase
         $this->assertContains($item->id, $ids);
     }
 
+    public function test_unarchiving_an_item_from_another_branch_returns_404_and_keeps_it_archived(): void
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $item = InventoryItem::factory()->create(['branch_id' => $otherBranch->id, 'is_archived' => true]);
+
+        $response = $this->asUser($this->manager)->patchJson("/api/v1/references/inventory/{$item->id}/unarchive");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertTrue(InventoryItem::withoutBranch()->findOrFail($item->id)->is_archived);
+        $this->assertDatabaseMissing('activity_log', ['description' => 'inventory.unarchived', 'subject_id' => $item->id]);
+    }
+
     public function test_history_endpoint_returns_paginated_cross_item_logs(): void
     {
         $item1 = $this->makeItem(['name' => 'Item Alpha']);

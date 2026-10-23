@@ -50,6 +50,18 @@ class ParentAccountManagementTest extends TestCase
         return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
     }
 
+    /**
+     * Link the parent to a student of the active branch, which is how staff can reach them.
+     */
+    private function linkToStudentInBranch(ParentUser $parent): void
+    {
+        $parent->students()->attach(Student::factory()->create(['branch_id' => $this->branch->id])->id, [
+            'linked_at' => now(),
+            'linked_by' => $this->admin->id,
+            'wallet_alert_threshold' => 0,
+        ]);
+    }
+
     // -------------------------------------------------------------------------
     // disable
     // -------------------------------------------------------------------------
@@ -57,6 +69,7 @@ class ParentAccountManagementTest extends TestCase
     public function test_admin_can_disable_an_active_parent(): void
     {
         $parent = ParentUser::factory()->create();
+        $this->linkToStudentInBranch($parent);
         $parent->createToken('portal-token', ['parent']);
 
         $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/disable");
@@ -76,6 +89,7 @@ class ParentAccountManagementTest extends TestCase
         Mail::fake();
 
         $parent = ParentUser::factory()->disabled()->create();
+        $this->linkToStudentInBranch($parent);
 
         $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/enable");
 
@@ -91,6 +105,7 @@ class ParentAccountManagementTest extends TestCase
         Mail::fake();
 
         $parent = ParentUser::factory()->create(); // active, enabled
+        $this->linkToStudentInBranch($parent);
 
         $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/enable");
 
@@ -107,6 +122,7 @@ class ParentAccountManagementTest extends TestCase
     public function test_admin_can_soft_delete_a_parent(): void
     {
         $parent = ParentUser::factory()->create();
+        $this->linkToStudentInBranch($parent);
         $parent->createToken('portal-token', ['parent']);
 
         $response = $this->asAdmin()->deleteJson("/api/v1/references/parents/{$parent->id}");
@@ -126,6 +142,7 @@ class ParentAccountManagementTest extends TestCase
         Mail::fake();
 
         $parent = ParentUser::factory()->create();
+        $this->linkToStudentInBranch($parent);
         $parent->delete();
 
         $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/restore");
@@ -141,6 +158,7 @@ class ParentAccountManagementTest extends TestCase
     public function test_restoring_a_non_deleted_parent_returns_404(): void
     {
         $parent = ParentUser::factory()->create(); // not deleted
+        $this->linkToStudentInBranch($parent);
 
         $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/restore");
 
@@ -269,6 +287,7 @@ class ParentAccountManagementTest extends TestCase
     public function test_show_returns_is_disabled_and_deleted_at_fields(): void
     {
         $parent = ParentUser::factory()->disabled()->create();
+        $this->linkToStudentInBranch($parent);
 
         $response = $this->asAdmin()->getJson("/api/v1/references/parents/{$parent->id}");
 
@@ -280,6 +299,7 @@ class ParentAccountManagementTest extends TestCase
     public function test_show_resolves_soft_deleted_parent(): void
     {
         $parent = ParentUser::factory()->create();
+        $this->linkToStudentInBranch($parent);
         $parent->delete();
 
         $response = $this->asAdmin()->getJson("/api/v1/references/parents/{$parent->id}");
@@ -345,6 +365,7 @@ class ParentAccountManagementTest extends TestCase
     public function test_disabling_an_already_disabled_parent_is_idempotent(): void
     {
         $parent = ParentUser::factory()->disabled()->create();
+        $this->linkToStudentInBranch($parent);
 
         $response = $this->asAdmin()->postJson("/api/v1/references/parents/{$parent->id}/disable");
 
@@ -364,5 +385,110 @@ class ParentAccountManagementTest extends TestCase
 
         // Soft-deleted records are excluded from normal queries — login treats it as "not found" → 422
         $response->assertUnprocessable();
+    }
+
+    // -------------------------------------------------------------------------
+    // cross-branch access (Spec 16 B-01)
+    // -------------------------------------------------------------------------
+
+    public function test_viewing_a_parent_whose_children_are_all_in_another_branch_returns_404(): void
+    {
+        $parent = $this->parentInAnotherBranch();
+
+        $response = $this->asUserWithRole('manager')->getJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+    }
+
+    public function test_resending_activation_to_a_parent_in_another_branch_returns_404_and_sends_nothing(): void
+    {
+        Mail::fake();
+        $parent = $this->parentInAnotherBranch();
+
+        $response = $this->asUserWithRole('manager')->postJson("/api/v1/references/parents/{$parent->id}/resend-activation");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        Mail::assertNothingQueued();
+    }
+
+    public function test_disabling_a_parent_in_another_branch_returns_404_and_keeps_access(): void
+    {
+        $parent = $this->parentInAnotherBranch();
+
+        $response = $this->asUserWithRole('manager')->postJson("/api/v1/references/parents/{$parent->id}/disable");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertNull($parent->fresh()->disabled_at);
+    }
+
+    public function test_enabling_a_parent_in_another_branch_returns_404_and_keeps_them_disabled(): void
+    {
+        Mail::fake();
+        $parent = $this->parentInAnotherBranch();
+        $parent->update(['disabled_at' => now()]);
+
+        $response = $this->asUserWithRole('manager')->postJson("/api/v1/references/parents/{$parent->id}/enable");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertNotNull($parent->fresh()->disabled_at);
+        Mail::assertNothingQueued();
+    }
+
+    public function test_deleting_a_parent_in_another_branch_returns_404_and_keeps_the_account(): void
+    {
+        $parent = $this->parentInAnotherBranch();
+
+        $response = $this->asUserWithRole('manager')->deleteJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertNotSoftDeleted('parents', ['id' => $parent->id]);
+    }
+
+    public function test_restoring_a_deleted_parent_in_another_branch_returns_404_and_keeps_it_deleted(): void
+    {
+        Mail::fake();
+        $parent = $this->parentInAnotherBranch();
+        $parent->delete();
+
+        $response = $this->asUserWithRole('manager')->postJson("/api/v1/references/parents/{$parent->id}/restore");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertSoftDeleted('parents', ['id' => $parent->id]);
+        Mail::assertNothingQueued();
+    }
+
+    public function test_a_parent_whose_only_child_in_the_branch_was_deleted_can_still_be_viewed(): void
+    {
+        $parent = ParentUser::factory()->create();
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $parent->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id, 'wallet_alert_threshold' => 0]);
+        $student->delete();
+
+        $response = $this->asUserWithRole('manager')->getJson("/api/v1/references/parents/{$parent->id}");
+
+        $response->assertOk();
+        $this->assertSame($parent->id, $response->json('id'));
+    }
+
+    /**
+     * A parent whose only child is enrolled in a branch the acting staff member does not work in.
+     */
+    private function parentInAnotherBranch(): ParentUser
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $parent = ParentUser::factory()->create();
+        $parent->students()->attach(Student::factory()->create(['branch_id' => $otherBranch->id])->id, [
+            'linked_at' => now(),
+            'linked_by' => $this->admin->id,
+            'wallet_alert_threshold' => 0,
+        ]);
+
+        return $parent;
     }
 }

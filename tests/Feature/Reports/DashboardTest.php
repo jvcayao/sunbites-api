@@ -149,6 +149,7 @@ class DashboardTest extends TestCase
     public function test_staff_status_upsert_creates_record(): void
     {
         $staffUser = User::factory()->create();
+        $staffUser->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
         $response = $this->asAdmin()->postJson('/api/v1/dashboard/staff-status', [
             'user_id' => $staffUser->id,
@@ -164,9 +165,29 @@ class DashboardTest extends TestCase
         ]);
     }
 
+    public function test_staff_status_for_a_user_of_another_branch_returns_422_and_records_nothing(): void
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+        $otherBranchUser = User::factory()->create();
+        $otherBranchUser->branches()->attach($otherBranch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+
+        $response = $this->asAdmin()->postJson('/api/v1/dashboard/staff-status', [
+            'user_id' => $otherBranchUser->id,
+            'status' => StaffStatus::OnLeave->value,
+        ]);
+
+        $response->assertUnprocessable();
+        $this->assertSame(
+            ['message' => 'Validation failed.', 'errors' => ['user_id' => ['The selected user id is invalid.']]],
+            $response->json(),
+        );
+        $this->assertDatabaseCount('staff_daily_statuses', 0);
+    }
+
     public function test_staff_status_upsert_updates_existing_record(): void
     {
         $staffUser = User::factory()->create();
+        $staffUser->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
         StaffDailyStatus::create([
             'user_id' => $staffUser->id,
