@@ -244,8 +244,8 @@
     - Tests: fixtures unchanged; `MealPlannerTest` unchanged.
     - _Requirements: 3.1, 3.6_
 
-- [ ] 8. Pre-registration (kitchen and public) *(design §4.3.5, §4.2.2; hazard H3)*
-  - [ ] 8.1 Create `ApprovePreRegistrationAction`
+- [x] 8. Pre-registration (kitchen and public) *(design §4.3.5, §4.2.2; hazard H3)*
+  - [x] 8.1 Create `ApprovePreRegistrationAction`
     - Create `app/Actions/PreRegistrations/ApprovePreRegistrationAction.php` per design §4.3.5.
     - Tests: `tests/Feature/Kitchen/ApprovePreRegistrationActionTest.php` covers:
       - only the primary contact with an email is provisioned
@@ -254,11 +254,11 @@
       - the approved mail is queued to the primary, falling back to the first contact
     - `PreRegistrationTest` and `PreRegistrationApprovalDuplicateTest` unchanged.
     - _Requirements: 2.1, 2.2_
-  - [ ] 8.2 Kitchen pre-registration requests
+  - [x] 8.2 Kitchen pre-registration requests
     - Create `ListPreRegistrationsRequest`, `UpdatePreRegistrationRequest` and `RejectPreRegistrationRequest` (pending guards as `HttpResponseException`).
     - Tests, precedence: rejecting an approved record with an empty body → 422 `"Only pending pre-registrations can be rejected."`.
     - _Requirements: 3.3_
-  - [ ] 8.3 Public pre-registration request
+  - [x] 8.3 Public pre-registration request
     - Create `app/Services/RecaptchaVerifier.php` and `StorePublicPreRegistrationRequest` (honeypot, then captcha in `prepareForValidation()`; errors-only month check in `passedValidation()`; `recaptchaScore()`).
     - Tests: `tests/Feature/Public/PreRegistrationTest.php` unchanged, plus:
       - honeypot with an invalid body → 201 and no record created
