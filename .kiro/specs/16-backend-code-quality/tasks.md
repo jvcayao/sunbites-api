@@ -323,20 +323,20 @@
     - B-04 was approved on 2026-10-09, so both portal pre-registration routes and controllers are removed. Do not create `CheckPreRegistrationRequest` or `StorePortalPreRegistrationRequest`. B-04's commit must come before T-11 (design §6).
     - _Requirements: 3.1_
 
-- [ ] 12. Model modernisation *(design §4.5; hazard H2)*
-  - [ ] 12.1 Scopes, accessors and casts
+- [x] 12. Model modernisation *(design §4.5; hazard H2)*
+  - [x] 12.1 Scopes, accessors and casts
     - `#[Scope]` on `InventoryItem`, an `Attribute` accessor on `PreRegistration`, `casts()` on `ParentPaymentReminder`, and `EnrollmentStatus::Enrolled` in `EnrollmentService`.
     - Tests: fixtures unchanged (`PreRegistration::toArray()` still has no `full_name`; assert this explicitly in a unit test).
     - _Requirements: 4.1, 4.2, 4.4_
-  - [ ] 12.2 Report literals to enums
+  - [x] 12.2 Report literals to enums
     - Replace `'subscription'`/`'non_subscription'`/`'completed'` literals in **Eloquent** (not raw-SQL) queries in report controllers with `StudentType::Subscription`, `StudentType::NonSubscription` and `OrderStatus::Completed`. Grep: `rg -n "'(subscription|non_subscription|completed)'" app/Http/Controllers`.
     - Tests: fixtures unchanged.
     - _Requirements: 4.4_
-  - [ ] 12.3 `PaymentStatus` enum cast
+  - [x] 12.3 `PaymentStatus` enum cast
     - Create `app/Enums/PaymentStatus.php` (design §4.5.1), add the cast, and change **exactly** the sites in the design §4.5.2 table, including `tests/Feature/EnrollmentTest.php:106` (the only permitted test edit).
     - Tests: `tests/Unit/PaymentStatusTest.php` (extends `PHPUnit\Framework\TestCase`; labels); billing export totals and status cells are correct with paid and unpaid rows. This guards the export cell: without `->value` the download fails with a PhpSpreadsheet error. It does not guard the collection `where`, which `enum_value()` keeps working on 13.38 (H2, corrected 2026-10-24); fixtures unchanged.
     - _Requirements: 4.3_
-  - [ ] 12.4 Post-cast grep check
+  - [x] 12.4 Post-cast grep check
     - Run the grep in design §4.5.2 and paste its output into the PR description, with each hit classified as safe.
     - _Requirements: 4.3_
 

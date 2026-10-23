@@ -17,10 +17,13 @@ class ParentPaymentReminder extends Model
         'send_count',
     ];
 
-    protected $casts = [
-        'sent_at' => 'datetime',
-        'send_count' => 'integer',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'sent_at' => 'datetime',
+            'send_count' => 'integer',
+        ];
+    }
 
     public function parentUser(): BelongsTo
     {

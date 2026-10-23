@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentStatus;
 use App\Enums\SchoolMonth;
 use Database\Factories\StudentMonthlyPaymentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -30,6 +31,7 @@ class StudentMonthlyPayment extends Model
     {
         return [
             'school_month' => SchoolMonth::class,
+            'status' => PaymentStatus::class,
             'year' => 'integer',
             'amount' => 'decimal:2',
             'recorded_at' => 'datetime',
@@ -54,16 +56,16 @@ class StudentMonthlyPayment extends Model
 
     public function isPaid(): bool
     {
-        return $this->status === 'paid';
+        return $this->status === PaymentStatus::Paid;
     }
 
     public function isUnpaid(): bool
     {
-        return $this->status === 'unpaid';
+        return $this->status === PaymentStatus::Unpaid;
     }
 
     public function isVoided(): bool
     {
-        return $this->status === 'voided';
+        return $this->status === PaymentStatus::Voided;
     }
 }

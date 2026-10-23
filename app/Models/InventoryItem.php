@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasBranch;
 use Database\Factories\InventoryItemFactory;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -61,13 +62,15 @@ class InventoryItem extends Model
     }
 
     /** @param  Builder<InventoryItem>  $query */
-    public function scopeActive(Builder $query): void
+    #[Scope]
+    protected function active(Builder $query): void
     {
         $query->where('is_archived', false);
     }
 
     /** @param  Builder<InventoryItem>  $query */
-    public function scopeArchived(Builder $query): void
+    #[Scope]
+    protected function archived(Builder $query): void
     {
         $query->where('is_archived', true);
     }

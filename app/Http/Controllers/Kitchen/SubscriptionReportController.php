@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\MenuCategory;
+use App\Enums\PaymentStatus;
 use App\Enums\SchoolMonth;
+use App\Enums\StudentType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Kitchen\ShowSubscriptionReportRequest;
 use App\Models\BranchSubscriptionConfig;
@@ -27,7 +29,7 @@ class SubscriptionReportController extends Controller
         $search = $validated['search'] ?? null;
 
         $students = Student::where('branch_id', $branch->id)
-            ->where('student_type', 'subscription')
+            ->where('student_type', StudentType::Subscription)
             ->when($gradeLevel, fn ($q) => $q->where('grade_level', $gradeLevel))
             ->when($search, fn ($q) => $q->whereAnyContainsLiteral(['first_name', 'last_name', 'student_number'], $search))
             ->when($status === 'not_recorded', fn ($q) => $q->whereDoesntHave('monthlyPayments', fn ($pq) => $pq
@@ -75,7 +77,7 @@ class SubscriptionReportController extends Controller
 
             $paymentStatus = match (true) {
                 $payment === null => 'not_recorded',
-                $payment->status === 'paid' => 'paid',
+                $payment->status === PaymentStatus::Paid => 'paid',
                 default => 'unpaid',
             };
 
@@ -106,7 +108,7 @@ class SubscriptionReportController extends Controller
         });
 
         $historical = Student::where('branch_id', $branch->id)
-            ->where('student_type', 'non_subscription')
+            ->where('student_type', StudentType::NonSubscription)
             ->whereHas('monthlyPayments', fn ($q) => $q
                 ->where('school_month', $monthEnum->value)
                 ->where('year', $calendarYear)

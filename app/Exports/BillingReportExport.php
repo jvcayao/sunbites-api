@@ -48,7 +48,7 @@ class BillingReportExport implements FromCollection, ShouldAutoSize, WithHeading
             $payment->student?->section ?? '—',
             "{$payment->school_month?->value} {$payment->year}",
             number_format((float) $payment->amount, 2),
-            $payment->status,
+            $payment->status->value,
             $payment->recorded_at?->format('Y-m-d') ?? '—',
             $payment->recorder?->full_name ?? '—',
         ];

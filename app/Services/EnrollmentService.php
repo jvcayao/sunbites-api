@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\EnrollmentStatus;
 use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Models\BranchMonthlyAmount;
@@ -51,7 +52,7 @@ class EnrollmentService
             'notes' => $data['notes'] ?? null,
             'qr_code' => $qrCode,
             'student_type' => $data['student_type'],
-            'enrollment_status' => 'enrolled',
+            'enrollment_status' => EnrollmentStatus::Enrolled,
             'enrollment_date' => now()->toDateString(),
         ]);
 

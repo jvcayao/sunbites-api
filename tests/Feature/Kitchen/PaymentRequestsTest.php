@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Kitchen;
 
+use App\Enums\PaymentStatus;
 use App\Models\Branch;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
@@ -61,7 +62,7 @@ class PaymentRequestsTest extends TestCase
         $response = $this->asManager()->patchJson("/api/v1/students/{$this->student->id}/payments/{$payment->id}/void");
 
         $response->assertNotFound()->assertJsonPath('exception', NotFoundHttpException::class);
-        $this->assertSame('paid', $payment->fresh()->status);
+        $this->assertSame(PaymentStatus::Paid, $payment->fresh()->status);
     }
 
     public function test_voiding_an_unpaid_payment_returns_422_before_validating(): void
@@ -73,7 +74,7 @@ class PaymentRequestsTest extends TestCase
         $response->assertUnprocessable()
             ->assertJsonPath('message', 'Only paid payments can be voided.')
             ->assertJsonPath('exception', HttpException::class);
-        $this->assertSame('unpaid', $payment->fresh()->status);
+        $this->assertSame(PaymentStatus::Unpaid, $payment->fresh()->status);
     }
 
     /**

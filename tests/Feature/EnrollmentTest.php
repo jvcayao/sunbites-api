@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Enums\EnrollmentStatus;
+use App\Enums\PaymentStatus;
 use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Models\Branch;
@@ -11,6 +13,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Activitylog\Models\Activity;
 use Tests\TestCase;
 
 class EnrollmentTest extends TestCase
@@ -103,7 +106,7 @@ class EnrollmentTest extends TestCase
 
         $student = Student::where('student_number', 'TEST-2025-002')->first();
         $this->assertCount(10, $student->monthlyPayments);
-        $this->assertTrue($student->monthlyPayments->every(fn ($p) => $p->status === 'unpaid'));
+        $this->assertTrue($student->monthlyPayments->every(fn ($p) => $p->status === PaymentStatus::Unpaid));
     }
 
     public function test_subscription_enrollment_seeds_partial_range(): void
@@ -282,5 +285,21 @@ class EnrollmentTest extends TestCase
 
         $response->assertUnprocessable();
         $response->assertJsonValidationErrors(['student_number']);
+    }
+
+    /**
+     * The created-student activity records enrollment_status as "enrolled" (Spec 16 T-12.1, H5).
+     */
+    public function test_enrollment_logs_the_student_as_enrolled(): void
+    {
+        $this->asManager()->postJson('/api/v1/enrollment', $this->validPayload(['student_number' => 'TEST-2025-077']))->assertCreated();
+
+        $student = Student::where('student_number', 'TEST-2025-077')->sole();
+        $created = Activity::forSubject($student)->where('description', 'students.created')->sole();
+
+        $this->assertSame(
+            ['student' => EnrollmentStatus::Enrolled, 'logged' => 'enrolled'],
+            ['student' => $student->enrollment_status, 'logged' => $created->attribute_changes['attributes']['enrollment_status']],
+        );
     }
 }

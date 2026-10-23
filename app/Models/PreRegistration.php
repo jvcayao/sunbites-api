@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\PreRegistrationStatus;
 use App\Models\Concerns\HasBranch;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -78,9 +79,12 @@ class PreRegistration extends Model
         return $this->belongsTo(User::class, 'rejected_by');
     }
 
-    public function getFullNameAttribute(): string
+    /**
+     * Not in `$appends`: the pre-registration payloads list the names separately.
+     */
+    protected function fullName(): Attribute
     {
-        return "{$this->first_name} {$this->last_name}";
+        return Attribute::make(get: fn (): string => "{$this->first_name} {$this->last_name}");
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class BillingReportTest extends TestCase
@@ -566,6 +567,33 @@ class BillingReportTest extends TestCase
                     [...array_keys($row['student']), ...array_keys($row['recorder'])],
                     ['qr_code', 'daily_rate', 'phone', 'birthday', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'],
                 )),
+            ],
+        );
+    }
+
+    /**
+     * The export's totals and status cells come from the loaded payments. A string compare
+     * against an enum-cast status would make both totals 0 (Spec 16 T-12.3, H2).
+     */
+    public function test_export_totals_and_status_cells_count_paid_and_unpaid_payments(): void
+    {
+        $this->unpaidPayment(Student::factory()->create(['branch_id' => $this->branch->id]), 'june', 2026)
+            ->update(['status' => 'paid', 'amount' => 800.00, 'recorded_at' => now(), 'recorded_by' => $this->admin->id]);
+        $this->unpaidPayment(Student::factory()->create(['branch_id' => $this->branch->id]), 'june', 2026)
+            ->update(['amount' => 500.00]);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/billing/export?year=2026&school_month=june');
+
+        $response->assertOk();
+        $sheet = IOFactory::load($response->baseResponse->getFile()->getPathname())->getActiveSheet();
+        $rows = $sheet->toArray();
+        $summary = collect($rows)->filter(fn (array $row): bool => is_string($row[0]))->mapWithKeys(fn (array $row): array => [$row[0] => $row[1]]);
+        $this->assertSame(
+            ['status cells' => ['paid', 'unpaid'], 'Total Collected' => 800.0, 'Total Outstanding' => 500.0],
+            [
+                'status cells' => collect(array_slice($rows, 1, 2))->pluck(6)->sort()->values()->all(),
+                'Total Collected' => (float) $summary['Total Collected'],
+                'Total Outstanding' => (float) $summary['Total Outstanding'],
             ],
         );
     }

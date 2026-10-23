@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Enums\PaymentStatus;
 use App\Enums\SchoolMonth;
 use App\Exports\BillingReportExport;
 use App\Http\Controllers\Controller;
@@ -84,8 +85,8 @@ class BillingReportController extends Controller
             ->orderByRaw("CASE WHEN status = 'unpaid' THEN 0 ELSE 1 END")
             ->get();
 
-        $totalCollected = (float) $payments->where('status', 'paid')->sum('amount');
-        $totalOutstanding = (float) $payments->where('status', 'unpaid')->sum('amount');
+        $totalCollected = (float) $payments->where('status', PaymentStatus::Paid)->sum('amount');
+        $totalOutstanding = (float) $payments->where('status', PaymentStatus::Unpaid)->sum('amount');
         $totalAmount = $totalCollected + $totalOutstanding;
         $collectionRate = $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
 
