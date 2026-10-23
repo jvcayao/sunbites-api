@@ -7,11 +7,11 @@ use App\Actions\Parents\EnableParentAction;
 use App\Actions\Parents\RestoreParentAction;
 use App\Actions\Parents\SoftDeleteParentAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListParentsRequest;
 use App\Mail\ParentWelcomeMail;
 use App\Models\ParentUser;
 use App\Models\StudentContact;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 
@@ -24,13 +24,9 @@ class ParentController extends Controller
         private readonly RestoreParentAction $restoreParent,
     ) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(ListParentsRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'search' => ['nullable', 'string', 'max:100'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'status' => ['nullable', 'in:active,pending,disabled,deleted'],
-        ]);
+        $validated = $request->validated();
 
         $query = ParentUser::with('students:id,first_name,last_name,student_number,branch_id')
             ->orderBy('last_name')

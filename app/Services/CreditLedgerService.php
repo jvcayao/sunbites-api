@@ -200,8 +200,8 @@ class CreditLedgerService
             $alreadySentToday = $parent->notifications()
                 ->where('type', CreditChargedNotification::class)
                 ->whereDate('created_at', now()->toDateString())
-                ->get()
-                ->contains(fn ($notification) => (int) ($notification->data['student_id'] ?? 0) === $locked->id);
+                ->where('data->student_id', $locked->id)
+                ->exists();
 
             if ($alreadySentToday) {
                 continue;

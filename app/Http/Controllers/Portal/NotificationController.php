@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\NotificationResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -15,13 +16,7 @@ class NotificationController extends Controller
             ->paginate(20);
 
         return response()->json([
-            'data' => collect($notifications->items())->map(fn ($n) => [
-                'id' => $n->id,
-                'type' => $n->type,
-                'data' => $n->data,
-                'read_at' => $n->read_at,
-                'created_at' => $n->created_at,
-            ]),
+            'data' => NotificationResource::collection($notifications->items()),
             'meta' => $this->paginationMeta($notifications),
         ]);
     }

@@ -266,28 +266,28 @@
       - a low score with an invalid body → 422 `"Submission could not be verified. Please try again."`
     - _Requirements: 3.3_
 
-- [ ] 9. Reminders, announcements, notifications, feedback, dashboard, kitchen parents *(design §4.3.7, §4.4, §4.6; hazard H11)*
-  - [ ] 9.1 Create `PaymentReminderService`
+- [x] 9. Reminders, announcements, notifications, feedback, dashboard, kitchen parents *(design §4.3.7, §4.4, §4.6; hazard H11)*
+  - [x] 9.1 Create `PaymentReminderService`
     - Create `app/Services/PaymentReminderService.php` per design §4.3.7, moving the logic verbatim including the `+1` year logic (H11), with Req 7.4 applied in `send()`.
     - Tests: `tests/Feature/Kitchen/PaymentReminderServiceTest.php` covers unpaid periods excluding future months, due date, bell count, and the `send` force/skip paths; plus a query-count test (N=1 vs N=5 parents). `ReminderTest` unchanged.
     - _Requirements: 2.1, 7.4, 7.6_
-  - [ ] 9.2 Reminder requests
+  - [x] 9.2 Reminder requests
     - Create `ListEligibleParentsRequest` (+ permissive `page`) and `SendRemindersRequest`.
     - Tests: fixtures unchanged.
     - _Requirements: 3.1, 3.6_
-  - [ ] 9.3 Announcement N+1 fixes
+  - [x] 9.3 Announcement N+1 fixes
     - Implement the read-count and recipient queries in `AnnouncementController` per design §4.6, and create `StoreAnnouncementRequest`.
     - Tests: query-count tests for index (N=1 vs 5 announcements) and show (N=1 vs 5 recipients); `AnnouncementTest` unchanged; fixtures unchanged.
     - _Requirements: 7.1, 7.2, 7.6_
-  - [ ] 9.4 Notification resource
+  - [x] 9.4 Notification resource
     - Create `NotificationResource`, used by the Portal and Staff notification index.
     - Tests: fixtures unchanged; `NotificationTest`/`StaffNotificationTest` unchanged.
     - _Requirements: 5.1_
-  - [ ] 9.5 Credit notification debounce
+  - [x] 9.5 Credit notification debounce
     - Rewrite the `CreditLedgerService::notifyParentsOfCharge` debounce as an `exists()` query (design §4.6).
     - Tests: `CreditNotificationTest` unchanged, plus a query-count test with 1 vs 5 prior notifications that day.
     - _Requirements: 7.3, 7.6_
-  - [ ] 9.6 Feedback, dashboard and parent requests
+  - [x] 9.6 Feedback, dashboard and parent requests
     - Create `ListFeedbackRequest`, `ReplyFeedbackRequest` (sanitise in `prepareForValidation()`), `UpdateStaffStatusRequest` and `ListParentsRequest`.
     - Tests: precedence: a reply of `"<br><br>"` → 422 on `reply` (`min:5` applied to sanitised text); fixtures unchanged.
     - _Requirements: 3.1, 3.5_

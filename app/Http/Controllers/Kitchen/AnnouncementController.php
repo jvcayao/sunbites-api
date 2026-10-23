@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\StoreAnnouncementRequest;
 use App\Models\Announcement;
 use App\Models\ParentUser;
 use App\Models\User;
 use App\Notifications\AnnouncementNotification;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class AnnouncementController extends Controller
@@ -19,11 +19,15 @@ class AnnouncementController extends Controller
             ->latest()
             ->paginate(15);
 
-        $items = $announcements->getCollection()->map(function (Announcement $announcement) {
-            $readCount = DB::table('notifications')
-                ->whereRaw("JSON_EXTRACT(data, '$.announcement_id') = ?", [$announcement->id])
-                ->whereNotNull('read_at')
-                ->count();
+        $readCounts = DB::table('notifications')
+            ->selectRaw("json_extract(data, '$.announcement_id') AS announcement_id, COUNT(*) AS total")
+            ->whereIn(DB::raw("json_extract(data, '$.announcement_id')"), $announcements->getCollection()->pluck('id')->all())
+            ->whereNotNull('read_at')
+            ->groupBy('announcement_id')
+            ->pluck('total', 'announcement_id');
+
+        $items = $announcements->getCollection()->map(function (Announcement $announcement) use ($readCounts) {
+            $readCount = (int) ($readCounts[$announcement->id] ?? 0);
 
             return [
                 'id' => $announcement->id,
@@ -43,15 +47,9 @@ class AnnouncementController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreAnnouncementRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'title' => ['nullable', 'string', 'max:255'],
-            'message' => ['required', 'string'],
-            'recipient_type' => ['required', 'in:parents,staff'],
-            'recipient_ids' => ['required', 'array', 'min:1'],
-            'recipient_ids.*' => ['integer'],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
 
@@ -107,14 +105,11 @@ class AnnouncementController extends Controller
             ->whereRaw("JSON_EXTRACT(data, '$.announcement_id') = ?", [$announcement->id])
             ->get();
 
-        $recipients = $notifications->map(function ($n) use ($announcement) {
-            $data = json_decode($n->data, true);
+        $model = $announcement->recipient_type === 'parents' ? ParentUser::class : User::class;
+        $notifiables = $model::whereIn('id', $notifications->pluck('notifiable_id'))->get()->keyBy('id');
 
-            if ($announcement->recipient_type === 'parents') {
-                $notifiable = ParentUser::find($n->notifiable_id);
-            } else {
-                $notifiable = User::find($n->notifiable_id);
-            }
+        $recipients = $notifications->map(function ($n) use ($notifiables) {
+            $notifiable = $notifiables->get($n->notifiable_id);
 
             return [
                 'id' => $n->id,

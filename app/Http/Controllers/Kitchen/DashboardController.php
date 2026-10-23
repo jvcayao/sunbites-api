@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\OrderStatus;
 use App\Enums\StaffStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\UpdateStaffStatusRequest;
 use App\Models\InventoryItem;
 use App\Models\Order;
 use App\Models\PosMenuItem;
@@ -12,7 +13,6 @@ use App\Models\StaffDailyStatus;
 use App\Models\Student;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
 {
@@ -122,12 +122,9 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function updateStaffStatus(Request $request): JsonResponse
+    public function updateStaffStatus(UpdateStaffStatusRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'user_id' => ['required', 'exists:users,id'],
-            'status' => ['required', Rule::enum(StaffStatus::class)],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
 
