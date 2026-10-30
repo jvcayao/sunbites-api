@@ -318,5 +318,6 @@ Next step per §6: <id> (waiting for "proceed")
 - **Commit-body correction:** `50224cc` (B-02) says `application-info` ran before the code. It ran afterwards, with identical output (13.38.0 / PHP 8.5 / mysql). Commits are never amended, so the correction lives here.
 - **Tooling-order notes:** in T-9 and B-12 + B-13, `search-docs` (and, in T-9, the skills) ran after the code was written. Each time the implementer re-checked the code against the results, and nothing needed to change. The commit bodies say so.
 - **Dependency commits on this branch:** `5b5d5e3` (Laravel 13.37.0) and `880d4c0` (13.38.0, a PHP security patch). Both were verified by the full MySQL and SQLite gates with the contract fixtures unchanged.
+- **Security patch:** `symfony/mime` 8.1.7 → 8.1.10 for CVE-2026-45070 (email header injection; medium). Approved by the user on 2026-10-30, as its own commit after T-16.
 - **Data check after deploy (B-22):** pre-registration birthdays edited in production before B-22 may be one or more days early, and so may the students approved from them. Pre-registrations are not audit-logged, so this is a manual check.
 - **Staging smoke tests:** the design §13.3 list, plus login → branch select → dashboard (B-02), References → Inventory → Archived/Unarchive (B-16) and Reports → Inventory → Export (B-19).
