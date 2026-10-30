@@ -340,8 +340,8 @@
     - Run the grep in design §4.5.2 and paste its output into the PR description, with each hit classified as safe.
     - _Requirements: 4.3_
 
-- [ ] 13. Lazy-loading guard *(design §4.5.4; hazard H14)*
-  - [ ] 13.1 Enable the guard and fix violations
+- [x] 13. Lazy-loading guard *(design §4.5.4; hazard H14)*
+  - [x] 13.1 Enable the guard and fix violations
     - Add the `configureDefaults()` code, run the full suite, and fix every `LazyLoadingViolationException` with eager loading at the query site. Never use model `$with`.
     - Tests: the full suite is green; fixtures unchanged; plus unit tests that the violation handler logs rather than throws when the environment is `local` **and** when it is `staging` (`app()->detectEnvironment(fn () => 'local')`, `Log::spy()`), and that it throws in `testing`.
     - _Requirements: 4.6_

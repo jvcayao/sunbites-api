@@ -19,7 +19,8 @@ class WalletController extends Controller
 
         $perPage = $validated['per_page'] ?? 20;
 
-        $transactions = Transaction::where('payable_type', Student::class)
+        $transactions = Transaction::with('wallet')
+            ->where('payable_type', Student::class)
             ->where('payable_id', $student->id)
             ->when(isset($validated['type']), fn ($q) => $q->where('type', $validated['type']))
             ->when(isset($validated['from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['from']))

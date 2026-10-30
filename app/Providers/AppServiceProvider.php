@@ -6,11 +6,13 @@ use App\Listeners\AuthEventSubscriber;
 use App\Models\PreRegistration;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -80,6 +82,16 @@ class AppServiceProvider extends ServiceProvider
         DB::prohibitDestructiveCommands(
             app()->isProduction(),
         );
+
+        Model::preventLazyLoading(! $this->app->isProduction());
+
+        // Throw only in the test suite. `local` (developers running the POS/portal against the
+        // local API) and `staging` log instead, so an untested lazy load never breaks a page.
+        if (! $this->app->environment('testing')) {
+            Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
+                Log::warning('Lazy loading violation', ['model' => $model::class, 'relation' => $relation]);
+            });
+        }
 
         Password::defaults(fn (): Password => app()->isProduction()
             ? Password::min(8)->mixedCase()->numbers()->symbols()->uncompromised()

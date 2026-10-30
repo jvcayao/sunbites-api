@@ -20,7 +20,7 @@ class TransactionController extends Controller
 
         $date = $validated['date'] ?? now()->toDateString();
 
-        $query = Order::with(['items', 'student', 'cashier'])
+        $query = Order::with(['items', 'student.wallet', 'cashier'])
             ->whereDate('created_at', $date)
             ->orderByDesc('created_at');
 
