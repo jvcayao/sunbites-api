@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasBranch;
 use Database\Factories\InventoryItemFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -14,21 +15,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
+#[Fillable([
+    'branch_id',
+    'name',
+    'quantity',
+    'unit',
+    'restock_threshold',
+    'overstock_threshold',
+    'cost_per_unit',
+    'is_archived',
+])]
 class InventoryItem extends Model
 {
     /** @use HasFactory<InventoryItemFactory> */
     use HasBranch, HasFactory, LogsActivity;
-
-    protected $fillable = [
-        'branch_id',
-        'name',
-        'quantity',
-        'unit',
-        'restock_threshold',
-        'overstock_threshold',
-        'cost_per_unit',
-        'is_archived',
-    ];
 
     protected function casts(): array
     {
@@ -50,11 +50,13 @@ class InventoryItem extends Model
             ->setDescriptionForEvent(fn (string $eventName) => "inventory.{$eventName}");
     }
 
+    /** @return HasMany<InventoryLog, $this> */
     public function logs(): HasMany
     {
         return $this->hasMany(InventoryLog::class);
     }
 
+    /** @return BelongsToMany<PosMenuItem, $this> */
     public function menuItems(): BelongsToMany
     {
         return $this->belongsToMany(PosMenuItem::class, 'pos_menu_item_inventory')

@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 
+#[Fillable(['key', 'value', 'type', 'label', 'description'])]
 class SystemConfiguration extends Model
 {
-    protected $fillable = ['key', 'value', 'type', 'label', 'description'];
-
     /**
      * Read a configuration value from the database, cast to the correct type,
      * and cache indefinitely. The cache entry is invalidated on update.

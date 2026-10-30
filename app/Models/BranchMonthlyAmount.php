@@ -3,19 +3,19 @@
 namespace App\Models;
 
 use App\Enums\SchoolMonth;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+#[Fillable([
+    'branch_id',
+    'school_month',
+    'year',
+    'days',
+    'amount',
+])]
 class BranchMonthlyAmount extends Model
 {
-    protected $fillable = [
-        'branch_id',
-        'school_month',
-        'year',
-        'days',
-        'amount',
-    ];
-
     protected function casts(): array
     {
         return [
@@ -26,6 +26,7 @@ class BranchMonthlyAmount extends Model
         ];
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);

@@ -3,28 +3,28 @@
 namespace App\Models;
 
 use App\Enums\InventoryLogType;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+#[WithoutTimestamps]
+#[Fillable([
+    'branch_id',
+    'inventory_item_id',
+    'adjusted_by',
+    'type',
+    'quantity_change',
+    'stock_after',
+    'reason',
+    'item_name_snapshot',
+    'order_id',
+    'created_at',
+])]
 class InventoryLog extends Model
 {
-    public $timestamps = false;
-
-    protected $fillable = [
-        'branch_id',
-        'inventory_item_id',
-        'adjusted_by',
-        'type',
-        'quantity_change',
-        'stock_after',
-        'reason',
-        'item_name_snapshot',
-        'order_id',
-        'created_at',
-    ];
-
     protected function casts(): array
     {
         return [
@@ -36,16 +36,19 @@ class InventoryLog extends Model
         ];
     }
 
+    /** @return BelongsTo<InventoryItem, $this> */
     public function item(): BelongsTo
     {
         return $this->belongsTo(InventoryItem::class, 'inventory_item_id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function adjustedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'adjusted_by');
     }
 
+    /** @return BelongsTo<Order, $this> */
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);

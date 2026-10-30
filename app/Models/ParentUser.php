@@ -4,6 +4,9 @@ namespace App\Models;
 
 use App\Enums\StudentType;
 use Database\Factories\ParentUserFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -14,26 +17,23 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\HasApiTokens;
 
+#[Table('parents')]
+#[Fillable([
+    'first_name',
+    'last_name',
+    'email',
+    'password',
+    'phone',
+    'address',
+    'profile_photo_path',
+    'email_verified_at',
+    'disabled_at',
+])]
+#[Hidden(['password', 'remember_token'])]
 class ParentUser extends Authenticatable
 {
     /** @use HasFactory<ParentUserFactory> */
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
-
-    protected $table = 'parents';
-
-    protected $fillable = [
-        'first_name',
-        'last_name',
-        'email',
-        'password',
-        'phone',
-        'address',
-        'profile_photo_path',
-        'email_verified_at',
-        'disabled_at',
-    ];
-
-    protected $hidden = ['password', 'remember_token'];
 
     protected function casts(): array
     {
@@ -80,6 +80,7 @@ class ParentUser extends Authenticatable
         );
     }
 
+    /** @return BelongsToMany<Student, $this> */
     public function students(): BelongsToMany
     {
         return $this->belongsToMany(Student::class, 'parent_student', 'parent_id', 'student_id')
@@ -91,6 +92,7 @@ class ParentUser extends Authenticatable
         return "parents.{$this->id}";
     }
 
+    /** @return HasMany<Feedback, $this> */
     public function feedbacks(): HasMany
     {
         return $this->hasMany(Feedback::class, 'parent_id');

@@ -5,6 +5,9 @@ namespace App\Models;
 use App\Enums\CreditSettlementMethod;
 use App\Enums\CreditTransactionType;
 use App\Services\CreditLedgerService;
+use Database\Factories\CreditTransactionFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,25 +23,24 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * parent portal ledger query, where no active branch is bound. Branch filtering stays
  * explicit in the report controllers, using the `branch_id` snapshot written here.
  */
+#[WithoutTimestamps]
+#[Fillable([
+    'student_id',
+    'branch_id',
+    'order_id',
+    'type',
+    'amount',
+    'payment_method',
+    'reference_number',
+    'wallet_transaction_id',
+    'notes',
+    'performed_by',
+    'created_at',
+])]
 class CreditTransaction extends Model
 {
+    /** @use HasFactory<CreditTransactionFactory> */
     use HasFactory;
-
-    public $timestamps = false;
-
-    protected $fillable = [
-        'student_id',
-        'branch_id',
-        'order_id',
-        'type',
-        'amount',
-        'payment_method',
-        'reference_number',
-        'wallet_transaction_id',
-        'notes',
-        'performed_by',
-        'created_at',
-    ];
 
     protected function casts(): array
     {
@@ -50,16 +52,19 @@ class CreditTransaction extends Model
         ];
     }
 
+    /** @return BelongsTo<Student, $this> */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function performer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'performed_by');

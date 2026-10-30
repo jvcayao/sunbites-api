@@ -4,45 +4,47 @@ namespace App\Models;
 
 use App\Enums\PreRegistrationStatus;
 use App\Models\Concerns\HasBranch;
+use Database\Factories\PreRegistrationFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[Fillable([
+    'branch_id',
+    'first_name',
+    'last_name',
+    'student_number',
+    'grade_level',
+    'section',
+    'birthday',
+    'allergies',
+    'notes',
+    'enrollment_type',
+    'subscription_start_month',
+    'subscription_start_year',
+    'subscription_end_month',
+    'subscription_end_year',
+    'signatory_name',
+    'acknowledged_at',
+    'status',
+    'approved_by',
+    'rejected_by',
+    'rejection_reason',
+    'processed_at',
+    'recaptcha_score',
+    'submitter_ip',
+    'expires_at',
+    'duplicate_check_passed_at',
+    'parent_email_exists',
+    'parent_phone_exists',
+])]
 class PreRegistration extends Model
 {
+    /** @use HasFactory<PreRegistrationFactory> */
     use HasBranch, HasFactory;
-
-    protected $fillable = [
-        'branch_id',
-        'first_name',
-        'last_name',
-        'student_number',
-        'grade_level',
-        'section',
-        'birthday',
-        'allergies',
-        'notes',
-        'enrollment_type',
-        'subscription_start_month',
-        'subscription_start_year',
-        'subscription_end_month',
-        'subscription_end_year',
-        'signatory_name',
-        'acknowledged_at',
-        'status',
-        'approved_by',
-        'rejected_by',
-        'rejection_reason',
-        'processed_at',
-        'recaptcha_score',
-        'submitter_ip',
-        'expires_at',
-        'duplicate_check_passed_at',
-        'parent_email_exists',
-        'parent_phone_exists',
-    ];
 
     protected function casts(): array
     {
@@ -59,21 +61,25 @@ class PreRegistration extends Model
         ];
     }
 
+    /** @return HasMany<PreRegistrationContact, $this> */
     public function contacts(): HasMany
     {
         return $this->hasMany(PreRegistrationContact::class);
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function rejectedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejected_by');
