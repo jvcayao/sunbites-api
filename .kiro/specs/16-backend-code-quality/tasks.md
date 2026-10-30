@@ -367,8 +367,8 @@
     - Test: resolve the attributes via reflection and assert `3` and `[10, 60]`; `WalletAlertTest` unchanged.
     - _Requirements: 8.3_
 
-- [ ] 15. Project hygiene *(Req 9.1)*
-  - [ ] 15.1 `composer.json` metadata and scripts
+- [x] 15. Project hygiene *(Req 9.1)*
+  - [x] 15.1 `composer.json` metadata and scripts
     - Update `composer.json` `name`/`description` and remove the npm steps from the `dev` and `ci:check` scripts. Do not touch `require`/`require-dev`. Run `vendor/bin/sail composer validate`.
     - Tests: none (no behaviour); CI green.
     - _Requirements: 9.1_
