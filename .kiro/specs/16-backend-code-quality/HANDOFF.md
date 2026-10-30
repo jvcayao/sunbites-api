@@ -194,7 +194,7 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 
 **C-1 edits `.github/workflows/ci.yml`.** That is the only workflow file you may change, and only as design §15 states. **B-17 and B-18 were approved on 2026-10-12** and are in the table above.
 
-**Authorised extra commit (2026-10-30, approved by the user):** between steps 39 (T-16) and 40 (T-17), a security patch commit `chore(deps): update symfony/mime for CVE-2026-45070`.
+**~~Authorised extra commit~~ (superseded):** the user's `composer update` (`336a826`, Laravel 13.39.0) already brought `symfony/mime` to v8.1.10, and `composer audit` now reports no advisories. The separate commit below is **no longer needed; skip it.** *(Original note kept for the record:)* between steps 39 (T-16) and 40 (T-17), a security patch commit `chore(deps): update symfony/mime for CVE-2026-45070`.
 - `symfony/mime` v8.1.7 is affected by CVE-2026-45070 / PKSA-wtxr-p26d-nn42 (medium, email header injection via non-token characters in MIME parameter names). It is fixed in 8.1.10.
 - Run `vendor/bin/sail composer update symfony/mime --no-scripts`, so no publish or boost hooks rewrite tracked files.
 - `git diff composer.lock` may change ONLY the `symfony/mime` package block. `content-hash` and `plugin-api-version` must stay the same, and laravel/framework and maatwebsite/excel stay pinned (`v13.38.0` and `4dbe31c`).
@@ -299,7 +299,7 @@ Next step per §6: <id> (waiting for "proceed")
 
 | Fact | Value |
 |---|---|
-| Repo | `~/sunbites-api` (Laravel 13.38.0 since `880d4c0` on 2026-10-23; T-1 to T-6 ran on 13.35.0, T-7 to B-20 on 13.37.0. PHP 8.5, Sail) |
+| Repo | `~/sunbites-api` (Laravel 13.39.0 since `336a826` on 2026-10-30; T-1 to T-6 ran on 13.35.0, T-7 to B-20 on 13.37.0, B-20 to T-15 on 13.38.0. PHP 8.5, Sail) |
 | Branch / start SHA | `bump-laravel-13-latest` / `3454977` |
 | MySQL gate | design §11.1 (direct `vendor/bin/phpunit` with `-e DB_CONNECTION=mysql -e DB_DATABASE=testing` and credentials read from `.env`) + `[path] [--filter=name]` |
 | SQLite gate | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit [path] [--filter=name]` |
@@ -317,7 +317,7 @@ Next step per §6: <id> (waiting for "proceed")
 
 - **Commit-body correction:** `50224cc` (B-02) says `application-info` ran before the code. It ran afterwards, with identical output (13.38.0 / PHP 8.5 / mysql). Commits are never amended, so the correction lives here.
 - **Tooling-order notes:** in T-9 and B-12 + B-13, `search-docs` (and, in T-9, the skills) ran after the code was written. Each time the implementer re-checked the code against the results, and nothing needed to change. The commit bodies say so.
-- **Dependency commits on this branch:** `5b5d5e3` (Laravel 13.37.0) and `880d4c0` (13.38.0, a PHP security patch). Both were verified by the full MySQL and SQLite gates with the contract fixtures unchanged.
-- **Security patch:** `symfony/mime` 8.1.7 → 8.1.10 for CVE-2026-45070 (email header injection; medium). Approved by the user on 2026-10-30, as its own commit after T-16.
+- **Dependency commits on this branch:** `5b5d5e3` (Laravel 13.37.0), `880d4c0` (13.38.0, a PHP security patch), `4784e9d` (T-15 composer metadata) and `336a826` (13.39.0, including symfony/mime 8.1.10). Both were verified by the full MySQL and SQLite gates with the contract fixtures unchanged.
+- **Security patch:** `symfony/mime` 8.1.7 → 8.1.10 for CVE-2026-45070 (email header injection; medium). It arrived with the user's `composer update` to Laravel 13.39.0 (`336a826`); `composer audit` is clean.
 - **Data check after deploy (B-22):** pre-registration birthdays edited in production before B-22 may be one or more days early, and so may the students approved from them. Pre-registrations are not audit-logged, so this is a manual check.
 - **Staging smoke tests:** the design §13.3 list, plus login → branch select → dashboard (B-02), References → Inventory → Archived/Unarchive (B-16) and Reports → Inventory → Export (B-19).

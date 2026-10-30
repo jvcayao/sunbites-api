@@ -6,11 +6,11 @@ inclusion: always
 
 ## Stack
 
-Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-10-23 (after the `composer update` in commit `880d4c0`, a PHP security patch; earlier updates: `ba2b420`/`2de27ac`, `5b5d5e3`).
+Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-10-30 (after the `composer update` in commit `336a826`; earlier updates: `ba2b420`/`2de27ac`, `5b5d5e3`, `880d4c0`).
 
 | Layer | Technology | Version |
 |---|---|---|
-| API backend | Laravel | 13.38 |
+| API backend | Laravel | 13.39 |
 | PHP | PHP | 8.5 (`composer.json` constraint `^8.3`) |
 | POS & admin frontend | Next.js (App Router) | 16.2.6 |
 | Parent portal frontend | Next.js (App Router) | 16.2.6 |
@@ -30,14 +30,14 @@ Versions below are the **installed** versions (`composer.lock`, `package.json`, 
 | `spatie/laravel-permission` | 7.4 | Roles: admin, manager, supervisor, cashier (guard `web`) |
 | `bavix/laravel-wallet` | 12.1 | Student wallet; all balance mutations go through `deposit`/`withdraw` |
 | `spatie/laravel-activitylog` | 5.1 | Audit trail for key model events and kitchen actions |
-| `maatwebsite/excel` (+ `phpoffice/phpspreadsheet` 5.10) | 4.x-dev (`4dbe31c`; a dev branch, so it can move on any `composer update`) | Excel report exports |
+| `maatwebsite/excel` (+ `phpoffice/phpspreadsheet` 5.10) | 4.x-dev (`90b012e`; a dev branch, so it can move on any `composer update`) | Excel report exports |
 | `laravel/reverb` | 1.12 | WebSocket server for private-channel notifications |
 | `resend/resend-laravel` | 1.7 | `resend` mail transport is configured in `config/mail.php`; the mailer is chosen per environment (`.env.example` uses `smtp`) |
 | `league/flysystem-aws-s3-v3` | 3.x | `private` and `public` disks are S3 (photos) |
 | `sentry/sentry-laravel` / `spatie/laravel-flare` | 4.29 / 3.6 | Error monitoring (`Integration::handles` in `bootstrap/app.php`) |
 | `laravel/fortify` | 1.41 | Installed; see Known Discrepancies (not used by either frontend) |
 | `binafy/laravel-cart` | 2.1 | Installed; not referenced anywhere in `app/`, `config/` or `database/` |
-| `laravel/boost` (dev) | 2.10.3 | MCP tools + agent guidelines |
+| `laravel/boost` (dev) | 2.10.4 | MCP tools + agent guidelines |
 | `laravel/pint` (dev) | 1.32 | Formatter (`preset: laravel`); run `vendor/bin/sail bin pint --dirty --format agent` after PHP changes |
 | `phpunit/phpunit` (dev) | 12.5 | Test runner |
 

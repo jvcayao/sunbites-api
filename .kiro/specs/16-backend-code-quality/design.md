@@ -28,7 +28,7 @@ The refactor has two tracks:
 | Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
-### 1.2 Verified framework facts (installed `laravel/framework` v13.38.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`) and on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch), each after a `composer update`)
+### 1.2 Verified framework facts (installed `laravel/framework` v13.39.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) and on 13.39.0 on 2026-10-30 (`336a826`), each after a `composer update`)
 
 | Fact | Verified in |
 |---|---|
