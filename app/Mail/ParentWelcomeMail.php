@@ -4,13 +4,13 @@ namespace App\Mail;
 
 use App\Models\ParentUser;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class ParentWelcomeMail extends Mailable implements ShouldQueue
+class ParentWelcomeMail extends Mailable implements ShouldQueueAfterCommit
 {
     use Queueable, SerializesModels;
 

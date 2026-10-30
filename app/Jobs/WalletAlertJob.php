@@ -6,8 +6,12 @@ use App\Mail\WalletAlertMail;
 use App\Models\Student;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Backoff;
+use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Support\Facades\Mail;
 
+#[Tries(3)]
+#[Backoff(10, 60)]
 class WalletAlertJob implements ShouldQueue
 {
     use Queueable;

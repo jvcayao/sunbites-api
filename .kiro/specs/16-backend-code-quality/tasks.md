@@ -346,8 +346,8 @@
     - Tests: the full suite is green; fixtures unchanged; plus unit tests that the violation handler logs rather than throws when the environment is `local` **and** when it is `staging` (`app()->detectEnvironment(fn () => 'local')`, `Log::spy()`), and that it throws in `testing`.
     - _Requirements: 4.6_
 
-- [ ] 14. Notifications after commit *(design §4.7)*
-  - [ ] 14.1 `ShouldQueueAfterCommit` on the five notifications
+- [x] 14. Notifications after commit *(design §4.7)*
+  - [x] 14.1 `ShouldQueueAfterCommit` on the five notifications
     - Change the 5 notification classes from `ShouldQueue` to `ShouldQueueAfterCommit` (design §4.7). No constructor change.
     - Tests: `tests/Feature/Kitchen/NotificationAfterCommitTest.php` uses **no fakes** (design §4.7; `QueueFake` ignores after-commit):
       - *(Corrected 2026-10-30, design §4.7.)* Use `Event::fake([NotificationSent::class])` and nothing else, with a notification that has no existing after-commit flag (e.g. `AnnouncementNotification`).
@@ -356,13 +356,13 @@
       - Keep the `CreditLedgerService::charge` rollback/commit cases as pins. They pass before and after, because those two notifications already set `afterCommit` in their constructors.
       - Existing notification tests are unchanged.
     - _Requirements: 8.1, 8.4, 8.5_
-  - [ ] 14.2 `ShouldQueueAfterCommit` on the welcome mail
+  - [x] 14.2 `ShouldQueueAfterCommit` on the welcome mail
     - Change `ParentWelcomeMail` from `ShouldQueue` to `ShouldQueueAfterCommit` (design §4.7). No call-site change.
     - Tests (no `Mail::fake()`): `Event::fake([MessageSending::class])`.
       - **Rollback:** call `ParentProvisioningService::provision()` for a new email inside a transaction that throws; assert `Event::assertNotDispatched(MessageSending::class)`.
       - **Commit:** the same without the throw; assert it was dispatched once.
     - _Requirements: 8.2_
-  - [ ] 14.3 `WalletAlertJob` retries *(Q7 approved)*
+  - [x] 14.3 `WalletAlertJob` retries *(Q7 approved)*
     - Add `#[Tries(3)]` and `#[Backoff(10, 60)]` (`Illuminate\Queue\Attributes\Tries`, `…\Backoff`) to `WalletAlertJob`.
     - Test: resolve the attributes via reflection and assert `3` and `[10, 60]`; `WalletAlertTest` unchanged.
     - _Requirements: 8.3_
