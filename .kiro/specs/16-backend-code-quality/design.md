@@ -729,7 +729,7 @@ Verified in 13.35 (`Model::initializeModelAttributes`, `GuardsAttributes::initia
 | `protected $fillable = [...]` | `#[Fillable([...])]` (same order) | every model that declares `$fillable` |
 | `protected $hidden = [...]` | `#[Hidden([...])]` | `User`, `ParentUser` |
 | `public $timestamps = false;` | `#[WithoutTimestamps]` | `CreditTransaction`, `InventoryLog`, `WalletTopupVoid` |
-| missing `/** @use HasFactory<XFactory> */` | add it | `Announcement`, `Branch`, `CreditTransaction`, `PreRegistration`, `PreRegistrationContact`, `WalletTopupVoid` (6, from `rg`) |
+| missing `/** @use HasFactory<XFactory> */` | add it | `Branch`, `CreditTransaction`, `PreRegistration`, `PreRegistrationContact`, `WalletTopupVoid` (5). *(Corrected 2026-10-30 at the implementer's T-16 STOP: `Announcement` uses `HasFactory`, but no `AnnouncementFactory` exists and nothing calls `Announcement::factory()`, so it gets no docblock and its trait stays as is.)* |
 | relation methods with a bare return type (52) | add the generic docblock, e.g. `/** @return BelongsTo<Branch, $this> */`, `/** @return HasMany<Order, $this> */`, `/** @return BelongsToMany<ParentUser, $this> */` | all models |
 
 **Stays as is (no attribute equivalent, or package API):**

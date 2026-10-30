@@ -381,7 +381,7 @@
   - [ ] 16.2 Convert every model
     - Move `$table` → `#[Table('…')]`, `$fillable` → `#[Fillable([...])]` (same order), `$hidden` → `#[Hidden([...])]` and `public $timestamps = false` → `#[WithoutTimestamps]` (imports from `Illuminate\Database\Eloquent\Attributes\`), exactly per the design §4.5.5 table.
     - Keep `UPDATED_AT`/`CREATED_AT` constants, `$recordEvents`, `casts()`, `HasBranch` and `getDefaultGuardName()` as they are.
-    - Add the 6 missing `/** @use HasFactory<XFactory> */` docblocks and a generic `@return` docblock on all 52 relation methods.
+    - Add the 5 missing `/** @use HasFactory<XFactory> */` docblocks (not `Announcement`, which has no factory; design §4.5.5) and a generic `@return` docblock on the 52 relation methods that lack one.
     - Tests: `ModelAttributesTest` is unchanged and still passes; full suite green; fixtures unchanged.
     - _Requirements: 4.7, 13.1_
 
