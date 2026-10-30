@@ -32,7 +32,7 @@ ls bootstrap/cache/                       # MUST be only: packages.php services.
 ```
 
 Then:
-- Confirm the **Laravel Boost** MCP is connected. Its tools may be deferred; load them with `ToolSearch` `select:mcp__laravel-boost__application-info,mcp__laravel-boost__search-docs,mcp__laravel-boost__database-schema,mcp__laravel-boost__database-query,mcp__laravel-boost__last-error`. Call `application-info` and confirm `laravel/framework` is **13.35.x**.
+- Confirm the **Laravel Boost** MCP is connected. Its tools may be deferred; load them with `ToolSearch` `select:mcp__laravel-boost__application-info,mcp__laravel-boost__search-docs,mcp__laravel-boost__database-schema,mcp__laravel-boost__database-query,mcp__laravel-boost__last-error`. Call `application-info` and confirm `laravel/framework` is **13.35.x**. *(Updated 2026-10-30: Boost 2.10.4, from `336a826`, no longer ships `application-info`. Instead run `vendor/bin/sail artisan --version`, `vendor/bin/sail php -r 'echo PHP_VERSION;'` and `vendor/bin/sail artisan config:show database.default` (plus `vendor/bin/sail composer show <package>` when a step depends on a package version), and record their output in each commit body. The installed framework is 13.39.0. `search-docs` is still mandatory before code.)*
   - If it is a later 13.x: stop, report, and wait. Design §1.2 must be re-verified first.
   - If Boost will not connect: stop (Req 12.4). Never continue without it.
 - **Before your first step only**, run the baseline (design §14.6) and confirm both report **951 passed**:

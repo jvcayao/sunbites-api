@@ -8,7 +8,7 @@
   - **Before any PHP work:** activate `laravel-best-practices` and read its mapped rule files (design §12.1).
   - **Before any test work:** activate `testing-best-practices`.
   - **Domain skills:** `laravel-excel` (exports), `laravel-permission-development` (roles), `fortify-development` (T-17.1), `activitylog-development` (any activity-log work, H5).
-  - **Boost:** confirm the Laravel Boost MCP is connected (`vendor/bin/sail up -d`); run `application-info` at PR start and `search-docs` before using any Laravel or package API. Use `database-schema`/`database-query` before model, enum or raw-SQL changes (design §12.2). **Do not proceed without Boost.**
+  - **Boost:** confirm the Laravel Boost MCP is connected (`vendor/bin/sail up -d`); run `application-info` at PR start (since Boost 2.10.4 it no longer exists; use `vendor/bin/sail artisan --version`, `vendor/bin/sail php -r 'echo PHP_VERSION;'` and `vendor/bin/sail artisan config:show database.default` (plus `vendor/bin/sail composer show <package>` when a step depends on a package version) instead, decided 2026-10-30) and `search-docs` before using any Laravel or package API. Use `database-schema`/`database-query` before model, enum or raw-SQL changes (design §12.2). **Do not proceed without Boost.**
   - **Tooling log:** the PR description includes one block per commit listing skills, rule files read, and each `search-docs` query with the section used.
   - **Laravel Pint (non-negotiable, `.claude/rules/backend/laravel-pint.md`):** every backend task ends with `vendor/bin/sail bin pint --dirty --format agent` before it is reported done or committed. Before pushing the branch, `vendor/bin/sail bin pint --format agent` must report no changes (CI runs `pint --test`).
   - **Laravel 13 standards:** each task also applies the design §14.1 rows (S1–S10) assigned to it, and never introduces anything in §14.3.
@@ -373,12 +373,12 @@
     - Tests: none (no behaviour); CI green.
     - _Requirements: 9.1_
 
-- [ ] 16. Laravel 13 model PHP attributes *(Q4 approved; design §4.5.5; Req 4.7)*
-  - [ ] 16.1 Snapshot test first
+- [x] 16. Laravel 13 model PHP attributes *(Q4 approved; design §4.5.5; Req 4.7)*
+  - [x] 16.1 Snapshot test first
     - Create `tests/Unit/ModelAttributesTest.php` (extends `Tests\TestCase`; model construction boots traits that use the container). For every model in `app/Models/`, assert `getTable()`, `getFillable()` (exact array and order), `getHidden()`, `usesTimestamps()`, `getKeyName()` and `getCasts()` equal literals copied from the current code.
     - It must pass on the unconverted code before 16.2 starts.
     - _Requirements: 4.7_
-  - [ ] 16.2 Convert every model
+  - [x] 16.2 Convert every model
     - Move `$table` → `#[Table('…')]`, `$fillable` → `#[Fillable([...])]` (same order), `$hidden` → `#[Hidden([...])]` and `public $timestamps = false` → `#[WithoutTimestamps]` (imports from `Illuminate\Database\Eloquent\Attributes\`), exactly per the design §4.5.5 table.
     - Keep `UPDATED_AT`/`CREATED_AT` constants, `$recordEvents`, `casts()`, `HasBranch` and `getDefaultGuardName()` as they are.
     - Add the 5 missing `/** @use HasFactory<XFactory> */` docblocks (not `Announcement`, which has no factory; design §4.5.5) and a generic `@return` docblock on the 52 relation methods that lack one.
