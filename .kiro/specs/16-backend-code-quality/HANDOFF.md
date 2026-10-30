@@ -194,6 +194,13 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 
 **C-1 edits `.github/workflows/ci.yml`.** That is the only workflow file you may change, and only as design §15 states. **B-17 and B-18 were approved on 2026-10-12** and are in the table above.
 
+**Authorised extra commit (2026-10-30, approved by the user):** between steps 39 (T-16) and 40 (T-17), a security patch commit `chore(deps): update symfony/mime for CVE-2026-45070`.
+- `symfony/mime` v8.1.7 is affected by CVE-2026-45070 / PKSA-wtxr-p26d-nn42 (medium, email header injection via non-token characters in MIME parameter names). It is fixed in 8.1.10.
+- Run `vendor/bin/sail composer update symfony/mime --no-scripts`, so no publish or boost hooks rewrite tracked files.
+- `git diff composer.lock` may change ONLY the `symfony/mime` package block. `content-hash` and `plugin-api-version` must stay the same, and laravel/framework and maatwebsite/excel stay pinned (`v13.38.0` and `4dbe31c`).
+- If Composer needs any other package to move, STOP and report rather than adding `--with-dependencies`.
+- `vendor/bin/sail composer audit` must then report no advisories. Both gates and the digest must stay unchanged.
+
 **Authorised extra commit (2026-10-23):** between steps 25 (B-02) and 26 (T-10), a test-only commit `test(parents): restore the role check in the non-manager test`. It adds one Arrange line to `Portal\ParentManagementTest::test_non_manager_cannot_access_parent_management`, attaching the cashier to `$this->branch`. Since B-02, the unattached cashier was stopped by `SetActiveBranch` instead of the `role:` middleware, so the test no longer proved the role restriction.
 
 **Authorised extra commit (2026-10-23):** between steps 20 (T-9) and 21 (B-01), a test-only commit `test(announcements): pin read counts for the grouped query`. No test asserted announcement `read_count` values, and the fixtures record only the shape. The test is proven against the pre-T-9 controller.
