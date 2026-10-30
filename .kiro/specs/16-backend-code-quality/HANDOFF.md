@@ -194,6 +194,11 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 
 **C-1 edits `.github/workflows/ci.yml`.** That is the only workflow file you may change, and only as design §15 states. **B-17 and B-18 were approved on 2026-10-12** and are in the table above.
 
+**Authorised extra commit (2026-10-30, approved by the user):** right after step 39 (T-16), `chore(composer): drop npm steps from the setup script`.
+- `composer.json` `scripts.setup` only: remove the `npm install` and `npm run build` entries. Keep the other 4 entries in their order. This is the rest of steering D6.
+- `composer validate` must not report the lock as out of date (scripts are not part of the content-hash). If it does, STOP.
+- No tests. Run both gates.
+
 **~~Authorised extra commit~~ (superseded):** the user's `composer update` (`336a826`, Laravel 13.39.0) already brought `symfony/mime` to v8.1.10, and `composer audit` now reports no advisories. The separate commit below is **no longer needed; skip it.** *(Original note kept for the record:)* between steps 39 (T-16) and 40 (T-17), a security patch commit `chore(deps): update symfony/mime for CVE-2026-45070`.
 - `symfony/mime` v8.1.7 is affected by CVE-2026-45070 / PKSA-wtxr-p26d-nn42 (medium, email header injection via non-token characters in MIME parameter names). It is fixed in 8.1.10.
 - Run `vendor/bin/sail composer update symfony/mime --no-scripts`, so no publish or boost hooks rewrite tracked files.
