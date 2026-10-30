@@ -350,8 +350,10 @@
   - [ ] 14.1 `ShouldQueueAfterCommit` on the five notifications
     - Change the 5 notification classes from `ShouldQueue` to `ShouldQueueAfterCommit` (design §4.7). No constructor change.
     - Tests: `tests/Feature/Kitchen/NotificationAfterCommitTest.php` uses **no fakes** (design §4.7; `QueueFake` ignores after-commit):
-      - **Rollback:** call `CreditLedgerService::charge` for a student with a linked parent inside `DB::transaction(...)` that then throws (catch it). Assert `DB::table('notifications')->where('notifiable_id', $parent->id)->count() === 0`.
-      - **Commit:** the same without the throw. Assert the count is `1`.
+      - *(Corrected 2026-10-30, design §4.7.)* Use `Event::fake([NotificationSent::class])` and nothing else, with a notification that has no existing after-commit flag (e.g. `AnnouncementNotification`).
+        - **Rollback:** send it inside `DB::transaction(...)` that then throws (catch it), and assert `NotificationSent` was not dispatched. This is red on the current code.
+        - **Commit:** the same without the throw; assert it was dispatched.
+      - Keep the `CreditLedgerService::charge` rollback/commit cases as pins. They pass before and after, because those two notifications already set `afterCommit` in their constructors.
       - Existing notification tests are unchanged.
     - _Requirements: 8.1, 8.4, 8.5_
   - [ ] 14.2 `ShouldQueueAfterCommit` on the welcome mail

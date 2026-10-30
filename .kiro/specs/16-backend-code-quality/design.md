@@ -779,7 +779,13 @@ Verified in 13.35 (`Model::initializeModelAttributes`, `GuardsAttributes::initia
 Tests use `RefreshDatabase`/`LazilyRefreshDatabase`, which run after-commit callbacks when the application transaction commits (Laravel's test-transaction-aware mode, §1.2). `Notification::fake()` and `Mail::fake()` record at call time, so existing tests keep passing unchanged.
 
 **The new after-commit tests must not use `Queue::fake()`, `Notification::fake()` or `Mail::fake()`.** Verified in 13.35: `QueueFake` has no after-commit handling and records pushes immediately, so a rollback test using fakes would fail even when the code is correct. Only the real `SyncQueue` (`QUEUE_CONNECTION=sync` in `phpunit.xml`) defers via `db.transactions` (`Queue/SyncQueue.php` L197). Use real side effects instead:
-- **Notifications:** assert on the `notifications` table (database channel) after `DB::transaction(function () { $ledger->charge(...); throw new RuntimeException; })` is caught. Expect no new row. In the committed case, expect one.
+- **Notifications** *(corrected 2026-10-30 after the implementer's T-14 STOP)*:
+  - **What to assert:** use `Event::fake([\Illuminate\Notifications\Events\NotificationSent::class])` and nothing else, then assert `NotificationSent` was not dispatched after a rolled-back transaction, and was dispatched after a committed one. Events are not rolled back.
+  - **Why not the `notifications` table:** with `QUEUE_CONNECTION=sync`, a notification sent *without* after-commit runs inside the open transaction, so its database row rolls back with it. A row count of 0 therefore passes both before and after the change.
+  - **Which notification to drive:** use one without an existing after-commit flag, for example `AnnouncementNotification` via `$parent->notify()` or `PaymentReminderService::send`.
+    - `CreditChargedNotification` and `CreditSettledNotification` already set `$this->afterCommit = true;` in their constructors (Spec 14), so `CreditLedgerService::charge` defers already.
+    - Keep the `charge` rollback/commit tests anyway, as pins that are green before and after.
+    - Keep those constructors unchanged: "no constructor change" still holds, and the redundant flag is harmless.
 - **Mail:** `Event::fake([\Illuminate\Mail\Events\MessageSending::class])`, which fakes only that event so mail still flows through the `array` mailer. Then `Event::assertNotDispatched(MessageSending::class)` after a rolled-back enrollment, and `assertDispatched` after a committed one.
 
 ### 4.8 Dependency and surface cleanup (T-17, Q6 approved on condition "must not affect the API")
