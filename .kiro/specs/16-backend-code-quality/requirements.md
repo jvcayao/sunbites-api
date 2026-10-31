@@ -150,7 +150,7 @@ A Track A change and a Track B change are never combined in one PR.
 3. New cross-cutting defaults (Req 4.6) live in `AppServiceProvider::configureDefaults()`.
 4. `#[CurrentUser]` SHALL NOT be adopted wholesale; it MAY appear in new Action entry points only.
 
-### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17, B-18 and B-19 approved 2026-10-12; B-20–B-24 approved 2026-10-17; B-06 merged into B-05)*
+### Requirement 10: Track B, behaviour-changing defect fixes *(B-01–B-05 and B-07–B-16 approved 2026-10-09; B-17, B-18 and B-19 approved 2026-10-12; B-20–B-24 approved 2026-10-17; B-25 approved 2026-10-31; B-06 merged into B-05)*
 
 **User Story:** As the product owner, I want each real defect listed separately with its verified frontend impact, so that I can approve, defer or reject each one.
 
@@ -187,6 +187,7 @@ A Track A change and a Track B change are never combined in one PR.
 22. **B-22 *(approved 2026-10-17)*: pre-registration birthday.** Pre-registration responses SHALL serialise `birthday` as `Y-m-d`, so the POS edit form shows it and saving does not move it back one day (design §5.20).
 23. **B-23 *(approved 2026-10-17)*: 403/404 bodies.** For `api/*`, a policy denial SHALL return 403 `{"message":"Forbidden."}` and a model-binding or `firstOrFail()` miss SHALL return 404 `{"message":"Not found."}`, as `bootstrap/app.php` intends. Every `abort()` text and the `role:` middleware text SHALL stay unchanged (design §5.21).
 24. **B-24 *(approved 2026-10-17)*: checkout with another branch's menu item.** `POST /pos/checkout` with a menu item id that exists only in another branch SHALL return 422 `{"message":"One or more items are not available in this branch. Clear the cart and add them again."}` instead of 500, and SHALL write nothing (design §5.22).
+25. **B-25 *(approved 2026-10-31)*: spending summary at month end.** `GET /portal/students/{student}/spending-summary` SHALL return `monthly` as consecutive calendar months ending with the current month, `last_month_total` for the previous calendar month, and each chart month with all its orders, on every day of the month, including the 29th–31st (design §5.23).
 
 ### Requirement 11: Dependency and surface cleanup *(Q6 approved 2026-10-09, on condition that the API is not affected)*
 

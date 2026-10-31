@@ -185,8 +185,11 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 38 | T-15 | `chore(composer): correct package metadata and scripts` |
 | 39 | T-16 | `refactor(models): adopt Laravel 13 model attributes` |
 | 40 | T-17 | `chore(deps): remove fortify, laravel-cart, default bcast route` |
-| 41 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
-| 42 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
+| 41 | B-25 | `fix(portal): B-25 stop month overflow in the spending summary` |
+| 42 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
+| 43 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
+
+**B-25 (portal spending summary month overflow) was approved on 2026-10-31** and is step 41, right after T-17. T-18 and T-19 moved to steps 42 and 43. Until B-25 lands, `SpendingSummaryControllerTest::test_missing_months_are_filled_with_zero` is the only accepted gate failure, and only on a month-end overflow date (design §5.23). Name it in the commit body as a known pre-existing failure. Any other failure, or this one on another date, is a STOP.
 
 **B-20 and B-21 were approved on 2026-10-17** and are in the table: B-20 runs after T-7 and B-03 (it touches `PosMenuItemController`, which T-7 refactors), and B-21 runs after T-11 and B-08 (portal). **B-24 (checkout with another branch's menu item) was approved on 2026-10-17** and is step 10, right after T-4. **B-22 and B-23 were approved on 2026-10-17** and are in the table. B-23 is step 5, right after T-2: from then on, a policy denial returns `Forbidden.` and a binding miss returns `Not found.` (design H19), which B-15, T-6.3, B-01, B-17 and B-18 rely on. B-22 runs right after B-09, in the pre-registration area.
 
@@ -229,7 +232,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 42, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 43, stop. The user pushes and opens the PR.
 
 ---
 

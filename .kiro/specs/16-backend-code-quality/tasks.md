@@ -427,7 +427,7 @@
 
 ---
 
-## Track B (23 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17; one commit each; failing test first)
+## Track B (24 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17, B-25 on 2026-10-31; one commit each; failing test first)
 
 - [x] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -525,6 +525,11 @@
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
   - _Requirements: 6.3, 10.15_
+- [ ] B-25. *(approved 2026-10-31)* Spending summary month overflow *(design §5.23; HANDOFF §6 step 41, right after T-17)*
+  - Failing tests first (in `SpendingSummaryControllerTest`, pinned with `travelTo`): six consecutive months on 2026-10-31, last month is September on 2026-10-31, and the oldest month keeps its orders on 2026-07-31.
+  - Exactly three lines change: `subMonthsNoOverflow()` at L28 and L42, `subMonthNoOverflow()` at L56.
+  - Fixtures: none.
+  - _Requirements: 10.25_
 
 ---
 
@@ -556,7 +561,7 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.24 | B-01 … B-24 |
+| 10.2–10.25 | B-01 … B-25 |
 | 14.1–14.5 | C-1.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |

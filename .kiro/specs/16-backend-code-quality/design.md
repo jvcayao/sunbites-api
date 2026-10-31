@@ -26,6 +26,7 @@ The refactor has two tracks:
 | Track B | B-20 (sold menu item delete 500), B-21 (portal dashboard credit badge), both found during T-1 | **Approved** 2026-10-17 |
 | Track B | B-22 (pre-registration birthday shifted one day per save), B-23 (make the 403/404 bodies in `bootstrap/app.php` effective; found during T-2) | **Approved** 2026-10-17 |
 | Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
+| Track B | B-25 (portal spending summary repeats and skips months at month end; found during the T-16 gates) | **Approved** 2026-10-31 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.39.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) and on 13.39.0 on 2026-10-30 (`336a826`), each after a `composer update`)
@@ -1237,6 +1238,30 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **FE impact:** positive, with no FE change needed. The POS toast shows the message instead of "Server Error".
 - **Slot:** HANDOFF §6 step 10, right after T-4. It depends only on T-3, which created `CheckoutAction`.
 
+### 5.23 B-25 *(approved 2026-10-31)*: Portal spending summary repeats and skips months at month end
+
+- **Defect** (found by the spec owner in the T-16 gate run on 2026-10-31, confirmed in tinker):
+  - `Portal\SpendingSummaryController::show` L42 builds each chart month with `now()->subMonths($i)`. Carbon's `subMonths()` overflows when the target month has fewer days than today's date: on 2026-10-31, "Sep 31" becomes Oct 1 and "Jun 31" becomes Jul 1. The six `monthly` keys come out as `2026-05, 2026-07, 2026-07, 2026-08, 2026-10, 2026-10`: June and September are missing, and July and October each appear twice with that month's total.
+  - L56 `$lastMonth = now()->subMonth()` gives October on 2026-10-31, so `last_month_total` equals `this_month_total`.
+  - L28 `$chartFrom = now()->subMonths($months - 1)->startOfMonth()` overflows the same way: on 2026-07-31 with 6 months, "Feb 31" becomes Mar 3, so the query starts at March 1 and the oldest chart month loses its orders.
+  - Affected days: the 29th–31st, whenever a target month is shorter. `SpendingSummaryControllerTest::test_missing_months_are_filled_with_zero` fails on 2026-10-31 on both drivers ("actual size 4 matches expected size 5") and passes on other days.
+  - The other month loops (`Kitchen\PaymentController`, `Kitchen\AnalyticsController::monthPeriods()`, `EnrollmentService`) start from day 1 of a month and cannot overflow. They are unchanged.
+- **Fix** (exactly these three lines in `SpendingSummaryController`; nothing else):
+  - L28: `$chartFrom = now()->subMonthsNoOverflow($months - 1)->startOfMonth();`
+  - L42: `$date = now()->subMonthsNoOverflow($i);`
+  - L56: `$lastMonth = now()->subMonthNoOverflow();`
+
+  On days that do not overflow, every value is identical to today's.
+- **Tests** (failing first; add to `tests/Feature/Portal/SpendingSummaryControllerTest.php`; create orders with the file's existing pattern: `Order::factory()->for($this->student)->create([...])` with `branch_id`, `PaymentMethod::Wallet`, `OrderStatus::Completed`, `total`, `voided_at => null` and `created_at`):
+  1. `test_monthly_lists_six_consecutive_months_at_month_end`: `$this->travelTo('2026-10-31 12:00:00')` (the suite's existing string form), then `array_column($monthly, 'month')` is exactly `['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']` (`assertSame`).
+  2. `test_last_month_total_is_the_previous_calendar_month_at_month_end`: travel to 2026-10-31 12:00; orders of 100 on 2026-10-15 and 250 on 2026-09-15; `this_month_total` is 100 and `last_month_total` is 250.
+  3. `test_oldest_chart_month_keeps_its_orders_at_month_end`: travel to 2026-07-31 12:00; an order of 80 on 2026-02-10; `monthly.0.month` is `2026-02` and `monthly.0.total` is 80. This covers L28: with only L42 fixed, the total is 0.
+
+  All three fail before the fix. The existing tests stay unchanged; `test_missing_months_are_filled_with_zero` then passes on every date.
+- **Fixtures:** none. The spending-summary fixtures record types only (`month: string`, `total: number`).
+- **FE impact:** positive, with no FE change needed. The portal chart shows six distinct months, and "last month" shows the previous month's total.
+- **Slot:** HANDOFF §6 step 41, right after T-17. T-18 and T-19 become steps 42 and 43, so the T-19 simplifier pass covers it.
+
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
 All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
@@ -1252,7 +1277,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (42 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (43 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD
