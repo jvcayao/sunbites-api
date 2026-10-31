@@ -28,6 +28,7 @@ The refactor has two tracks:
 | Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
 | Track B | B-25 (portal spending summary repeats and skips months at month end; found during the T-16 gates) | **Approved** 2026-10-31 |
 | Track B | B-26 (a manager can create an admin by sending the role as a list; flagged by the T-19 simplifier) | **Approved** 2026-10-31 |
+| Track B | B-27 (the other untyped `exists` rules accept a list and return 500; found in the final QA for the same pattern as B-26) | **Approved** 2026-10-31 (the user's final-QA instruction to find and fix the same scenario) |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.39.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) and on 13.39.0 on 2026-10-30 (`336a826`), each after a `composer update`)
@@ -1282,6 +1283,27 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **FE impact:** none. The POS sends `role` as a string (`~/sunbites-pos/lib/api/users.ts`: `role: string`).
 - **Slot:** HANDOFF §6 step 44, after T-19. It changes one rule and one parameter type, so the simplifier pass is not re-run.
 
+### 5.25 B-27 *(approved 2026-10-31)*: Untyped `exists` rules accept a list and return 500
+
+- **Defect** (final QA, same pattern as B-26; found by the spec owner):
+  - Laravel's `exists` rule accepts an array and passes when every element exists (`validateExists`: `$expected = is_array($value) ? count(array_unique($value)) : 1`). By contrast, `in:`, `Rule::in` and `Rule::enum` already reject arrays (`validateIn` returns `! is_array($value) && …` unless the field also has `array`; `Enum::passes` catches the `tryFrom` `TypeError`).
+  - Six `exists` rules have no type, so a list such as `[5]` passes validation and then fails in code that expects one id, returning 500 instead of 422:
+    1. `Kitchen\CheckoutRequest` `student_id` (`['nullable', 'exists:students,id']`): `Student::lockForUpdate()->findOrFail([5])` returns a Collection.
+    2. `Kitchen\CheckoutRequest` `items.*.pos_menu_item_id` (`['required', 'exists:pos_menu_items,id']`): `findMany` and `$menuItems[...]` receive an array.
+    3. `Kitchen\EnrollStudentRequest` `branch_id` (`['required', 'exists:branches,id']`): the student is created with an array `branch_id`.
+    4. `Kitchen\InlineReloadRequest` `student_id` (`['required', 'exists:students,id']`): `Student::findOrFail([5])` returns a Collection, and `->deposit()` throws.
+    5. `Kitchen\UpdateStaffStatusRequest` `user_id` (`Rule::exists('branch_user', 'user_id')->where(...)`): `updateOrCreate` inserts an array `user_id`.
+    6. `Public\StorePublicPreRegistrationRequest` `branch_id` (`['required', 'exists:branches,id']`): an unauthenticated endpoint; the record is created with an array `branch_id`.
+  - None of these grants access or writes data, unlike B-26: each fails before or inside a transaction. They are 500s for malformed input.
+- **Fix:** add `'integer'` directly before the `exists` rule in each of the six rules above. Nothing else changes. `integer` also accepts numeric strings (`"3"`), which multipart forms send (enrolment with a photo). Every frontend sends these ids as numbers: POS cart ids, `student_id`, `user_id` and enrolment `branch_id` (`z.number`); portal pre-registration `branch_id` (`z.number`).
+- **Tests** (failing first; a new class `tests/Feature/IdFieldListInputTest.php`, created with `make:test --phpunit`, `RefreshDatabase`, reusing the setup patterns of `CheckoutActionTest`, `EnrollmentTest`, `PosInsufficientFundsTest`, `DashboardTest` and `Public\PreRegistrationTest`). One test per field. Each sends an otherwise valid request with the field as a one-element list of a real id, and asserts `assertUnprocessable()`, `assertJsonValidationErrors(['<field>'])` (for checkout items, `items.0.pos_menu_item_id`), and that nothing was written (`assertDatabaseCount` on `orders`, `students`, `transactions`, `staff_daily_statuses` or `pre_registrations`, as relevant). Every test must fail before the fix (today: 500). If one does not, STOP and report.
+- **Fixtures:** none. The `422-validation` variants already record the `{message, errors}` shape.
+- **FE impact:** none (see Fix).
+- **Checked and deliberately not changed:**
+  - The 16 single-rule fields (`['nullable']`/`['required']`): the `ListStudentsRequest`, `ListStaffUsersRequest`, `ShowMealPlanRequest`, `ListBranchMonthlyAmountsRequest` and `ListEligibleParentsRequest` filters, and `ResetStaffPasswordRequest` `token`. These are read-only filters, or a token that is only hashed and compared. §4.2.3 keeps them permissive on purpose, so the POS's existing values (`deleted=true`, `type=all`, lowercase months) keep working.
+  - Enrolment into a branch other than the active one: intended. The POS enrolment form lists every active branch (`EnrollmentController::index`), and `EnrollStudentAction`'s docblock documents it. Limiting it would be a product decision.
+- **Slot:** HANDOFF §6 step 45, after B-26. It is a one-word change in six rules, so the simplifier pass is not re-run.
+
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
 All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
@@ -1297,7 +1319,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (44 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (45 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD

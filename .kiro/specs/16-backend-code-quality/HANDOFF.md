@@ -189,6 +189,9 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 42 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
 | 43 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 | 44 | B-26 | `fix(security): B-26 reject a staff role sent as a list` |
+| 45 | B-27 | `fix(api): B-27 reject lists in single-id fields` |
+
+**B-27 (the other untyped `exists` rules accept a list and return 500) was approved on 2026-10-31,** under the user's final-QA instruction to find and fix the same scenario as B-26. It is step 45 (design §5.25). Any gate failure is a STOP.
 
 **B-26 (a manager can create an admin by sending the role as a list) was approved on 2026-10-31** and is step 44, after T-19. It changes one validation rule and one parameter type, so the simplifier pass is not re-run (design §5.24). Any gate failure is a STOP.
 
@@ -235,7 +238,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 44, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 45, stop. The user pushes and opens the PR.
 
 ---
 
