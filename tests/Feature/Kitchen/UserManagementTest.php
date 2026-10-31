@@ -173,6 +173,29 @@ class UserManagementTest extends TestCase
             ->assertJsonStructure(['errors' => ['email']]);
     }
 
+    public function test_manager_cannot_create_an_admin_by_sending_the_role_as_a_list(): void
+    {
+        $manager = User::factory()->create();
+        $manager->assignRole('manager');
+        $managerToken = $manager->createToken('staff', ['staff'])->plainTextToken;
+
+        $response = $this->withToken($managerToken)
+            ->postJson('/api/v1/users', [
+                'first_name' => 'Juan',
+                'last_name' => 'dela Cruz',
+                'email' => 'juan@sunbites.test',
+                'password' => 'Password1',
+                'password_confirmation' => 'Password1',
+                'role' => ['admin'],
+                'branch_ids' => [$this->branch->id],
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertExactJson(['message' => 'Validation failed.', 'errors' => ['role' => ['The role field must be a string.']]]);
+
+        $this->assertDatabaseMissing('users', ['email' => 'juan@sunbites.test']);
+    }
+
     public function test_admin_can_view_user(): void
     {
         $user = User::factory()->create();
@@ -200,6 +223,25 @@ class UserManagementTest extends TestCase
 
         $response->assertOk();
         $this->assertDatabaseHas('users', ['id' => $user->id, 'first_name' => 'Updated']);
+    }
+
+    public function test_updating_a_user_rejects_the_role_as_a_list(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('cashier');
+
+        $response = $this->withToken($this->adminToken())
+            ->putJson("/api/v1/users/{$user->id}", [
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
+                'email' => $user->email,
+                'role' => ['supervisor'],
+            ]);
+
+        $response->assertUnprocessable()
+            ->assertExactJson(['message' => 'Validation failed.', 'errors' => ['role' => ['The role field must be a string.']]]);
+
+        $this->assertTrue($user->fresh()->hasRole('cashier'));
     }
 
     public function test_admin_can_change_user_role(): void

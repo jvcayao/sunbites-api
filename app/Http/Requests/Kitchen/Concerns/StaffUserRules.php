@@ -35,7 +35,7 @@ trait StaffUserRules
             'pagibig_number' => ['nullable', 'string', 'max:50'],
             'philhealth_number' => ['nullable', 'string', 'max:50'],
             'tin_number' => ['nullable', 'string', 'max:50'],
-            'role' => ['required', 'exists:roles,name'],
+            'role' => ['required', 'string', 'exists:roles,name'],
             'branch_ids' => ['nullable', 'array'],
             'branch_ids.*' => ['integer', 'exists:branches,id'],
             'profile_photo' => ['nullable', 'file', 'mimes:jpeg,png,webp', 'max:2048'],

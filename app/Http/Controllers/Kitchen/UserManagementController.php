@@ -213,11 +213,7 @@ class UserManagementController extends Controller
         return response()->json($user->load('branches')->branches);
     }
 
-    /**
-     * `$role` stays untyped: its rule (`exists:roles,name`) also accepts an array, and a
-     * `string` type would turn that input into a TypeError instead of today's comparison.
-     */
-    private function ensureMayAssignRole(User $actor, mixed $role): void
+    private function ensureMayAssignRole(User $actor, string $role): void
     {
         if ($role === 'admin' && ! $actor->hasRole('admin')) {
             abort(403, 'Only an admin may assign the admin role.');
