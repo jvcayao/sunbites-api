@@ -25,11 +25,11 @@ class StorePublicPreRegistrationRequest extends FormRequest
 
     /**
      * The honeypot runs first, then reCAPTCHA. Both answer before the form is validated, as
-     * they did in the controller.
+     * they did in the controller. Bots fill the hidden `website` field, so the honeypot
+     * returns the normal 201 without creating a record.
      */
     protected function prepareForValidation(): void
     {
-        // Honeypot — bots fill the hidden website field; return 201 without creating a record
         if ($this->filled('website')) {
             throw new HttpResponseException(response()->json(['message' => 'Pre-registration received.'], 201));
         }
@@ -93,21 +93,23 @@ class StorePublicPreRegistrationRequest extends FormRequest
     {
         $validated = $this->validated();
 
-        if ($validated['enrollment_type'] === 'subscription') {
-            $start = Carbon::createFromDate(
-                $validated['subscription_start_year'],
-                SchoolMonth::from($validated['subscription_start_month'])->toMonthNumber(),
-                1
-            );
-            $end = Carbon::createFromDate(
-                $validated['subscription_end_year'],
-                SchoolMonth::from($validated['subscription_end_month'])->toMonthNumber(),
-                1
-            );
+        if ($validated['enrollment_type'] !== 'subscription') {
+            return;
+        }
 
-            if ($end->lt($start)) {
-                throw new HttpResponseException(response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422));
-            }
+        $start = Carbon::createFromDate(
+            $validated['subscription_start_year'],
+            SchoolMonth::from($validated['subscription_start_month'])->toMonthNumber(),
+            1
+        );
+        $end = Carbon::createFromDate(
+            $validated['subscription_end_year'],
+            SchoolMonth::from($validated['subscription_end_month'])->toMonthNumber(),
+            1
+        );
+
+        if ($end->lt($start)) {
+            throw new HttpResponseException(response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422));
         }
     }
 

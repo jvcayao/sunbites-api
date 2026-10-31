@@ -19,10 +19,8 @@ class BillingReportController extends Controller
 {
     public function index(ListBillingReportRequest $request): JsonResponse
     {
-        $validated = $request->validated();
+        $validated = $this->withDefaultPeriod($request->validated());
 
-        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
-        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
         $perPage = $validated['per_page'] ?? 50;
 
         $query = $this->buildQuery($validated)
@@ -37,8 +35,7 @@ class BillingReportController extends Controller
         $totalSubscribers = (clone $summaryQuery)->distinct('student_id')->count('student_id');
         $totalCollected = (float) (clone $summaryQuery)->where('status', 'paid')->sum('amount');
         $totalOutstanding = (float) (clone $summaryQuery)->where('status', 'unpaid')->sum('amount');
-        $totalAmount = $totalCollected + $totalOutstanding;
-        $collectionRate = $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
+        $collectionRate = $this->collectionRate($totalCollected, $totalOutstanding);
 
         $payments = $query->paginate($perPage);
 
@@ -73,10 +70,8 @@ class BillingReportController extends Controller
 
     public function export(ExportBillingReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validated();
+        $validated = $this->withDefaultPeriod($request->validated());
 
-        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
-        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
         $branch = app('active_branch');
         $year = $validated['year'];
 
@@ -87,8 +82,7 @@ class BillingReportController extends Controller
 
         $totalCollected = (float) $payments->where('status', PaymentStatus::Paid)->sum('amount');
         $totalOutstanding = (float) $payments->where('status', PaymentStatus::Unpaid)->sum('amount');
-        $totalAmount = $totalCollected + $totalOutstanding;
-        $collectionRate = $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
+        $collectionRate = $this->collectionRate($totalCollected, $totalOutstanding);
 
         $summary = [
             'total_subscribers' => $payments->unique('student_id')->count(),
@@ -100,6 +94,27 @@ class BillingReportController extends Controller
         $filename = "billing-report-{$branch->slug}-{$year}.xlsx";
 
         return Excel::download(new BillingReportExport($payments, $summary), $filename);
+    }
+
+    /**
+     * Defaults the filters to the current school month and school year when they are missing.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function withDefaultPeriod(array $validated): array
+    {
+        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
+        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
+
+        return $validated;
+    }
+
+    private function collectionRate(float $totalCollected, float $totalOutstanding): float|int
+    {
+        $totalAmount = $totalCollected + $totalOutstanding;
+
+        return $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
     }
 
     /**

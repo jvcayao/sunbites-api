@@ -7,6 +7,8 @@ use App\Enums\StudentType;
 use App\Models\Branch;
 use App\Models\ParentPaymentReminder;
 use App\Models\ParentUser;
+use App\Models\Student;
+use App\Models\StudentMonthlyPayment;
 use App\Models\User;
 use App\Notifications\PaymentReminderNotification;
 use Carbon\Carbon;
@@ -77,19 +79,15 @@ class PaymentReminderService
 
         return $parent->students
             ->flatMap(fn ($s) => $s->monthlyPayments)
-            ->filter(function ($p) use ($now) {
-                return Carbon::create($p->year, $p->school_month->toMonthNumber(), 1)->startOfMonth()->lte($now);
-            })
+            ->filter(fn ($p) => Carbon::create($p->year, $p->school_month->toMonthNumber(), 1)->startOfMonth()->lte($now))
             ->map(fn ($p) => ['school_month' => $p->school_month->value, 'year' => $p->year])
-            ->unique(fn ($p) => $p['school_month'].'_'.$p['year'])
+            ->unique(fn ($p) => $this->periodKey($p['school_month'], $p['year']))
             ->values();
     }
 
     public function dueDate(SchoolMonth $schoolMonth, int $year): Carbon
     {
-        $monthNumber = $schoolMonth->toMonthNumber();
-
-        return Carbon::create($year, $monthNumber, 1)->endOfMonth();
+        return Carbon::create($year, $schoolMonth->toMonthNumber(), 1)->endOfMonth();
     }
 
     /**
@@ -107,13 +105,13 @@ class PaymentReminderService
             ->whereIn('parent_user_id', $parents->pluck('id'))
             ->get()
             ->groupBy('parent_user_id')
-            ->map(fn ($reminders) => $reminders->map(fn ($r) => $r->school_month.'_'.$r->school_year)->flip());
+            ->map(fn ($reminders) => $reminders->map(fn ($r) => $this->periodKey($r->school_month, $r->school_year))->flip());
 
         return $parents->filter(function (ParentUser $parent) use ($sentKeys) {
             $periods = $this->unpaidPeriods($parent);
             $parentSentKeys = $sentKeys->get($parent->id, collect());
 
-            return $periods->contains(fn ($p) => ! $parentSentKeys->has($p['school_month'].'_'.$p['year']));
+            return $periods->contains(fn ($p) => ! $parentSentKeys->has($this->periodKey($p['school_month'], $p['year'])));
         })->count();
     }
 
@@ -142,7 +140,7 @@ class PaymentReminderService
         return $parents->map(function (ParentUser $parent) use ($remindersMap, $now) {
             $periods = $this->unpaidPeriods($parent);
             $reminders = $remindersMap->get($parent->id, collect());
-            $remindersByKey = $reminders->keyBy(fn ($r) => $r->school_month.'_'.$r->school_year);
+            $remindersByKey = $reminders->keyBy(fn ($r) => $this->periodKey($r->school_month, $r->school_year));
 
             $hasOverdue = $periods->contains(function ($p) use ($now) {
                 $monthNum = SchoolMonth::from($p['school_month'])->toMonthNumber();
@@ -151,16 +149,14 @@ class PaymentReminderService
             });
 
             $totalSendCount = $reminders->sum('send_count');
-            $allSent = $periods->isNotEmpty() && $periods->every(fn ($p) => $remindersByKey->has($p['school_month'].'_'.$p['year']));
+            $allSent = $periods->isNotEmpty() && $periods->every(fn ($p) => $remindersByKey->has($this->periodKey($p['school_month'], $p['year'])));
             $noneSent = $totalSendCount === 0;
 
             $unpaidPeriods = $periods->map(function ($p) use ($parent, $remindersByKey) {
-                $key = $p['school_month'].'_'.$p['year'];
-                $reminder = $remindersByKey->get($key);
+                $reminder = $remindersByKey->get($this->periodKey($p['school_month'], $p['year']));
 
                 $students = $parent->students->map(function ($s) use ($p) {
-                    $payment = $s->monthlyPayments
-                        ->first(fn ($mp) => $mp->school_month->value === $p['school_month'] && $mp->year === $p['year']);
+                    $payment = $this->paymentForPeriod($s, $p);
 
                     return $payment ? [
                         'id' => $s->id,
@@ -231,11 +227,11 @@ class PaymentReminderService
             }
 
             $existingReminders = $remindersByParent->get($parent->id, collect())
-                ->keyBy(fn ($r) => $r->school_month.'_'.$r->school_year);
+                ->keyBy(fn ($r) => $this->periodKey($r->school_month, $r->school_year));
 
             $periodsToNotify = $force
                 ? $allPeriods
-                : $allPeriods->filter(fn ($p) => ! $existingReminders->has($p['school_month'].'_'.$p['year']))->values();
+                : $allPeriods->filter(fn ($p) => ! $existingReminders->has($this->periodKey($p['school_month'], $p['year'])))->values();
 
             if ($periodsToNotify->isEmpty()) {
                 $skippedCount++;
@@ -248,8 +244,7 @@ class PaymentReminderService
                 $schoolMonth = SchoolMonth::from($p['school_month']);
 
                 $students = $parent->students->map(function ($s) use ($p) {
-                    $payment = $s->monthlyPayments
-                        ->first(fn ($mp) => $mp->school_month->value === $p['school_month'] && $mp->year === $p['year']);
+                    $payment = $this->paymentForPeriod($s, $p);
 
                     return $payment ? ['id' => $s->id, 'full_name' => $s->full_name, 'amount' => (float) $payment->amount] : null;
                 })->filter()->values();
@@ -264,8 +259,7 @@ class PaymentReminderService
             }
 
             foreach ($periodsToNotify as $p) {
-                $key = $p['school_month'].'_'.$p['year'];
-                $reminder = $existingReminders->get($key) ?? new ParentPaymentReminder([
+                $reminder = $existingReminders->get($this->periodKey($p['school_month'], $p['year'])) ?? new ParentPaymentReminder([
                     'parent_user_id' => $parent->id,
                     'branch_id' => $branch->id,
                     'school_month' => $p['school_month'],
@@ -287,5 +281,24 @@ class PaymentReminderService
             'skipped' => $skippedCount,
             'skipped_names' => $skippedNames,
         ];
+    }
+
+    /**
+     * The key that matches an unpaid period (`school_month`, `year`) to a reminder (`school_month`, `school_year`).
+     */
+    private function periodKey(string $schoolMonth, int|string $year): string
+    {
+        return $schoolMonth.'_'.$year;
+    }
+
+    /**
+     * The student's loaded monthly payment for this unpaid period, if any.
+     *
+     * @param  array{school_month: string, year: int}  $period
+     */
+    private function paymentForPeriod(Student $student, array $period): ?StudentMonthlyPayment
+    {
+        return $student->monthlyPayments
+            ->first(fn ($mp) => $mp->school_month->value === $period['school_month'] && $mp->year === $period['year']);
     }
 }

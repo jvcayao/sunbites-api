@@ -26,20 +26,16 @@ class AnnouncementController extends Controller
             ->groupBy('announcement_id')
             ->pluck('total', 'announcement_id');
 
-        $items = $announcements->getCollection()->map(function (Announcement $announcement) use ($readCounts) {
-            $readCount = (int) ($readCounts[$announcement->id] ?? 0);
-
-            return [
-                'id' => $announcement->id,
-                'title' => $announcement->title,
-                'message_preview' => mb_substr($announcement->message, 0, 100),
-                'sender_name' => $announcement->sender->full_name,
-                'recipient_type' => $announcement->recipient_type,
-                'recipient_count' => $announcement->recipient_count,
-                'read_count' => $readCount,
-                'created_at' => $announcement->created_at,
-            ];
-        });
+        $items = $announcements->getCollection()->map(fn (Announcement $announcement) => [
+            'id' => $announcement->id,
+            'title' => $announcement->title,
+            'message_preview' => mb_substr($announcement->message, 0, 100),
+            'sender_name' => $announcement->sender->full_name,
+            'recipient_type' => $announcement->recipient_type,
+            'recipient_count' => $announcement->recipient_count,
+            'read_count' => (int) ($readCounts[$announcement->id] ?? 0),
+            'created_at' => $announcement->created_at,
+        ]);
 
         return response()->json([
             'data' => $items,
@@ -64,7 +60,6 @@ class AnnouncementController extends Controller
             ]);
 
             $recipientIds = $validated['recipient_ids'];
-            $notified = 0;
 
             if ($validated['recipient_type'] === 'parents') {
                 $recipients = ParentUser::whereHas('students', function ($q) use ($branch) {
@@ -80,10 +75,9 @@ class AnnouncementController extends Controller
 
             foreach ($recipients as $recipient) {
                 $recipient->notify(new AnnouncementNotification($announcement));
-                $notified++;
             }
 
-            $announcement->update(['recipient_count' => $notified]);
+            $announcement->update(['recipient_count' => $recipients->count()]);
 
             return $announcement;
         });
@@ -93,11 +87,7 @@ class AnnouncementController extends Controller
 
     public function show(Announcement $announcement): JsonResponse
     {
-        $branch = app('active_branch');
-
-        if ($announcement->branch_id !== $branch->id) {
-            abort(404);
-        }
+        abort_if($announcement->branch_id !== app('active_branch')->id, 404);
 
         $announcement->load('sender');
 

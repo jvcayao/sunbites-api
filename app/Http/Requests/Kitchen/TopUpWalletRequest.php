@@ -22,12 +22,7 @@ class TopUpWalletRequest extends FormRequest
         return [
             'amount' => ['required', 'numeric', 'min:1', 'max:100000'],
             'payment_method' => ['required', 'in:cash,gcash,bank_transfer'],
-            'reference_number' => [
-                'nullable',
-                'string',
-                'alpha_num',
-                'max:50',
-            ],
+            'reference_number' => ['nullable', 'string', 'alpha_num', 'max:50'],
             'note' => ['nullable', 'string', 'max:255'],
         ];
     }

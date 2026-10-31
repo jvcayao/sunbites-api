@@ -98,20 +98,20 @@ class SalesReportController extends Controller
      * Completed orders of the branch in the date range, narrowed by the optional payment method,
      * walk-in and cashier filters. Callers add eager loads, ordering and aggregates.
      *
-     * @param  array<string, mixed>  $v
+     * @param  array<string, mixed>  $validated
      * @return Builder<Order>
      */
-    private function filteredOrders(int $branchId, array $v, string $dateFrom, string $dateTo): Builder
+    private function filteredOrders(int $branchId, array $validated, string $dateFrom, string $dateTo): Builder
     {
         return Order::withoutBranch()
             ->where('branch_id', $branchId)
             ->where('status', OrderStatus::Completed)
             ->whereBetween('created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
-            ->when(isset($v['payment_method']), fn ($q) => $q->where('payment_method', $v['payment_method']))
-            ->when(isset($v['is_walk_in']), fn ($q) => $v['is_walk_in']
+            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
+            ->when(isset($validated['is_walk_in']), fn ($q) => $validated['is_walk_in']
                 ? $q->whereNull('student_id')
                 : $q->whereNotNull('student_id'),
             )
-            ->when(isset($v['cashier_id']), fn ($q) => $q->where('cashier_id', $v['cashier_id']));
+            ->when(isset($validated['cashier_id']), fn ($q) => $q->where('cashier_id', $validated['cashier_id']));
     }
 }

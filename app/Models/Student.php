@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -207,7 +208,7 @@ class Student extends Model implements Wallet
 
         do {
             if (++$attempts > 10) {
-                throw new \RuntimeException('Failed to generate a unique QR code after 10 attempts.');
+                throw new RuntimeException('Failed to generate a unique QR code after 10 attempts.');
             }
 
             $code = 'SB-'.Str::random(12);

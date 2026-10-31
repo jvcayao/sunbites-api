@@ -32,7 +32,7 @@ class UpdateStudentRequest extends FormRequest
                 'string',
                 'max:50',
                 Rule::unique('students')
-                    ->where(fn ($q) => $q->where('branch_id', $student->branch_id))
+                    ->where(fn ($query) => $query->where('branch_id', $student->branch_id))
                     ->ignore($student->id)
                     ->whereNotNull('student_number'),
             ],

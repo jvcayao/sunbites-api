@@ -48,19 +48,14 @@ class UserManagementController extends Controller
     {
         $validated = $request->validated();
 
-        if ($validated['role'] === 'admin' && ! $request->user()->hasRole('admin')) {
-            abort(403, 'Only an admin may assign the admin role.');
-        }
+        $this->ensureMayAssignRole($request->user(), $validated['role']);
 
         $user = DB::transaction(function () use ($validated, $request) {
             $user = User::create($validated);
             $user->assignRole($validated['role']);
 
             if (! empty($validated['branch_ids'])) {
-                $user->branches()->sync(array_fill_keys($validated['branch_ids'], [
-                    'assigned_at' => now(),
-                    'assigned_by' => $request->user()->id,
-                ]));
+                $this->syncBranches($user, $validated['branch_ids'], $request->user());
             }
 
             if ($request->hasFile('profile_photo')) {
@@ -89,9 +84,7 @@ class UserManagementController extends Controller
     {
         $validated = $request->validated();
 
-        if ($validated['role'] === 'admin' && ! $request->user()->hasRole('admin')) {
-            abort(403, 'Only an admin may assign the admin role.');
-        }
+        $this->ensureMayAssignRole($request->user(), $validated['role']);
 
         $user = DB::transaction(function () use ($validated, $request, $user) {
             $oldRole = $user->getRoleNames()->first();
@@ -110,10 +103,7 @@ class UserManagementController extends Controller
             }
 
             if (isset($validated['branch_ids'])) {
-                $user->branches()->sync(array_fill_keys($validated['branch_ids'], [
-                    'assigned_at' => now(),
-                    'assigned_by' => $request->user()->id,
-                ]));
+                $this->syncBranches($user, $validated['branch_ids'], $request->user());
             }
 
             if ($request->hasFile('profile_photo')) {
@@ -221,5 +211,27 @@ class UserManagementController extends Controller
         $user->branches()->detach($branch->id);
 
         return response()->json($user->load('branches')->branches);
+    }
+
+    /**
+     * `$role` stays untyped: its rule (`exists:roles,name`) also accepts an array, and a
+     * `string` type would turn that input into a TypeError instead of today's comparison.
+     */
+    private function ensureMayAssignRole(User $actor, mixed $role): void
+    {
+        if ($role === 'admin' && ! $actor->hasRole('admin')) {
+            abort(403, 'Only an admin may assign the admin role.');
+        }
+    }
+
+    /**
+     * @param  array<int, int|string>  $branchIds
+     */
+    private function syncBranches(User $user, array $branchIds, User $assignedBy): void
+    {
+        $user->branches()->sync(array_fill_keys($branchIds, [
+            'assigned_at' => now(),
+            'assigned_by' => $assignedBy->id,
+        ]));
     }
 }

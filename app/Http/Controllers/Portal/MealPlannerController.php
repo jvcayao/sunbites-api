@@ -19,9 +19,11 @@ class MealPlannerController extends Controller
 
         $parent = $request->user();
 
-        if (! $parent->students()->where('student_type', StudentType::Subscription)->exists()) {
-            abort(403, 'Meal plan access requires a subscription student.');
-        }
+        abort_unless(
+            $parent->students()->where('student_type', StudentType::Subscription)->exists(),
+            403,
+            'Meal plan access requires a subscription student.'
+        );
 
         if (isset($validated['branch_id'])) {
             abort_unless(

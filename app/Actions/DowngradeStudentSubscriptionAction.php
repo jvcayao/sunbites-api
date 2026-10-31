@@ -16,10 +16,10 @@ class DowngradeStudentSubscriptionAction
         return DB::transaction(function () use ($student, $causer): Student {
             $allPayments = $student->monthlyPayments()->get();
 
-            $unpaidPayments = $allPayments->filter(fn ($p) => $p->status === PaymentStatus::Unpaid);
-            $paidPayments = $allPayments->filter(fn ($p) => $p->status === PaymentStatus::Paid);
+            $unpaidPayments = $allPayments->filter(fn ($payment) => $payment->status === PaymentStatus::Unpaid);
+            $paidPayments = $allPayments->filter(fn ($payment) => $payment->status === PaymentStatus::Paid);
 
-            $monthLabel = fn ($p) => $p->school_month->label().' '.$p->year;
+            $monthLabel = fn ($payment) => $payment->school_month->label().' '.$payment->year;
 
             $deletedMonthLabels = $unpaidPayments->map($monthLabel)->values()->all();
             $paidMonthLabels = $paidPayments->map($monthLabel)->values()->all();

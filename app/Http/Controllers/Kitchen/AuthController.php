@@ -35,14 +35,7 @@ class AuthController extends Controller
 
         return response()->json([
             'token' => $token,
-            'user' => [
-                'id' => $user->id,
-                'first_name' => $user->first_name,
-                'last_name' => $user->last_name,
-                'email' => $user->email,
-                'roles' => $user->getRoleNames(),
-                'branches' => $user->branches()->select('id', 'name', 'slug')->get(),
-            ],
+            'user' => $this->userData($user),
         ]);
     }
 
@@ -60,16 +53,7 @@ class AuthController extends Controller
 
     public function user(Request $request): JsonResponse
     {
-        $user = $request->user();
-
-        return response()->json([
-            'id' => $user->id,
-            'first_name' => $user->first_name,
-            'last_name' => $user->last_name,
-            'email' => $user->email,
-            'roles' => $user->getRoleNames(),
-            'branches' => $user->branches()->select('id', 'name', 'slug')->get(),
-        ]);
+        return response()->json($this->userData($request->user()));
     }
 
     public function sendResetEmail(SendStaffResetLinkRequest $request): JsonResponse
@@ -126,5 +110,18 @@ class AuthController extends Controller
         }
 
         return response()->json(['message' => __($status)]);
+    }
+
+    /** @return array<string, mixed> */
+    private function userData(User $user): array
+    {
+        return [
+            'id' => $user->id,
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
+            'email' => $user->email,
+            'roles' => $user->getRoleNames(),
+            'branches' => $user->branches()->select('id', 'name', 'slug')->get(),
+        ];
     }
 }

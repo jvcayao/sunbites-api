@@ -18,14 +18,18 @@ class EnrollmentController extends Controller
         $dailyRate = SystemConfiguration::getValue('daily_meal_rate', 135);
         $configMonths = config('sunbites.school_months');
 
-        $defaults = collect(SchoolMonth::cases())->mapWithKeys(fn ($m) => [
-            $m->value => [
-                'month' => $m->value,
-                'label' => $m->label(),
-                'days' => $configMonths[$m->value]['days'] ?? 0,
-                'default_amount' => ($configMonths[$m->value]['days'] ?? 0) * $dailyRate,
-            ],
-        ]);
+        $defaults = collect(SchoolMonth::cases())->mapWithKeys(function (SchoolMonth $m) use ($configMonths, $dailyRate) {
+            $days = $configMonths[$m->value]['days'] ?? 0;
+
+            return [
+                $m->value => [
+                    'month' => $m->value,
+                    'label' => $m->label(),
+                    'days' => $days,
+                    'default_amount' => $days * $dailyRate,
+                ],
+            ];
+        });
 
         return response()->json([
             'branches' => Branch::where('is_active', true)->get(['id', 'name', 'slug']),

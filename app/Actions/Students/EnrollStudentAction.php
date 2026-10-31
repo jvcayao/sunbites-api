@@ -31,10 +31,7 @@ class EnrollStudentAction
     public function execute(array $validated, ?UploadedFile $photo, User $enrolledBy): Student
     {
         return DB::transaction(function () use ($validated, $photo, $enrolledBy) {
-            $photoPath = null;
-            if ($photo !== null) {
-                $photoPath = $photo->store('photos/students', 'private');
-            }
+            $photoPath = $photo?->store('photos/students', 'private');
 
             $student = $this->enrollmentService->enroll(array_merge($validated, [
                 'photo_path' => $photoPath,

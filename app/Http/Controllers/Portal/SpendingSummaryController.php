@@ -49,9 +49,7 @@ class SpendingSummaryController extends Controller
             ];
         });
 
-        $schoolYearStart = now()->month >= 6
-            ? Carbon::create(now()->year, 6, 1)->startOfDay()
-            : Carbon::create(now()->year - 1, 6, 1)->startOfDay();
+        $schoolYearStart = Carbon::create(now()->month >= 6 ? now()->year : now()->year - 1, 6, 1)->startOfDay();
 
         $lastMonth = now()->subMonthNoOverflow();
 

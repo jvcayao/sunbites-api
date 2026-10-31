@@ -148,9 +148,7 @@ class ParentController extends Controller
     {
         $this->ensureVisibleInActiveBranch($parent);
 
-        if (! $parent->trashed()) {
-            abort(404);
-        }
+        abort_unless($parent->trashed(), 404);
 
         $this->restoreParent->execute($parent);
 

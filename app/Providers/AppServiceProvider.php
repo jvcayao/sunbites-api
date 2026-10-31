@@ -92,9 +92,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Date::use(CarbonImmutable::class);
 
-        DB::prohibitDestructiveCommands(
-            app()->isProduction(),
-        );
+        DB::prohibitDestructiveCommands($this->app->isProduction());
 
         Model::preventLazyLoading(! $this->app->isProduction());
 
@@ -106,7 +104,7 @@ class AppServiceProvider extends ServiceProvider
             });
         }
 
-        Password::defaults(fn (): Password => app()->isProduction()
+        Password::defaults(fn (): Password => $this->app->isProduction()
             ? Password::min(8)->mixedCase()->numbers()->symbols()->uncompromised()
             : Password::min(8)->mixedCase()->numbers(),
         );

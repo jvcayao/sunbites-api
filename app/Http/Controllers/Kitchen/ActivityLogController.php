@@ -16,15 +16,14 @@ class ActivityLogController extends Controller
 
         $perPage = $validated['per_page'] ?? 25;
 
-        $query = Activity::with('causer')
+        $logs = Activity::with('causer')
             ->when(isset($validated['date_from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['date_from']))
             ->when(isset($validated['date_to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['date_to']))
             ->when(isset($validated['user_id']), fn ($q) => $q->where('causer_id', $validated['user_id'])->where('causer_type', User::class))
             ->when(isset($validated['log_name']), fn ($q) => $q->where('log_name', $validated['log_name']))
             ->when(isset($validated['search']), fn ($q) => $q->whereContainsLiteral('description', $validated['search']))
-            ->latest();
-
-        $logs = $query->paginate($perPage);
+            ->latest()
+            ->paginate($perPage);
 
         return response()->json([
             'data' => collect($logs->items())->map(fn ($log) => [

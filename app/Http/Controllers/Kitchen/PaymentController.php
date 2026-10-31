@@ -141,21 +141,6 @@ class PaymentController extends Controller
         ]);
     }
 
-    private function logPaymentActivity(User $causer, Student $student, StudentMonthlyPayment $payment, string $status): void
-    {
-        activity('payments')
-            ->causedBy($causer)
-            ->performedOn($student)
-            ->withProperties([
-                'school_month' => $payment->school_month->value,
-                'year' => $payment->year,
-                'status' => $status,
-                'amount' => $payment->amount,
-                'recorded_by' => $causer->id,
-            ])
-            ->log('payments.recorded');
-    }
-
     public function addRange(AddPaymentRangeRequest $request, Student $student): JsonResponse
     {
         $validated = $request->validated();
@@ -215,5 +200,20 @@ class PaymentController extends Controller
             'skipped' => $skipped,
             'payments' => $created,
         ], 201);
+    }
+
+    private function logPaymentActivity(User $causer, Student $student, StudentMonthlyPayment $payment, string $status): void
+    {
+        activity('payments')
+            ->causedBy($causer)
+            ->performedOn($student)
+            ->withProperties([
+                'school_month' => $payment->school_month->value,
+                'year' => $payment->year,
+                'status' => $status,
+                'amount' => $payment->amount,
+                'recorded_by' => $causer->id,
+            ])
+            ->log('payments.recorded');
     }
 }

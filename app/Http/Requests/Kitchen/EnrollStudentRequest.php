@@ -31,7 +31,7 @@ class EnrollStudentRequest extends FormRequest
                 'string',
                 'max:50',
                 Rule::unique('students')
-                    ->where(fn ($q) => $q->where('branch_id', $this->input('branch_id')))
+                    ->where(fn ($query) => $query->where('branch_id', $this->input('branch_id')))
                     ->whereNotNull('student_number'),
             ],
             'first_name' => ['required', 'string', 'max:100'],
@@ -67,13 +67,23 @@ class EnrollStudentRequest extends FormRequest
     {
         $validated = $this->validated();
 
-        if (StudentType::from($validated['student_type']) === StudentType::Subscription) {
-            $start = Carbon::createFromDate($validated['subscription_start_year'], SchoolMonth::from($validated['subscription_start_month'])->toMonthNumber(), 1);
-            $end = Carbon::createFromDate($validated['subscription_end_year'], SchoolMonth::from($validated['subscription_end_month'])->toMonthNumber(), 1);
+        if (StudentType::from($validated['student_type']) !== StudentType::Subscription) {
+            return;
+        }
 
-            if ($end->lt($start)) {
-                throw new HttpResponseException(response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422));
-            }
+        $start = Carbon::createFromDate(
+            $validated['subscription_start_year'],
+            SchoolMonth::from($validated['subscription_start_month'])->toMonthNumber(),
+            1
+        );
+        $end = Carbon::createFromDate(
+            $validated['subscription_end_year'],
+            SchoolMonth::from($validated['subscription_end_month'])->toMonthNumber(),
+            1
+        );
+
+        if ($end->lt($start)) {
+            throw new HttpResponseException(response()->json(['errors' => ['subscription_end_month' => ['End month must be after start month.']]], 422));
         }
     }
 }

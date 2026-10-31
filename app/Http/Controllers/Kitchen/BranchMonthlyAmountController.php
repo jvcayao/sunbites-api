@@ -27,15 +27,20 @@ class BranchMonthlyAmountController extends Controller
         $configMonths = config('sunbites.school_months');
         $dailyRate = SystemConfiguration::getValue('daily_meal_rate', 135);
 
-        $months = collect(SchoolMonth::cases())->map(fn ($m) => [
-            'id' => $configured->get($m->value)?->id,
-            'school_month' => $m->value,
-            'label' => $m->label(),
-            'year' => $year,
-            'days' => $configured->get($m->value)?->days ?? ($configMonths[$m->value]['days'] ?? 0),
-            'amount' => $configured->get($m->value)?->amount ?? (($configMonths[$m->value]['days'] ?? 0) * $dailyRate),
-            'is_configured' => $configured->has($m->value),
-        ]);
+        $months = collect(SchoolMonth::cases())->map(function (SchoolMonth $m) use ($configured, $configMonths, $dailyRate, $year) {
+            $record = $configured->get($m->value);
+            $defaultDays = $configMonths[$m->value]['days'] ?? 0;
+
+            return [
+                'id' => $record?->id,
+                'school_month' => $m->value,
+                'label' => $m->label(),
+                'year' => $year,
+                'days' => $record?->days ?? $defaultDays,
+                'amount' => $record?->amount ?? ($defaultDays * $dailyRate),
+                'is_configured' => $configured->has($m->value),
+            ];
+        });
 
         return response()->json($months);
     }
@@ -44,20 +49,15 @@ class BranchMonthlyAmountController extends Controller
     {
         $validated = $request->validated();
 
-        $branchId = app('active_branch')->id;
-        $amount = isset($validated['amount'])
-            ? (float) $validated['amount']
-            : $validated['days'] * SystemConfiguration::getValue('daily_meal_rate', 135);
-
         $record = BranchMonthlyAmount::updateOrCreate(
             [
-                'branch_id' => $branchId,
+                'branch_id' => app('active_branch')->id,
                 'school_month' => $validated['school_month'],
                 'year' => $validated['year'],
             ],
             [
                 'days' => $validated['days'],
-                'amount' => $amount,
+                'amount' => $this->resolveAmount($validated),
             ]
         );
 
@@ -68,11 +68,7 @@ class BranchMonthlyAmountController extends Controller
     {
         $validated = $request->validated();
 
-        $amount = isset($validated['amount'])
-            ? (float) $validated['amount']
-            : $validated['days'] * SystemConfiguration::getValue('daily_meal_rate', 135);
-
-        $branchMonthlyAmount->update(['days' => $validated['days'], 'amount' => $amount]);
+        $branchMonthlyAmount->update(['days' => $validated['days'], 'amount' => $this->resolveAmount($validated)]);
 
         return response()->json($branchMonthlyAmount);
     }
@@ -86,5 +82,17 @@ class BranchMonthlyAmountController extends Controller
         $branchMonthlyAmount->delete();
 
         return response()->json(['message' => 'Month config deleted.']);
+    }
+
+    /**
+     * The explicit amount when one was sent, otherwise the days times the daily meal rate.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function resolveAmount(array $validated): int|float
+    {
+        return isset($validated['amount'])
+            ? (float) $validated['amount']
+            : $validated['days'] * SystemConfiguration::getValue('daily_meal_rate', 135);
     }
 }

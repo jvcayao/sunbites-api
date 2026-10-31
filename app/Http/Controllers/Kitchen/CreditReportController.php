@@ -19,13 +19,12 @@ class CreditReportController extends Controller
         $branchId = app('active_branch')->id;
         $perPage = $validated['per_page'] ?? 25;
 
-        $query = $this->baseQuery($branchId, $validated)
+        $transactions = $this->baseQuery($branchId, $validated)
             ->with(['student', 'performer'])
             ->when(isset($validated['type']), fn ($q) => $q->where('type', $validated['type']))
             ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
-            ->latest('created_at');
-
-        $transactions = $query->paginate($perPage);
+            ->latest('created_at')
+            ->paginate($perPage);
 
         return response()->json([
             'data' => collect($transactions->items())->map(fn (CreditTransaction $tx) => [

@@ -14,7 +14,7 @@ class InventoryItemResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $inventoryItems = $this->relationLoaded('menuItems') ? $this->menuItems : collect();
+        $menuItems = $this->relationLoaded('menuItems') ? $this->menuItems : collect();
 
         return [
             'id' => $this->id,
@@ -26,7 +26,7 @@ class InventoryItemResource extends JsonResource
             'cost_per_unit' => $this->cost_per_unit,
             'is_archived' => $this->is_archived,
             'status' => $this->status,
-            'has_inventory_mapping' => $inventoryItems->isNotEmpty(),
+            'has_inventory_mapping' => $menuItems->isNotEmpty(),
         ];
     }
 }

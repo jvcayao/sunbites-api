@@ -25,8 +25,10 @@ class StudentController extends Controller
     public function index(ListStudentsRequest $request): JsonResponse
     {
         $filters = $request->validated();
+        $onlyDeleted = ! empty($filters['deleted']);
+        $type = $filters['type'] ?? null;
 
-        $query = ($filters['deleted'] ?? null)
+        $query = $onlyDeleted
             ? Student::onlyTrashed()
             : Student::query();
 
@@ -38,12 +40,12 @@ class StudentController extends Controller
             ->when($filters['search'] ?? null, fn ($q, $search) => $q->whereAnyContainsLiteral(['first_name', 'last_name', 'student_number'], $search))
             ->when($filters['grade'] ?? null, fn ($q, $grade) => $q->where('grade_level', $grade));
 
-        if (! ($filters['deleted'] ?? null)) {
+        if (! $onlyDeleted) {
             $query
                 ->when($filters['status'] ?? null, fn ($q, $status) => $q->where('enrollment_status', $status))
-                ->when(($filters['type'] ?? null) && ($filters['type'] ?? null) !== 'all', fn ($q) => $q->where('student_type', $filters['type']));
+                ->when($type && $type !== 'all', fn ($q) => $q->where('student_type', $type));
 
-            if (($filters['type'] ?? null) === 'subscription' && ($filters['month'] ?? null)) {
+            if ($type === 'subscription' && ($filters['month'] ?? null)) {
                 $month = $filters['month'];
                 $paymentStatus = $filters['payment_status'] ?? null;
                 $year = $filters['year'] ?? null;
@@ -214,17 +216,17 @@ class StudentController extends Controller
     public function updateType(UpdateStudentTypeRequest $request, Student $student): JsonResponse
     {
         $validated = $request->validated();
+        $newType = StudentType::from($validated['student_type']);
 
         abort_if(
-            $student->student_type === StudentType::Subscription
-                && StudentType::from($validated['student_type']) === StudentType::NonSubscription,
+            $student->student_type === StudentType::Subscription && $newType === StudentType::NonSubscription,
             422,
             'Subscription students must be downgraded via the dedicated downgrade endpoint.'
         );
 
         $oldType = $student->student_type->value;
 
-        $student->update(['student_type' => StudentType::from($validated['student_type'])]);
+        $student->update(['student_type' => $newType]);
 
         activity('students')
             ->causedBy($request->user())

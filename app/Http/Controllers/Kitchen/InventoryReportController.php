@@ -10,6 +10,7 @@ use App\Http\Requests\Kitchen\ShowInventoryReportRequest;
 use App\Http\Resources\InventoryLogResource;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
@@ -32,17 +33,7 @@ class InventoryReportController extends Controller
         $belowThreshold = $items->filter(fn ($item) => $item->quantity > 0 && $item->quantity <= $item->restock_threshold)->count();
         $overStock = $items->filter(fn ($item) => $item->overstock_threshold !== null && (float) $item->quantity > (float) $item->overstock_threshold)->count();
 
-        $logQuery = InventoryLog::forActiveItemsInBranch($branchId)
-            ->with('adjustedBy:id,first_name,last_name')
-            ->latest('inventory_logs.created_at');
-
-        if (! empty($validated['from'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '>=', $validated['from']);
-        }
-
-        if (! empty($validated['to'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '<=', $validated['to']);
-        }
+        $logQuery = $this->logsInDateRange($branchId, $validated);
 
         if (! empty($validated['type'])) {
             $logQuery->where('inventory_logs.type', $validated['type']);
@@ -99,25 +90,36 @@ class InventoryReportController extends Controller
             ->orderBy('name')
             ->get();
 
-        $logQuery = InventoryLog::forActiveItemsInBranch($branchId)
-            ->with('adjustedBy:id,first_name,last_name')
-            ->latest('inventory_logs.created_at');
-
-        if (! empty($validated['from'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '>=', $validated['from']);
-        }
-
-        if (! empty($validated['to'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '<=', $validated['to']);
-        }
-
-        $logs = $logQuery->get();
+        $logs = $this->logsInDateRange($branchId, $validated)->get();
 
         $from = $validated['from'] ?? now()->toDateString();
         $to = $validated['to'] ?? now()->toDateString();
         $filename = "inventory-report-{$branch->slug}-{$from}-{$to}.xlsx";
 
         return Excel::download(new InventoryReportExport($items, $logs), $filename);
+    }
+
+    /**
+     * Logs of the branch's active items, newest first, narrowed by the optional `from`/`to` dates.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return Builder<InventoryLog>
+     */
+    private function logsInDateRange(int $branchId, array $validated): Builder
+    {
+        $query = InventoryLog::forActiveItemsInBranch($branchId)
+            ->with('adjustedBy:id,first_name,last_name')
+            ->latest('inventory_logs.created_at');
+
+        if (! empty($validated['from'])) {
+            $query->whereDate('inventory_logs.created_at', '>=', $validated['from']);
+        }
+
+        if (! empty($validated['to'])) {
+            $query->whereDate('inventory_logs.created_at', '<=', $validated['to']);
+        }
+
+        return $query;
     }
 
     /**

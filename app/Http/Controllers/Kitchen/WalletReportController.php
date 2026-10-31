@@ -112,7 +112,6 @@ class WalletReportController extends Controller
     public function export(Request $request): BinaryFileResponse
     {
         $branch = app('active_branch');
-        $branchId = $branch->id;
 
         // Only include students who have real wallet activity (same filter as index())
         $students = $this->walletActivityStudents()

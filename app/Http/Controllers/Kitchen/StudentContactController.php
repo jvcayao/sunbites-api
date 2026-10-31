@@ -132,8 +132,6 @@ class StudentContactController extends Controller
 
     private function assertContactBelongsToStudent(StudentContact $contact, Student $student): void
     {
-        if ($contact->student_id !== $student->id) {
-            abort(404, 'Contact does not belong to this student.');
-        }
+        abort_if($contact->student_id !== $student->id, 404, 'Contact does not belong to this student.');
     }
 }

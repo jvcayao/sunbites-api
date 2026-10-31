@@ -119,22 +119,25 @@ class InventoryStockService
 
         foreach ($saleLogs as $saleLog) {
             $invItem = $lockedItems->get($saleLog->inventory_item_id);
-            if ($invItem) {
-                $restoredQty = (float) $invItem->quantity + abs((float) $saleLog->quantity_change);
-                $invItem->update(['quantity' => $restoredQty]);
-
-                InventoryLog::create([
-                    'branch_id' => $order->branch_id,
-                    'inventory_item_id' => $invItem->id,
-                    'order_id' => $order->id,
-                    'adjusted_by' => $by->id,
-                    'type' => InventoryLogType::Restock,
-                    'quantity_change' => abs((float) $saleLog->quantity_change),
-                    'stock_after' => $restoredQty,
-                    'item_name_snapshot' => $saleLog->item_name_snapshot,
-                    'reason' => 'Void: Order #'.$order->receipt_number,
-                ]);
+            if (! $invItem) {
+                continue;
             }
+
+            $restockedUnits = abs((float) $saleLog->quantity_change);
+            $restoredQty = (float) $invItem->quantity + $restockedUnits;
+            $invItem->update(['quantity' => $restoredQty]);
+
+            InventoryLog::create([
+                'branch_id' => $order->branch_id,
+                'inventory_item_id' => $invItem->id,
+                'order_id' => $order->id,
+                'adjusted_by' => $by->id,
+                'type' => InventoryLogType::Restock,
+                'quantity_change' => $restockedUnits,
+                'stock_after' => $restoredQty,
+                'item_name_snapshot' => $saleLog->item_name_snapshot,
+                'reason' => 'Void: Order #'.$order->receipt_number,
+            ]);
         }
     }
 
@@ -178,18 +181,20 @@ class InventoryStockService
      */
     public function recordInitialStock(InventoryItem $item, User $by, int $branchId): void
     {
-        if ((float) $item->quantity > 0) {
-            InventoryLog::create([
-                'branch_id' => $branchId,
-                'inventory_item_id' => $item->id,
-                'adjusted_by' => $by->id,
-                'type' => InventoryLogType::Restock,
-                'quantity_change' => $item->quantity,
-                'stock_after' => $item->quantity,
-                'item_name_snapshot' => $item->name,
-                'reason' => 'Initial stock',
-            ]);
+        if ((float) $item->quantity <= 0) {
+            return;
         }
+
+        InventoryLog::create([
+            'branch_id' => $branchId,
+            'inventory_item_id' => $item->id,
+            'adjusted_by' => $by->id,
+            'type' => InventoryLogType::Restock,
+            'quantity_change' => $item->quantity,
+            'stock_after' => $item->quantity,
+            'item_name_snapshot' => $item->name,
+            'reason' => 'Initial stock',
+        ]);
     }
 
     /**

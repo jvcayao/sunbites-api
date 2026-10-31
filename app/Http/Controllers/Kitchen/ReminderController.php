@@ -38,15 +38,15 @@ class ReminderController extends Controller
             default => $enriched,
         };
 
-        $response = $filtered->map(function ($p) {
+        $parents = $filtered->map(function ($p) {
             unset($p['_all_sent'], $p['_none_sent']);
 
             return $p;
         })->values();
 
         $page = $request->integer('page', 1);
-        $total = $response->count();
-        $items = $response->forPage($page, $perPage)->values();
+        $total = $parents->count();
+        $items = $parents->forPage($page, $perPage)->values();
 
         return response()->json([
             'data' => $items,

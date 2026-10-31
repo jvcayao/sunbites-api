@@ -19,6 +19,8 @@ class SendStaffResetLinkRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ['email' => ['required', 'email']];
+        return [
+            'email' => ['required', 'email'],
+        ];
     }
 }

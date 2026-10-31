@@ -70,28 +70,27 @@ class EnrollmentService
         $startMonth = SchoolMonth::from($data['subscription_start_month']);
         $endMonth = SchoolMonth::from($data['subscription_end_month']);
 
-        $start = Carbon::createFromDate($startYear, $startMonth->toMonthNumber(), 1);
+        $current = Carbon::createFromDate($startYear, $startMonth->toMonthNumber(), 1);
         $end = Carbon::createFromDate($endYear, $endMonth->toMonthNumber(), 1);
 
-        $current = $start->copy();
         while ($current->lte($end)) {
             $schoolMonth = SchoolMonth::fromMonthNumber($current->month);
+
             if ($schoolMonth !== null) {
                 $year = $current->year;
                 $amount = BranchMonthlyAmount::resolveAmount($student->branch_id, $schoolMonth, $year);
-                if ($amount == 0) {
-                    $current->addMonth();
 
-                    continue;
+                if ($amount != 0) {
+                    $student->monthlyPayments()->create([
+                        'school_month' => $schoolMonth->value,
+                        'year' => $year,
+                        'status' => 'unpaid',
+                        'amount' => $amount,
+                    ]);
                 }
-                $student->monthlyPayments()->create([
-                    'school_month' => $schoolMonth->value,
-                    'year' => $year,
-                    'status' => 'unpaid',
-                    'amount' => $amount,
-                ]);
             }
-            $current->addMonth();
+
+            $current = $current->addMonth();
         }
     }
 }
