@@ -802,6 +802,7 @@ Tests use `RefreshDatabase`/`LazilyRefreshDatabase`, which run after-commit call
 **Steps (one commit, `chore(deps): remove fortify, laravel-cart and default broadcast route`):**
 1. **Add tests first** (none exist today; `rg "broadcasting/auth|Broadcast::" tests` returns nothing). `tests/Feature/Foundation/BroadcastChannelAuthTest.php`:
    - set `config(['broadcasting.default' => 'reverb', 'broadcasting.connections.reverb.key' => 'k', 'broadcasting.connections.reverb.secret' => 's', 'broadcasting.connections.reverb.app_id' => 'a'])`
+   - then `require base_path('routes/channels.php');` *(added 2026-10-31)*. `phpunit.xml` sets `BROADCAST_CONNECTION=null`, and `routes/channels.php` runs at boot, so `Broadcast::channel()` (via `BroadcastManager::__call` → `driver()`) registers the callbacks on the null broadcaster. After the switch, `Broadcast::auth()` resolves a fresh reverb broadcaster with no channels and returns 403 for every channel. Use plain `require`, as in step 4, so the second load is not skipped.
    - a staff user (real token, Bearer header) posting `socket_id=1.1&channel_name=private-staff.{own id}` to `/api/v1/broadcasting/auth` → 200 with an `auth` key; `private-staff.{other id}` → 403
    - the same for a parent on `/api/v1/portal/broadcasting/auth` with `private-parents.{id}`
 
