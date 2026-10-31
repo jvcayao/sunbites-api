@@ -191,7 +191,7 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 44 | B-26 | `fix(security): B-26 reject a staff role sent as a list` |
 | 45 | B-27 | `fix(api): B-27 return 422 for list input instead of 500` |
 
-**B-27 (list input returns 500: six untyped `exists` rules and four `(string)` casts) was approved on 2026-10-31,** under the user's final-QA instruction to find and fix the same scenario as B-26. It is step 45 (design §5.25). Any gate failure is a STOP.
+**B-27 (list input returns 500: six untyped `exists` rules, four `(string)` casts, two rate-limiter keys and the reset token) was approved on 2026-10-31,** under the user's final-QA instruction to find and fix the same scenario as B-26. It is step 45 (design §5.25). Any gate failure is a STOP.
 
 **B-26 (a manager can create an admin by sending the role as a list) was approved on 2026-10-31** and is step 44, after T-19. It changes one validation rule and one parameter type, so the simplifier pass is not re-run (design §5.24). Any gate failure is a STOP.
 

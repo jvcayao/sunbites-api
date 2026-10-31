@@ -538,8 +538,8 @@
   - Fixtures: none.
   - _Requirements: 10.26_
 - [ ] B-27. *(approved 2026-10-31)* List input returns 500 *(design §5.25; HANDOFF §6 step 45, after B-26)*
-  - Failing tests first (new `tests/Feature/ListInputValidationTest.php`): one per item (10), each sending a one-element list. Expect 422 with a validation error on that field and nothing written.
-  - Add `'integer'` before `exists` in the six rules, and add the `is_scalar` guard in the four casts (design §5.25). Nothing else changes.
+  - Failing tests first (new `tests/Feature/ListInputValidationTest.php`): one per item (items 1–10, 3 for the item 11 auth routes, and 1 for item 12), each sending a one-element list. Expect 422 with a validation error on that field and nothing written.
+  - Add `'integer'` before `exists` in the six rules, add the `is_scalar` guard in the four casts, add the `scalarInput()` helper for the two rate-limiter keys, and add `'string'` to the reset `token` rule (design §5.25). Nothing else changes.
   - Fixtures: none.
   - _Requirements: 10.27_
 
