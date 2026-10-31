@@ -1566,11 +1566,13 @@ rg -n '\$request->validate\(' app                         # 0
 rg -n '\$request->all\(\)' app                            # 0
 rg -n 'use AuthorizesRequests' app/Http/Controllers | rg -v 'Controllers/Controller.php'   # 0
 rg -n 'final class|declare\(strict_types' app             # 0 (rejected, §14.3)
-for f in app/Models/*.php; do grep -q HasFactory "$f" && ! grep -q '@use HasFactory<' "$f" && echo "$f"; done   # no output
+for f in app/Models/*.php; do grep -q HasFactory "$f" && ! grep -q '@use HasFactory<' "$f" && echo "$f"; done   # only app/Models/Announcement.php (allowed exception below)
 vendor/bin/sail bin pint --format agent                 # reports no changes (CI runs pint --test)
 ```
 
 Any unexpected hit is fixed in the T-18 commit, behaviour-identically. If it cannot be fixed that way, list it as an exception with its reason.
+
+**Allowed exception (recorded 2026-10-31):** the `HasFactory` loop prints `app/Models/Announcement.php`. `AnnouncementFactory` does not exist and nothing calls `Announcement::factory()`, so T-16 left `use HasBranch, HasFactory;` without a docblock (option A, spec `cf1d607`). List it in the T-18 commit body as this exception, and do not add a factory or a docblock. Pre-checked by the spec owner on `4f45193`: every other command above returns 0 hits, and `rg -n sanitizeText app` shows only the definition in `Controller.php`.
 
 ### 14.5 Complete Laravel 13.35 attribute inventory
 
