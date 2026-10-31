@@ -188,6 +188,9 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 41 | B-25 | `fix(portal): B-25 stop month overflow in the spending summary` |
 | 42 | T-18 | `refactor(spec16): Laravel 13 standards audit fixes` |
 | 43 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
+| 44 | B-26 | `fix(security): B-26 reject a staff role sent as a list` |
+
+**B-26 (a manager can create an admin by sending the role as a list) was approved on 2026-10-31** and is step 44, after T-19. It changes one validation rule and one parameter type, so the simplifier pass is not re-run (design §5.24). Any gate failure is a STOP.
 
 **B-25 (portal spending summary month overflow) was approved on 2026-10-31** and is step 41, right after T-17. T-18 and T-19 moved to steps 42 and 43. Until B-25 lands, `SpendingSummaryControllerTest::test_missing_months_are_filled_with_zero` is the only accepted gate failure, and only on a month-end overflow date (design §5.23). Name it in the commit body as a known pre-existing failure. Any other failure, or this one on another date, is a STOP.
 
@@ -232,7 +235,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 43, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 44, stop. The user pushes and opens the PR.
 
 ---
 

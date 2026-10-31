@@ -27,6 +27,7 @@ The refactor has two tracks:
 | Track B | B-22 (pre-registration birthday shifted one day per save), B-23 (make the 403/404 bodies in `bootstrap/app.php` effective; found during T-2) | **Approved** 2026-10-17 |
 | Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
 | Track B | B-25 (portal spending summary repeats and skips months at month end; found during the T-16 gates) | **Approved** 2026-10-31 |
+| Track B | B-26 (a manager can create an admin by sending the role as a list; flagged by the T-19 simplifier) | **Approved** 2026-10-31 |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.39.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) and on 13.39.0 on 2026-10-30 (`336a826`), each after a `composer update`)
@@ -1264,6 +1265,23 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **FE impact:** positive, with no FE change needed. The portal chart shows six distinct months, and "last month" shows the previous month's total.
 - **Slot:** HANDOFF §6 step 41, right after T-17. T-18 and T-19 become steps 42 and 43, so the T-19 simplifier pass covers it.
 
+### 5.24 B-26 *(approved 2026-10-31)*: A manager can create an admin by sending the role as a list (security)
+
+- **Defect** (flagged by the `laravel-simplifier` agent during T-19, confirmed by the spec owner in tinker):
+  - `Kitchen\Concerns\StaffUserRules` validates `'role' => ['required', 'exists:roles,name']`. `exists` also accepts an array and passes when every element exists, so `role: ["admin"]` is valid.
+  - `UserManagementController::ensureMayAssignRole()` blocks a non-admin only when `$role === 'admin'`. For `["admin"]` that is false, so there is no 403, and `store()` calls `$user->assignRole(["admin"])`, which spatie accepts.
+  - `POST /api/v1/users` is in the `role:admin|manager` group, so **a manager can create an admin account**. `PUT /users/{user}` is admin-only (`role:admin`), so there it is not an escalation, but `syncRoles()` takes the array the same way.
+  - Tinker on 2026-10-31: `Validator::make(['role' => ['admin']], ['role' => ['required', 'exists:roles,name']])->passes()` is `true`; with `'string'` added it fails with "The role field must be a string.".
+- **Fix:**
+  - `app/Http/Requests/Kitchen/Concerns/StaffUserRules.php` L38: `'role' => ['required', 'string', 'exists:roles,name'],`. This covers both `StoreStaffUserRequest` and `UpdateStaffUserRequest`.
+  - `UserManagementController::ensureMayAssignRole()`: change `mixed $role` to `string $role`, and delete its docblock ("`$role` stays untyped: …"), which the rule now makes untrue. Nothing else changes.
+- **Tests** (failing first; add to `tests/Feature/Kitchen/UserManagementTest.php`, using its `setUp()` and the payload of `test_admin_can_create_user` / `test_admin_can_update_user`):
+  1. `test_manager_cannot_create_an_admin_by_sending_the_role_as_a_list`: a manager (`assignRole('manager')`, own `staff` token) posts the create payload with `'role' => ['admin']`. Expect 422 `assertExactJson(['message' => 'Validation failed.', 'errors' => ['role' => ['The role field must be a string.']]])`, and `assertDatabaseMissing('users', ['email' => …])`. Before the fix it returns 201 and the new user is an admin.
+  2. `test_updating_a_user_rejects_the_role_as_a_list`: the admin puts the update payload with `'role' => ['supervisor']` for a cashier. Expect the same 422 body, and the user still has only `cashier`. Before the fix it returns 200 and the role changes.
+- **Fixtures:** none. `post__api_v1_users@422-validation.json` and `put__api_v1_users_{user}@422-validation.json` already record the `{message, errors}` shape.
+- **FE impact:** none. The POS sends `role` as a string (`~/sunbites-pos/lib/api/users.ts`: `role: string`).
+- **Slot:** HANDOFF §6 step 44, after T-19. It changes one rule and one parameter type, so the simplifier pass is not re-run.
+
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 
 All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
@@ -1279,7 +1297,7 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
-Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (43 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
+Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (44 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
 
 ```mermaid
 graph TD

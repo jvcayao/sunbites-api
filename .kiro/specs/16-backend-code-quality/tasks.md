@@ -428,7 +428,7 @@
 
 ---
 
-## Track B (24 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17, B-25 on 2026-10-31; one commit each; failing test first)
+## Track B (25 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17, B-25 and B-26 on 2026-10-31; one commit each; failing test first)
 
 - [x] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
   - Write failing tests: a branch-A manager gets 404 on each `ParentController` action for a branch-B-only parent; 404 on unarchive of a branch-B item; 422 on staff-status for a branch-B user. Then implement.
@@ -532,6 +532,11 @@
   - Named test edit (Arrange only): `test_last_month_total_covers_previous_calendar_month` L159 uses `now()->subMonthNoOverflow()`.
   - Fixtures: none.
   - _Requirements: 10.25_
+- [ ] B-26. *(approved 2026-10-31)* Staff role sent as a list (security) *(design §5.24; HANDOFF §6 step 44, after T-19)*
+  - Failing tests first (in `UserManagementTest`): a manager creating a user with `role: ["admin"]` gets 422 and no user is created; an admin updating with `role: ["supervisor"]` gets 422 and the role is unchanged.
+  - Add `'string'` to the `role` rule in `Kitchen/Concerns/StaffUserRules`; type `ensureMayAssignRole()`'s `$role` as `string` and drop its docblock.
+  - Fixtures: none.
+  - _Requirements: 10.26_
 
 ---
 
@@ -563,7 +568,7 @@
 | 8.1–8.5 | T-14.1–14.3 |
 | 9.1 | T-15.1 |
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
-| 10.2–10.25 | B-01 … B-25 |
+| 10.2–10.26 | B-01 … B-26 |
 | 14.1–14.5 | C-1.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
