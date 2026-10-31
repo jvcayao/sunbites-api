@@ -525,7 +525,7 @@
   - Failing test: an unlinked parent gets 403 `{"message":"Forbidden."}`.
   - Fixture: the `403` variant.
   - _Requirements: 6.3, 10.15_
-- [ ] B-25. *(approved 2026-10-31)* Spending summary month overflow *(design §5.23; HANDOFF §6 step 41, right after T-17)*
+- [x] B-25. *(approved 2026-10-31)* Spending summary month overflow *(design §5.23; HANDOFF §6 step 41, right after T-17)*
   - Failing tests first (in `SpendingSummaryControllerTest`, pinned with `travelTo`): six consecutive months on 2026-10-31, last month is September on 2026-10-31, and the oldest month keeps its orders on 2026-07-31.
   - Exactly three lines change: `subMonthsNoOverflow()` at L28 and L42, `subMonthNoOverflow()` at L56.
   - Named test edit (Arrange only): `test_last_month_total_covers_previous_calendar_month` L159 uses `now()->subMonthNoOverflow()`.
