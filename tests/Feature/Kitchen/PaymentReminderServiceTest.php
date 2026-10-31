@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 /**
- * Spec 16 T-9.1, design §4.3.7. A school year runs June to March, so January–March of school
- * year Y fall in calendar year Y + 1 (hazard H11). The clock is frozen at 15 October 2026.
+ * Spec 16 T-9.1, design §4.3.7. A school year runs June to March. The clock is frozen at
+ * 15 October 2026.
  */
 class PaymentReminderServiceTest extends TestCase
 {

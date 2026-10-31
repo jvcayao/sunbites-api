@@ -72,8 +72,9 @@ class PosMenuItemContractTest extends ContractTestCase
     }
 
     /**
-     * The scenario's menu item has order lines, and deleting it fails on the `order_items`
-     * foreign key, so the successful request deletes an item that was never sold.
+     * Deletes an item with no order lines, so the request succeeds. A sold item now returns
+     * 422 (`@422-has-sales`, since B-20) instead, covered by
+     * test_deleting_a_sold_menu_item_matches_contract below.
      */
     public function test_deleting_a_menu_item_matches_contract(): void
     {

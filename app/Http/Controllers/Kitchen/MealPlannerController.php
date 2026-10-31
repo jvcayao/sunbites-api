@@ -129,10 +129,6 @@ class MealPlannerController extends Controller
 
     private function isWeekVisibleToParents(string $month, int $week): bool
     {
-        if (! app()->bound('active_branch')) {
-            return true;
-        }
-
         $branchId = app('active_branch')->id;
 
         $record = MealPlannerWeekVisibility::withoutBranch()
