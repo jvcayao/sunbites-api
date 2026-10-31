@@ -385,8 +385,8 @@
     - Tests: `ModelAttributesTest` is unchanged and still passes; full suite green; fixtures unchanged.
     - _Requirements: 4.7, 13.1_
 
-- [ ] 17. Dependency and surface cleanup *(Q6 approved on condition "must not affect the API"; design §4.8; Req 11)*
-  - [ ] 17.1 Broadcast auth tests, then removals
+- [x] 17. Dependency and surface cleanup *(Q6 approved on condition "must not affect the API"; design §4.8; Req 11)*
+  - [x] 17.1 Broadcast auth tests, then removals
     - Record `vendor/bin/sail artisan route:list --path=api --except-vendor --json > /tmp/api-routes-before.json`.
     - Add `tests/Feature/Foundation/BroadcastChannelAuthTest.php` (design §4.8 step 1) and make it pass on the current code.
     - Run `vendor/bin/sail composer remove laravel/fortify binafy/laravel-cart`.
