@@ -532,7 +532,7 @@
   - Named test edit (Arrange only): `test_last_month_total_covers_previous_calendar_month` L159 uses `now()->subMonthNoOverflow()`.
   - Fixtures: none.
   - _Requirements: 10.25_
-- [ ] B-26. *(approved 2026-10-31)* Staff role sent as a list (security) *(design §5.24; HANDOFF §6 step 44, after T-19)*
+- [x] B-26. *(approved 2026-10-31)* Staff role sent as a list (security) *(design §5.24; HANDOFF §6 step 44, after T-19)*
   - Failing tests first (in `UserManagementTest`): a manager creating a user with `role: ["admin"]` gets 422 and no user is created; an admin updating with `role: ["supervisor"]` gets 422 and the role is unchanged.
   - Add `'string'` to the `role` rule in `Kitchen/Concerns/StaffUserRules`; type `ensureMayAssignRole()`'s `$role` as `string` and drop its docblock.
   - Fixtures: none.
