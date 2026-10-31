@@ -6,7 +6,7 @@ inclusion: always
 
 ## Stack
 
-Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-10-30 (after the `composer update` in commit `336a826`; earlier updates: `ba2b420`/`2de27ac`, `5b5d5e3`, `880d4c0`).
+Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-10-31 (after the `composer update` in commit `336a826` and the Spec 16 T-17 removals in `d39d720`; earlier updates: `ba2b420`/`2de27ac`, `5b5d5e3`, `880d4c0`).
 
 | Layer | Technology | Version |
 |---|---|---|
@@ -35,8 +35,6 @@ Versions below are the **installed** versions (`composer.lock`, `package.json`, 
 | `resend/resend-laravel` | 1.7 | `resend` mail transport is configured in `config/mail.php`; the mailer is chosen per environment (`.env.example` uses `smtp`) |
 | `league/flysystem-aws-s3-v3` | 3.x | `private` and `public` disks are S3 (photos) |
 | `sentry/sentry-laravel` / `spatie/laravel-flare` | 4.29 / 3.6 | Error monitoring (`Integration::handles` in `bootstrap/app.php`) |
-| `laravel/fortify` | 1.41 | Installed; see Known Discrepancies (not used by either frontend) |
-| `binafy/laravel-cart` | 2.1 | Installed; not referenced anywhere in `app/`, `config/` or `database/` |
 | `laravel/boost` (dev) | 2.10.4 | MCP tools + agent guidelines |
 | `laravel/pint` (dev) | 1.32 | Formatter (`preset: laravel`); run `vendor/bin/sail bin pint --dirty --format agent` after PHP changes |
 | `phpunit/phpunit` (dev) | 12.5 | Test runner |
@@ -83,7 +81,9 @@ Role authorization lives in the route files as `role:` middleware groups. Policy
 
 Models using `App\Models\Concerns\HasBranch` get `App\Models\Scopes\BranchScope`. `SetActiveBranch` reads `X-Branch-Id`, verifies the user may access that active branch, and binds `app('active_branch')`. It is **prepended** to the `api` middleware group so it runs before `SubstituteBindings`; that ordering is what makes route-model binding branch-scoped.
 
-`BranchScope` applies **no filter** when `active_branch` is unbound (portal requests, or kitchen requests without the header). Bypass explicitly with `Model::withoutBranch()` only with a documented cross-branch reason. Documented exceptions: `PreRegistration` route binding (`AppServiceProvider::bindCrossBranchRouteModels`), `CreditTransaction` and `WalletTopupVoid` (deliberately not `HasBranch`; they carry a `branch_id` snapshot).
+Kitchen routes also carry `branch.required` (`EnsureActiveBranch`, Spec 16 B-02, `50224cc`): with no active branch they return 422 `{"message":"No active branch selected. Please set a branch first."}`. Only the routes marked `->withoutMiddleware('branch.required')` in `routes/kitchen-api.php` (login-time, branch-picker and non-branch calls such as `auth/user`, `auth/branch`, `branches`, `system-configurations`, `broadcasting/auth` and user management) work without one.
+
+`BranchScope` applies **no filter** when `active_branch` is unbound (portal requests, and the allowlisted kitchen routes called without the header). Bypass explicitly with `Model::withoutBranch()` only with a documented cross-branch reason. Documented exceptions: `PreRegistration` route binding (`AppServiceProvider::bindCrossBranchRouteModels`), `CreditTransaction` and `WalletTopupVoid` (deliberately not `HasBranch`; they carry a `branch_id` snapshot).
 
 ### Code Organisation (backend)
 
@@ -92,11 +92,11 @@ Models using `App\Models\Concerns\HasBranch` get `App\Models\Scopes\BranchScope`
   - `CreditLedgerService` is the **only** writer of `credit_transactions` and `students.credit_balance`.
   - `InventoryStockService` makes every stock change after an item is created: sale deduction, void restock, manual adjustment and the initial-stock log. It locks the inventory rows with `lockForUpdate()` in id order (Spec 16 B-03).
   - `StudentLedgerQuery` + `LedgerEntryFormatter` build the unified ledger shared by kitchen and portal. `RecaptchaVerifier` wraps the Google reCAPTCHA call for the public pre-registration form.
-- **Form Requests** (`app/Http/Requests/`): `Kitchen/` and `Public/` per consumer; shared ones at the root (`SettleCreditRequest`, `WaiveCreditRequest`, `VoidWalletTopUpRequest`, `StudentLedgerRequest`), and shared rule traits in `Concerns/` and `Kitchen/Concerns/`. `authorize()` returns `true` (authorization is in route middleware and `#[Authorize]`). Guards that must win over validation run in `prepareForValidation()` and throw `HttpResponseException` with the same body as before.
+- **Form Requests** (`app/Http/Requests/`): `Kitchen/`, `Portal/` and `Public/` per consumer; shared ones at the root (`SettleCreditRequest`, `WaiveCreditRequest`, `VoidWalletTopUpRequest`, `StudentLedgerRequest`), and shared rule traits in `Concerns/` and `Kitchen/Concerns/`. `authorize()` returns `true` (authorization is in route middleware and `#[Authorize]`). Guards that must win over validation run in `prepareForValidation()` and throw `HttpResponseException` with the same body as before.
 - **API Resources** (`app/Http/Resources/`): `OrderResource`, `OrderItemResource`, `StudentResource`, `UserResource`, `CreditLedgerEntryResource`, `InventoryItemResource`, `InventoryLogResource`, `PosMenuItemResource`, `InventoryIngredientResource`. They are returned inside `response()->json([...])` or nested, so there is no automatic `data` wrapper.
 - **Enums** (`app/Enums/`): string-backed, TitleCase cases, `label()` helpers.
 - **Controller concerns** (`app/Http/Controllers/Concerns/`): shared code that both Kitchen and Portal need (they may not import each other).
-- Base `Controller` provides `paginationMeta()` and `sanitizeText()`.
+- Base `Controller` provides `paginationMeta()`. Free text is stripped with `strip_tags()` before it is stored: in the Form Request's `prepareForValidation()` (e.g. `ReplyFeedbackRequest`, `StoreFeedbackRequest`, `SettleCreditRequest`) or in the controller/action that saves it. (`sanitizeText()` was removed in Spec 16 T-18.)
 
 ### Student Wallet
 
@@ -108,7 +108,7 @@ Key models (`Student`, `Order`, `User`, `InventoryItem`, `PosMenuItem`) use `Log
 
 ### Queues, Mail, Notifications
 
-- Queue connection: `database` (`after_commit => false` on all connections).
+- Queue connection: `database` (`after_commit => false` on all connections). The 5 notifications and `ParentWelcomeMail` implement `ShouldQueueAfterCommit`, so anything queued inside a transaction is dispatched only after it commits, and not at all if it rolls back (Spec 16 T-14, `ef5cf55`). New notifications and mailables sent from inside a transaction should do the same.
 - All notifications implement `ShouldQueue` + `ShouldBroadcast` and use `database` + `broadcast` channels.
 - Every mailable is queued (`Mail::to()->queue()`; no synchronous `send()` in `app/`); Blade templates in `resources/views/emails/`. Links in emails use `config('app.pos_url')` / `config('app.portal_url')` (`POS_APP_URL` / `PORTAL_APP_URL`).
 - Scheduled (`routes/console.php`): `activitylog:clean` daily, `queue:prune-failed` weekly, `pre-registrations:expire` daily 00:00.
@@ -116,7 +116,7 @@ Key models (`Student`, `Order`, `User`, `InventoryItem`, `PosMenuItem`) use `Log
 
 ### Real-Time Broadcasting (Reverb)
 
-Private channels, authorized in `routes/channels.php`:
+Private channels, authorized in `routes/channels.php`. That file is loaded by `AppServiceProvider::loadBroadcastChannels()`, not by `withRouting(channels: …)`, so Laravel's default top-level `/broadcasting/auth` route is not registered (Spec 16 T-17, `d39d720`):
 - `parents.{parentId}`: `ParentUser` (`receivesBroadcastNotificationsOn()`)
 - `staff.{userId}`: `User`
 
@@ -134,7 +134,7 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 
 ### Rate Limiters (`AppServiceProvider`)
 
-`login`, `password-reset`, `portal-login`, `portal-forgot-password`; route-level `throttle:` on public pre-registration (3/60 min public, 5/10 min portal) and kiosk lookup (10/min).
+`login`, `password-reset`, `portal-login`, `portal-forgot-password`; route-level `throttle:` on public pre-registration (3/60 min) and kiosk lookup (10/min). The portal pre-registration routes and their 5/10 min throttle were removed (Spec 16 B-04, `fd11082`).
 
 ### Frontend Data Fetching
 
@@ -146,9 +146,10 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 ### PHP
 - PHP 8.x features: constructor property promotion, readonly properties, enums, first-class attributes
 - Explicit return types and parameter types on all methods
-- Form Request classes for all validation. Inline `$request->validate()` is being migrated under Spec 16, domain by domain, behind contract tests: 48 controller files at the start, 25 left after Spec 16 step 19 (B-22), with T-9 to T-11 covering the rest. Do not add new inline validation.
+- Form Request classes for all validation. No inline `$request->validate()` is left (Spec 16 T-18 audit); do not add any.
 - `$request->validated()` only, never `$request->all()`
-- Model casts via the `casts()` method; accessors via `Attribute::make()`
+- Model `$table`/`$fillable`/`$hidden`/`$timestamps` via the `#[Table]`/`#[Fillable]`/`#[Hidden]`/`#[WithoutTimestamps]` attributes (Spec 16 T-16, `a5e7ab1`); casts via the `casts()` method; accessors via `Attribute::make()`
+- Month arithmetic relative to today uses `subMonthsNoOverflow()`/`subMonthNoOverflow()`: plain `subMonths()` overflows on the 29th–31st ("Sep 31" becomes Oct 1; Spec 16 B-25). Month loops that start on day 1 are safe
 
 ### TypeScript / React
 - No `any`; named exports only for components; `"use client"` only when needed
@@ -196,10 +197,10 @@ CI and deploy (GitHub Actions):
 | # | Discrepancy | Evidence |
 |---|---|---|
 | D1 | POS staff token **is persisted** to `sessionStorage`; the code comment says it is kept in-memory only. Portal parent token is also in `sessionStorage` (intended). | `~/sunbites-pos/lib/store/auth.ts` `partialize` includes `token` |
-| D2 | Fortify is installed and registers session-based web routes (`/login`, `/logout`, `/forgot-password`, `/reset-password`, two-factor, email verification) that neither frontend uses; staff password reset is implemented in `Kitchen\AuthController` | `route:list --only-vendor`; `config/fortify.php` |
-| D3 | `withRouting(channels: ...)` also registers a top-level `GET/POST /broadcasting/auth` web route alongside the two scoped API ones | `route:list --only-vendor` |
-| D4 | `binafy/laravel-cart` is a dependency with no usage | grep of `app/`, `config/`, `database/` |
+| D2 | *(Resolved 2026-10-31 by Spec 16 T-17, `d39d720`.)* Fortify and its unused web routes were removed. Staff password reset stays in `Kitchen\AuthController` | `route:list --only-vendor` |
+| D3 | *(Resolved 2026-10-31 by Spec 16 T-17, `d39d720`.)* The top-level `/broadcasting/auth` route is gone; only the two scoped API routes remain | `route:list --only-vendor` |
+| D4 | *(Resolved 2026-10-31 by Spec 16 T-17, `d39d720`.)* `binafy/laravel-cart` was removed | `composer.json` |
 | D5 | *(Partly resolved 2026-10-12 by Spec 16 C-1, `fd567a4`.)* `ci.yml` now runs the suite on MySQL 8.4 too (`test-mysql`). Still SQLite only: local `vendor/bin/sail artisan test` (Collision loads the gitignored `.env.testing`) and the test jobs in `staging.yml`/`production.yml` that gate deploys | `.env.testing` (local, gitignored), `.github/workflows/*.yml` |
-| D6 | `composer.json` `name` is still `laravel/react-starter-kit`; `dev`/`ci:check` scripts still call npm/Vite | `composer.json` |
+| D6 | *(Mostly resolved by Spec 16 T-15, `4784e9d`, and `cfe8e13`.)* `name` is `sunbites/api`, `ci:check` runs only the tests, and `setup` no longer runs npm. Still left: the `dev` script runs `npx concurrently`, so it needs Node | `composer.json` |
 | D7 | POS staging domain is `staging-pos.sunbites.com.ph` in the POS docs, but the API CORS allow-list hard-codes `pos-staging.sunbites.com.ph`. Staging POS works only if `CORS_ALLOWED_ORIGINS` covers it; the deployed env was not checked | `config/cors.php`, `~/sunbites-pos/infrastructure/README.md` |
 | D8 | `payment_reminder_days` is seeded as a system configuration but is not read anywhere in `app/` | `database/seeders`, grep of `app/` |

@@ -25,11 +25,12 @@ app/
       Kitchen/              ← POS/admin controllers, incl. staff AuthController (auth:sanctum)
       Portal/               ← parent portal controllers (auth:parents)
       Public/               ← unauthenticated: branches, pre-registration, kiosk lookup
-      Controller.php        ← base: paginationMeta(), sanitizeText()
-    Middleware/             ← SetActiveBranch, CheckPermission, ForceConnectionClose
+      Controller.php        ← base: paginationMeta()
+    Middleware/             ← SetActiveBranch, EnsureActiveBranch (`branch.required`), CheckPermission, ForceConnectionClose
     Requests/               ← Form Requests; shared at the root (SettleCredit, WaiveCredit, VoidWalletTopUp, StudentLedger)
       Concerns/             ← shared rule traits (ValidatesOutstandingCredit)
-      Kitchen/              ← kitchen endpoint requests (Concerns/StaffUserRules); migration still in progress under Spec 16
+      Kitchen/              ← kitchen endpoint requests (Concerns/StaffUserRules)
+      Portal/               ← parent portal endpoint requests
       Public/               ← KioskLookupRequest, StorePublicPreRegistrationRequest
     Resources/              ← Order, OrderItem, Student, User, CreditLedgerEntry, InventoryItem,
                               InventoryLog, PosMenuItem, InventoryIngredient resources
@@ -51,7 +52,7 @@ routes/
   api.php                   ← /api/health + /api/v1 mount + /api/v1/public group
   kitchen-api.php           ← /api/v1/        POS/admin
   portal-api.php            ← /api/v1/portal/ parent portal
-  channels.php              ← Reverb private channel authorization
+  channels.php              ← Reverb private channel authorization (loaded by AppServiceProvider::loadBroadcastChannels())
   console.php               ← schedule
   web.php                   ← GET / → JSON banner only
 config/sunbites.php         ← school months, grade levels, fallback business-rule defaults
@@ -195,7 +196,7 @@ Numeric serialisation: `decimal:2` casts serialise as strings (`"150.00"`); valu
 
 ### Branch context
 
-All kitchen API requests include `X-Branch-Id`. `SetActiveBranch` (prepended to the `api` group, before route-model binding) validates access and binds `app('active_branch')`, or returns 403 for a branch the user cannot access. An absent header binds nothing.
+All kitchen API requests include `X-Branch-Id`. `SetActiveBranch` (prepended to the `api` group, before route-model binding) validates access and binds `app('active_branch')`, or returns 403 for a branch the user cannot access. An absent header binds nothing, and `branch.required` (`EnsureActiveBranch`) then returns 422 on every kitchen route except those marked `->withoutMiddleware('branch.required')` (see tech.md Branch Scoping).
 
 ### Auth token storage
 
