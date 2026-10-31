@@ -1258,7 +1258,8 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
   2. `test_last_month_total_is_the_previous_calendar_month_at_month_end`: travel to 2026-10-31 12:00; orders of 100 on 2026-10-15 and 250 on 2026-09-15; `this_month_total` is 100 and `last_month_total` is 250.
   3. `test_oldest_chart_month_keeps_its_orders_at_month_end`: travel to 2026-07-31 12:00; an order of 80 on 2026-02-10; `monthly.0.month` is `2026-02` and `monthly.0.total` is 80. This covers L28: with only L42 fixed, the total is 0.
 
-  All three fail before the fix. The existing tests stay unchanged; `test_missing_months_are_filled_with_zero` then passes on every date.
+  All three fail before the fix. `test_missing_months_are_filled_with_zero` then passes on every date.
+- **Named existing-test edit** *(decided 2026-10-31 after the implementer's STOP)*: `test_last_month_total_covers_previous_calendar_month` L159, Arrange only: `'created_at' => now()->subMonth()` becomes `now()->subMonthNoOverflow()`. The assertion (`last_month_total` 400) stays. Its Arrange had the same overflow as the controller, so on 2026-10-31 the order landed on Oct 1, and the test passed only because the old L56 overflowed to the same month. After the fix it fails (0, expected 400) on overflow dates. On every other date the edit changes nothing. Every other existing test stays unchanged.
 - **Fixtures:** none. The spending-summary fixtures record types only (`month: string`, `total: number`).
 - **FE impact:** positive, with no FE change needed. The portal chart shows six distinct months, and "last month" shows the previous month's total.
 - **Slot:** HANDOFF §6 step 41, right after T-17. T-18 and T-19 become steps 42 and 43, so the T-19 simplifier pass covers it.
