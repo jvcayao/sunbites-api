@@ -414,8 +414,8 @@
 
 ---
 
-- [ ] 19. Final `laravel-simplifier` pass *(non-negotiable; design §12.3; Req 12.6, 12.7)*
-  - [ ] 19.1 Run the simplifier over the complete backend diff
+- [x] 19. Final `laravel-simplifier` pass *(non-negotiable; design §12.3; Req 12.6, 12.7)*
+  - [x] 19.1 Run the simplifier over the complete backend diff
     - Starts only after **every** Track A commit, every approved Track B commit and T-18 are on `bump-laravel-13-latest`.
     - Build the file list from `git diff --name-only --diff-filter=d <spec16-start-sha>..HEAD -- app routes bootstrap config | grep '\.php$'` (197 files at `acf337e`; deleted files are left out). `<spec16-start-sha>` is `3454977`, recorded in the T-1 commit body.
     - Run the agent in the four sequential batches from design §12.3 step 2. Never run batches in parallel. The agent must not run tests; you run the gates.
