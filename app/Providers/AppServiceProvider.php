@@ -29,6 +29,8 @@ class AppServiceProvider extends ServiceProvider
         $this->bindCrossBranchRouteModels();
 
         $this->registerSearchMacros();
+
+        $this->loadBroadcastChannels();
     }
 
     /**
@@ -52,6 +54,17 @@ class AppServiceProvider extends ServiceProvider
                 }
             }, boolean: $boolean);
         });
+    }
+
+    /**
+     * Loads the channel authorization callbacks without registering Laravel's default
+     * top-level `/broadcasting/auth` route (which `channels:` in bootstrap/app.php's
+     * withRouting would add): the API already registers its own authenticated auth
+     * routes in routes/kitchen-api.php and routes/portal-api.php.
+     */
+    private function loadBroadcastChannels(): void
+    {
+        require base_path('routes/channels.php');
     }
 
     /**
