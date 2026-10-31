@@ -25,7 +25,7 @@ class SpendingSummaryController extends Controller
             ->whereNull('voided_at')
             ->where('status', OrderStatus::Completed);
 
-        $chartFrom = now()->subMonths($months - 1)->startOfMonth();
+        $chartFrom = now()->subMonthsNoOverflow($months - 1)->startOfMonth();
 
         $monthExpr = DB::connection()->getDriverName() === 'sqlite'
             ? "strftime('%Y-%m', created_at) as month"
@@ -39,7 +39,7 @@ class SpendingSummaryController extends Controller
             ->pluck('total', 'month');
 
         $monthly = collect(range($months - 1, 0))->map(function (int $i) use ($rawMonthly) {
-            $date = now()->subMonths($i);
+            $date = now()->subMonthsNoOverflow($i);
             $key = $date->format('Y-m');
 
             return [
@@ -53,7 +53,7 @@ class SpendingSummaryController extends Controller
             ? Carbon::create(now()->year, 6, 1)->startOfDay()
             : Carbon::create(now()->year - 1, 6, 1)->startOfDay();
 
-        $lastMonth = now()->subMonth();
+        $lastMonth = now()->subMonthNoOverflow();
 
         $ytdTotal = $base()->where('created_at', '>=', $schoolYearStart)->sum('total');
         $thisMonthTotal = $base()->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('total');

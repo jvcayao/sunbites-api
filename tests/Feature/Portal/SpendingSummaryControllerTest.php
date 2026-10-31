@@ -156,7 +156,7 @@ class SpendingSummaryControllerTest extends TestCase
             'status' => OrderStatus::Completed,
             'total' => 400.00,
             'voided_at' => null,
-            'created_at' => now()->subMonth(),
+            'created_at' => now()->subMonthNoOverflow(),
         ]);
 
         $this->callApi()
@@ -216,6 +216,64 @@ class SpendingSummaryControllerTest extends TestCase
 
         $zeroMonths = array_filter($monthly, fn ($m) => $m['total'] == 0);
         $this->assertCount(5, $zeroMonths);
+    }
+
+    public function test_monthly_lists_six_consecutive_months_at_month_end(): void
+    {
+        $this->travelTo('2026-10-31 12:00:00');
+
+        $monthly = $this->callApi()->assertOk()->json('monthly');
+
+        $this->assertSame(
+            ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'],
+            array_column($monthly, 'month'),
+        );
+    }
+
+    public function test_last_month_total_is_the_previous_calendar_month_at_month_end(): void
+    {
+        $this->travelTo('2026-10-31 12:00:00');
+
+        Order::factory()->for($this->student)->create([
+            'branch_id' => $this->branch->id,
+            'payment_method' => PaymentMethod::Wallet,
+            'status' => OrderStatus::Completed,
+            'total' => 100.00,
+            'voided_at' => null,
+            'created_at' => '2026-10-15',
+        ]);
+        Order::factory()->for($this->student)->create([
+            'branch_id' => $this->branch->id,
+            'payment_method' => PaymentMethod::Wallet,
+            'status' => OrderStatus::Completed,
+            'total' => 250.00,
+            'voided_at' => null,
+            'created_at' => '2026-09-15',
+        ]);
+
+        $response = $this->callApi()->assertOk()->json();
+
+        $this->assertEquals(100, $response['this_month_total']);
+        $this->assertEquals(250, $response['last_month_total']);
+    }
+
+    public function test_oldest_chart_month_keeps_its_orders_at_month_end(): void
+    {
+        $this->travelTo('2026-07-31 12:00:00');
+
+        Order::factory()->for($this->student)->create([
+            'branch_id' => $this->branch->id,
+            'payment_method' => PaymentMethod::Wallet,
+            'status' => OrderStatus::Completed,
+            'total' => 80.00,
+            'voided_at' => null,
+            'created_at' => '2026-02-10',
+        ]);
+
+        $monthly = $this->callApi()->assertOk()->json('monthly');
+
+        $this->assertSame('2026-02', $monthly[0]['month']);
+        $this->assertEquals(80, $monthly[0]['total']);
     }
 
     public function test_top_items_are_limited_to_5_ordered_by_count(): void
