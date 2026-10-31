@@ -28,7 +28,7 @@ The refactor has two tracks:
 | Track B | B-24 (checkout with another branch's menu item returns 500; found during T-3) | **Approved** 2026-10-17 |
 | Track B | B-25 (portal spending summary repeats and skips months at month end; found during the T-16 gates) | **Approved** 2026-10-31 |
 | Track B | B-26 (a manager can create an admin by sending the role as a list; flagged by the T-19 simplifier) | **Approved** 2026-10-31 |
-| Track B | B-27 (the other untyped `exists` rules accept a list and return 500; found in the final QA for the same pattern as B-26) | **Approved** 2026-10-31 (the user's final-QA instruction to find and fix the same scenario) |
+| Track B | B-27 (list input returns 500: six untyped `exists` rules and four `(string)` casts of raw input; found in the final QA for the same pattern as B-26) | **Approved** 2026-10-31 (the user's final-QA instruction to find and fix the same scenario) |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
 ### 1.2 Verified framework facts (installed `laravel/framework` v13.39.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) and on 13.39.0 on 2026-10-30 (`336a826`), each after a `composer update`)
@@ -1283,7 +1283,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 - **FE impact:** none. The POS sends `role` as a string (`~/sunbites-pos/lib/api/users.ts`: `role: string`).
 - **Slot:** HANDOFF §6 step 44, after T-19. It changes one rule and one parameter type, so the simplifier pass is not re-run.
 
-### 5.25 B-27 *(approved 2026-10-31)*: Untyped `exists` rules accept a list and return 500
+### 5.25 B-27 *(approved 2026-10-31)*: List input returns 500 instead of 422
 
 - **Defect** (final QA, same pattern as B-26; found by the spec owner):
   - Laravel's `exists` rule accepts an array and passes when every element exists (`validateExists`: `$expected = is_array($value) ? count(array_unique($value)) : 1`). By contrast, `in:`, `Rule::in` and `Rule::enum` already reject arrays (`validateIn` returns `! is_array($value) && …` unless the field also has `array`; `Enum::passes` catches the `tryFrom` `TypeError`).
@@ -1294,15 +1294,24 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
     4. `Kitchen\InlineReloadRequest` `student_id` (`['required', 'exists:students,id']`): `Student::findOrFail([5])` returns a Collection, and `->deposit()` throws.
     5. `Kitchen\UpdateStaffStatusRequest` `user_id` (`Rule::exists('branch_user', 'user_id')->where(...)`): `updateOrCreate` inserts an array `user_id`.
     6. `Public\StorePublicPreRegistrationRequest` `branch_id` (`['required', 'exists:branches,id']`): an unauthenticated endpoint; the record is created with an array `branch_id`.
+  - Four requests cast raw input with `(string)` before validation. PHP raises "Array to string conversion" for a list, and Laravel's `HandleExceptions::handleError` turns every warning into an `ErrorException`, so the request returns 500 before the field's `string`/`enum` rule can return 422:
+    7. `Kitchen\UpdateStudentStatusRequest::rules()` L31: `EnrollmentStatus::tryFrom((string) $this->input('enrollment_status'))`. B-14's docblock promises that an unknown value falls through to the 422; a list does not.
+    8. `WaiveCreditRequest::prepareForValidation()` L51-52: `if ($this->filled('reason')) { … strip_tags((string) $this->input('reason')) … }`. `filled()` is true for a non-empty list.
+    9. `VoidWalletTopUpRequest::prepareForValidation()` L31-32: the same, for `reason`.
+    10. `SettleCreditRequest::prepareForValidation()` L63-64: the same, for `note`.
   - None of these grants access or writes data, unlike B-26: each fails before or inside a transaction. They are 500s for malformed input.
-- **Fix:** add `'integer'` directly before the `exists` rule in each of the six rules above. Nothing else changes. `integer` also accepts numeric strings (`"3"`), which multipart forms send (enrolment with a photo). Every frontend sends these ids as numbers: POS cart ids, `student_id`, `user_id` and enrolment `branch_id` (`z.number`); portal pre-registration `branch_id` (`z.number`).
-- **Tests** (failing first; a new class `tests/Feature/IdFieldListInputTest.php`, created with `make:test --phpunit`, `RefreshDatabase`, reusing the setup patterns of `CheckoutActionTest`, `EnrollmentTest`, `PosInsufficientFundsTest`, `DashboardTest` and `Public\PreRegistrationTest`). One test per field. Each sends an otherwise valid request with the field as a one-element list of a real id, and asserts `assertUnprocessable()`, `assertJsonValidationErrors(['<field>'])` (for checkout items, `items.0.pos_menu_item_id`), and that nothing was written (`assertDatabaseCount` on `orders`, `students`, `transactions`, `staff_daily_statuses` or `pre_registrations`, as relevant). Every test must fail before the fix (today: 500). If one does not, STOP and report.
+- **Fix (items 1–6):** add `'integer'` directly before the `exists` rule in each of the six rules above. Nothing else changes. `integer` also accepts numeric strings (`"3"`), which multipart forms send (enrolment with a photo). Every frontend sends these ids as numbers: POS cart ids, `student_id`, `user_id` and enrolment `branch_id` (`z.number`); portal pre-registration `branch_id` (`z.number`).
+- **Fix (items 7–10):** cast only scalars, so every scalar input (string, number, bool, null) behaves exactly as before, and a list is left untouched for the existing rule to reject with 422:
+  - 7: read `$status = $this->input('enrollment_status');` first, and use `is_scalar($status) && (EnrollmentStatus::tryFrom((string) $status)?->requiresReason() ?? false)` as the `Rule::when` condition. Update the docblock: "a missing, unknown or non-scalar value".
+  - 8–10: change the condition to `$this->filled('<field>') && is_scalar($this->input('<field>'))`, and keep the `strip_tags((string) …)` body.
+  - This follows the guard `ReplyFeedbackRequest` and `StoreFeedbackRequest` already use (`is_string($reply) ? trim(strip_tags($reply)) : $reply`). `is_scalar` rather than `is_string` keeps numeric input identical (`(string) 12345`).
+- **Tests** (failing first; a new class `tests/Feature/ListInputValidationTest.php`, created with `make:test --phpunit`, `RefreshDatabase`, reusing the setup patterns of `CheckoutActionTest`, `EnrollmentTest`, `PosInsufficientFundsTest`, `DashboardTest`, `Public\PreRegistrationTest`, `UpdateStudentStatusRequestTest`, `CreditWaiveTest`, `CreditSettlementTest` and the existing top-up void tests). One test per item (10). Each sends an otherwise valid request with the field as a one-element list of a real id, and asserts `assertUnprocessable()`, `assertJsonValidationErrors(['<field>'])` (for checkout items, `items.0.pos_menu_item_id`), and that nothing was written (`assertDatabaseCount` on `orders`, `students`, `transactions`, `staff_daily_statuses`, `pre_registrations`, `wallet_topup_voids` or `credit_transactions`, as relevant; for item 7, the student's status is unchanged). Items 8 and 10 need a student with `credit_balance > 0`, so that the guard before the cast passes; item 9 needs a real top-up. Every test must fail before the fix (today: 500). If one does not, STOP and report.
 - **Fixtures:** none. The `422-validation` variants already record the `{message, errors}` shape.
 - **FE impact:** none (see Fix).
 - **Checked and deliberately not changed:**
   - The 16 single-rule fields (`['nullable']`/`['required']`): the `ListStudentsRequest`, `ListStaffUsersRequest`, `ShowMealPlanRequest`, `ListBranchMonthlyAmountsRequest` and `ListEligibleParentsRequest` filters, and `ResetStaffPasswordRequest` `token`. These are read-only filters, or a token that is only hashed and compared. §4.2.3 keeps them permissive on purpose, so the POS's existing values (`deleted=true`, `type=all`, lowercase months) keep working.
   - Enrolment into a branch other than the active one: intended. The POS enrolment form lists every active branch (`EnrollmentController::index`), and `EnrollStudentAction`'s docblock documents it. Limiting it would be a product decision.
-- **Slot:** HANDOFF §6 step 45, after B-26. It is a one-word change in six rules, so the simplifier pass is not re-run.
+- **Slot:** HANDOFF §6 step 45, after B-26. It is a one-word change in six rules plus four one-line guards, so the simplifier pass is not re-run.
 
 ## 6. Delivery plan (Q3: one commit per area, one PR)
 

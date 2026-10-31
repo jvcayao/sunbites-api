@@ -537,9 +537,9 @@
   - Add `'string'` to the `role` rule in `Kitchen/Concerns/StaffUserRules`; type `ensureMayAssignRole()`'s `$role` as `string` and drop its docblock.
   - Fixtures: none.
   - _Requirements: 10.26_
-- [ ] B-27. *(approved 2026-10-31)* Untyped `exists` rules accept a list (500) *(design §5.25; HANDOFF §6 step 45, after B-26)*
-  - Failing tests first (new `tests/Feature/IdFieldListInputTest.php`): one per field, each sending a one-element list. Expect 422 with a validation error on that field and nothing written.
-  - Add `'integer'` before `exists` in the six rules of design §5.25. Nothing else changes.
+- [ ] B-27. *(approved 2026-10-31)* List input returns 500 *(design §5.25; HANDOFF §6 step 45, after B-26)*
+  - Failing tests first (new `tests/Feature/ListInputValidationTest.php`): one per item (10), each sending a one-element list. Expect 422 with a validation error on that field and nothing written.
+  - Add `'integer'` before `exists` in the six rules, and add the `is_scalar` guard in the four casts (design §5.25). Nothing else changes.
   - Fixtures: none.
   - _Requirements: 10.27_
 
