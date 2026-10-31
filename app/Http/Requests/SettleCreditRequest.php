@@ -60,7 +60,7 @@ class SettleCreditRequest extends FormRequest
 
         abort_if($student->credit_balance <= 0, 422, 'No outstanding credit to settle.');
 
-        if ($this->filled('note')) {
+        if ($this->filled('note') && is_scalar($this->input('note'))) {
             $this->merge(['note' => strip_tags((string) $this->input('note'))]);
         }
     }

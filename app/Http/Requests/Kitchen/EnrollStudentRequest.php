@@ -25,7 +25,7 @@ class EnrollStudentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'branch_id' => ['required', 'exists:branches,id'],
+            'branch_id' => ['required', 'integer', 'exists:branches,id'],
             'student_number' => [
                 'nullable',
                 'string',

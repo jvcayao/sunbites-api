@@ -59,7 +59,7 @@ class StorePublicPreRegistrationRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'branch_id' => ['required', 'exists:branches,id'],
+            'branch_id' => ['required', 'integer', 'exists:branches,id'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'student_number' => ['nullable', 'string', 'max:50'],

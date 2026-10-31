@@ -111,16 +111,27 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('login', fn (Request $request) => [
             Limit::perMinute(5)->by($request->ip()),
-            Limit::perMinute(10)->by('login:'.$request->input('email', '')),
+            Limit::perMinute(10)->by('login:'.$this->scalarInput($request, 'email')),
         ]);
 
         RateLimiter::for('password-reset', fn (Request $request) => [
             Limit::perMinute(3)->by($request->ip()),
-            Limit::perMinute(5)->by('pwd-reset:'.$request->input('email', $request->input('token', ''))),
+            Limit::perMinute(5)->by('pwd-reset:'.$this->scalarInput($request, 'email', $this->scalarInput($request, 'token'))),
         ]);
 
         RateLimiter::for('portal-login', fn (Request $request) => Limit::perMinutes(5, 5)->by($request->ip()));
 
         RateLimiter::for('portal-forgot-password', fn (Request $request) => Limit::perMinutes(5, 5)->by($request->ip()));
+    }
+
+    /**
+     * Builds a rate-limit key part from request input, ignoring a list so that it cannot
+     * raise "Array to string conversion" before validation.
+     */
+    private function scalarInput(Request $request, string $key, string $default = ''): string
+    {
+        $value = $request->input($key, $default);
+
+        return is_scalar($value) ? (string) $value : '';
     }
 }

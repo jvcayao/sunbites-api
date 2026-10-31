@@ -22,9 +22,9 @@ class CheckoutRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'student_id' => ['nullable', 'exists:students,id'],
+            'student_id' => ['nullable', 'integer', 'exists:students,id'],
             'items' => ['required', 'array', 'min:1'],
-            'items.*.pos_menu_item_id' => ['required', 'exists:pos_menu_items,id'],
+            'items.*.pos_menu_item_id' => ['required', 'integer', 'exists:pos_menu_items,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'payment_method' => ['required', Rule::enum(PaymentMethod::class)],
             'amount_tendered' => ['nullable', 'numeric', 'min:0'],

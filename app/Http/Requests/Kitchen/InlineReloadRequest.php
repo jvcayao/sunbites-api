@@ -20,7 +20,7 @@ class InlineReloadRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'student_id' => ['required', 'exists:students,id'],
+            'student_id' => ['required', 'integer', 'exists:students,id'],
             'amount' => ['required', 'numeric', 'min:0.01', 'max:100000'],
             'payment_method' => ['required', 'in:cash,gcash'],
             'reference_number' => ['nullable', 'string', 'alpha_num', 'max:50'],

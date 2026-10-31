@@ -22,7 +22,7 @@ class UpdateStaffStatusRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_id' => ['required', Rule::exists('branch_user', 'user_id')->where('branch_id', app('active_branch')->id)],
+            'user_id' => ['required', 'integer', Rule::exists('branch_user', 'user_id')->where('branch_id', app('active_branch')->id)],
             'status' => ['required', Rule::enum(StaffStatus::class)],
         ];
     }

@@ -24,7 +24,7 @@ class ResetStaffPasswordRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'token' => ['required'],
+            'token' => ['required', 'string'],
             'email' => ['required', 'email'],
             'password' => ['required', PasswordRule::defaults(), 'confirmed'],
         ];
