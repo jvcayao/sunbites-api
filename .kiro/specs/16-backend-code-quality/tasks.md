@@ -400,8 +400,8 @@
       - contract suite has zero diffs; full suite green on both databases
     - _Requirements: 11.1–11.5_
 
-- [ ] 18. Laravel 13 standards audit *(design §14.4; Req 13.3)*
-  - [ ] 18.1 Run the audit and fix leftovers
+- [x] 18. Laravel 13 standards audit *(design §14.4; Req 13.3)*
+  - [x] 18.1 Run the audit and fix leftovers
     - Run every command in design §14.4.
     - Each must return its expected result. Fix any leftover behaviour-identically in this commit, or record it as an exception with its reason.
     - Paste the command output into the commit body.
