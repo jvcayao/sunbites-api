@@ -1,5 +1,7 @@
 # Phase 5 — GitHub Actions CI/CD
 
+> **2026-11-07:** the staging environment was removed from Laravel Cloud. Merging to `main` deploys to production. Staging sections below are historical.
+
 Two workflows:
 
 | Workflow | File | Trigger | Target |

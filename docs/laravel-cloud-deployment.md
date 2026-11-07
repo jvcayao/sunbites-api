@@ -1,5 +1,7 @@
 # Laravel Cloud Deployment — Full Process & Troubleshooting Record
 
+> **2026-11-07:** the staging environment was removed from Laravel Cloud. Merging to `main` deploys to production. Staging sections below are historical.
+
 This document covers the complete deployment of the Sunbites API to Laravel Cloud, including every issue encountered and how it was resolved. It serves as a runbook for future deployments and a reference for the team.
 
 ---
