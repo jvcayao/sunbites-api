@@ -428,8 +428,8 @@
 
 ---
 
-- [ ] 20. Commit the Laravel 13.40.0 upgrade *(approved 2026-11-07; design §16.4; Req 15; HANDOFF §6 step 46)*
-  - [ ] 20.1 Commit the user's `composer upgrade`
+- [x] 20. Commit the Laravel 13.40.0 upgrade *(approved 2026-11-07; design §16.4; Req 15; HANDOFF §6 step 46)*
+  - [x] 20.1 Commit the user's `composer upgrade`
     - Follow design §16.4 exactly. Do not run `composer upgrade` or `composer update` again.
     - The lock may differ from the user's only in `content-hash` and `plugin-api-version`. `composer.json` changes one line (`^13.40`).
     - Tests: none new. Full verification gate, plus `composer validate` and `composer audit` with no advisories.
