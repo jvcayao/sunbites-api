@@ -17,20 +17,20 @@ class UpdateStudentStatusRequest extends FormRequest
     }
 
     /**
-     * The status is read before it is validated, so `tryFrom()` lets a missing, unknown or
-     * non-scalar value fall through to the `enrollment_status` rule (a 422) instead of throwing.
+     * `string(..., strict: true)` reads the status before it is validated as an empty
+     * string for a missing, unknown or non-scalar value, so `tryFrom()` always receives a
+     * string and `requiresReason()` falls through to the `enrollment_status` rule (a 422)
+     * instead of throwing.
      *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
-        $status = $this->input('enrollment_status');
-
         return [
             'enrollment_status' => ['required', Rule::enum(EnrollmentStatus::class)],
             'reason' => [
                 Rule::when(
-                    is_scalar($status) && (EnrollmentStatus::tryFrom((string) $status)?->requiresReason() ?? false),
+                    EnrollmentStatus::tryFrom($this->string('enrollment_status', strict: true)->value())?->requiresReason() ?? false,
                     ['required', 'string', 'max:500'],
                     ['nullable'],
                 ),
