@@ -6,19 +6,19 @@ inclusion: always
 
 ## Stack
 
-Versions below are the **installed** versions (`composer.lock`, `package.json`, `compose.yaml`) as of 2026-10-31 (after the `composer update` in commit `336a826` and the Spec 16 T-17 removals in `d39d720`; earlier updates: `ba2b420`/`2de27ac`, `5b5d5e3`, `880d4c0`).
+Versions below are the **installed** versions (`composer.lock`, each frontend's `package.json`, `compose.yaml`) as of 2026-11-07 (after the `composer upgrade` in commit `53d4e19` and the Spec 16 T-17 removals in `d39d720`; earlier updates: `336a826`, `ba2b420`/`2de27ac`, `5b5d5e3`, `880d4c0`).
 
 | Layer | Technology | Version |
 |---|---|---|
-| API backend | Laravel | 13.39 |
+| API backend | Laravel | 13.40 |
 | PHP | PHP | 8.5 (`composer.json` constraint `^8.3`) |
 | POS & admin frontend | Next.js (App Router) | 16.2.6 |
 | Parent portal frontend | Next.js (App Router) | 16.2.6 |
 | React | React | 19.2 |
 | Database (local) | MySQL via Sail | 8.4 |
-| Database (CI tests) | SQLite + MySQL 8.4 | GitHub Actions `ci.yml`: `test` (SQLite) and `test-mysql` (MySQL 8.4 service container, Spec 16 C-1). `staging.yml` / `production.yml` gate deploys on SQLite only |
+| Database (CI tests) | MySQL 8.4 | Every GitHub Actions workflow's `test` job runs on a throwaway MySQL 8.4 service container (Spec 16 T-24). SQLite is for local runs only |
 | Container / local dev | Laravel Sail | 1.69 |
-| Hosting | Laravel Cloud | staging + production via `cloud deploy` |
+| Hosting | Laravel Cloud | One environment, `main`, deployed only through `production.yml` (the staging environment was removed on 2026-11-07) |
 
 ## Libraries and Tools
 
@@ -157,7 +157,7 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 ### Testing (backend)
 - `RefreshDatabase` on every Feature test; `actingAs($user, 'sanctum')` / `actingAs($parent, 'parents')`
 - Never mock Eloquent or the database layer
-- Tests must pass on **both** MySQL (production engine) and SQLite. CI runs both on every PR (`ci.yml` jobs `test` and `test-mysql`). Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
+- Tests must pass on **both** MySQL (production engine) and SQLite. CI runs MySQL on every PR (`ci.yml`), and SQLite is checked locally. Driver-specific SQL needs a SQLite branch (see `AnalyticsController::isSqlite()`, `SpendingSummaryController`)
 - **API contract tests** (Spec 16): `tests/Feature/Contract/` (one class per controller, plus `RouteCoverageTest` and `RoleAuthorizationMatrixTest`), and the harness in `tests/Support/Contract/`. They compare every API route's status and JSON shape with fixtures in `tests/Fixtures/contracts/`. Those fixtures are **gitignored and local only**, so fixture comparisons are skipped in CI and run only locally (design §4.1.7 of Spec 16)
 - The MySQL gate uses Sail's shared `testing` schema. Never run two MySQL test runs at once (for example from two Claude sessions): `RefreshDatabase` in one wipes the other's tables
 - `vendor/bin/sail artisan test` runs **SQLite** locally: Collision clears the `.env` variables, so the gitignored local `.env.testing` (`DB_CONNECTION=sqlite`) wins and the gitignored `testing` file in the repo root is used
@@ -180,16 +180,18 @@ Frontend: `components/providers/echo-provider.tsx` (Client Component) in both ap
 
 | Service | Local | Staging | Production |
 |---|---|---|---|
-| Laravel API | `http://api.sunbites.test` (Sail) | `https://api-staging.sunbites.com.ph` | `https://api.sunbites.com.ph` |
+| Laravel API | `http://api.sunbites.test` (Sail) | removed 2026-11-07 | `https://api.sunbites.com.ph` |
 | POS & admin | `http://localhost:3000` (`POS_APP_URL`) | `staging-pos.sunbites.com.ph` (per POS `infrastructure/`; see D7) | `pos.sunbites.com.ph` |
 | Parent portal | `http://localhost:3001` (`PORTAL_APP_URL`) | `portal-staging.sunbites.com.ph` | `portal.sunbites.com.ph` |
 
 Frontend URLs come from each app's `infrastructure/` docs; deployed values were not checked.
 
 CI and deploy (GitHub Actions):
-- `ci.yml`, on pull requests to `staging` or `main`. Job `test`: PHP 8.5, `pint --test`, then `php artisan test` on SQLite. Job `test-mysql` (Spec 16 C-1): `vendor/bin/phpunit` against a throwaway MySQL 8.4 service container, using no secrets.
-- `staging.yml`, on a push to `staging`: SQLite tests and Pint, then `cloud deploy "Sunbites API Prod" staging`.
-- `production.yml`, manual dispatch with the input `DEPLOY`: SQLite tests and Pint, then `cloud deploy "Sunbites API Prod" production`.
+- Branch flow: PR branch → `staging` → `main`.
+- `ci.yml`, on pull requests to `staging` or `main`. Job `test`: PHP 8.5, `pint --test`, then `vendor/bin/phpunit` against a throwaway MySQL 8.4 service container, using no secrets.
+- `staging.yml`, on a push to `staging`: the same `test` job. It does not deploy.
+- `production.yml`, manual dispatch with the input `DEPLOY`: the same `test` job, then `cloud deploy "Sunbites API Prod" main`. This is the only way to deploy: push-to-deploy is off in Laravel Cloud.
+- Cloud CLI: with one environment, it treats any environment name it cannot match as `main`. Always type `main`; a command naming another environment still acts on production.
 - The deploy workflows do not run the MySQL job; MySQL coverage comes from `ci.yml` on the PR.
 
 ## Known Discrepancies (verified 2026-09-25; resolve or accept, then remove)
@@ -200,7 +202,7 @@ CI and deploy (GitHub Actions):
 | D2 | *(Resolved 2026-10-31 by Spec 16 T-17, `d39d720`.)* Fortify and its unused web routes were removed. Staff password reset stays in `Kitchen\AuthController` | `route:list --only-vendor` |
 | D3 | *(Resolved 2026-10-31 by Spec 16 T-17, `d39d720`.)* The top-level `/broadcasting/auth` route is gone; only the two scoped API routes remain | `route:list --only-vendor` |
 | D4 | *(Resolved 2026-10-31 by Spec 16 T-17, `d39d720`.)* `binafy/laravel-cart` was removed | `composer.json` |
-| D5 | *(Partly resolved 2026-10-12 by Spec 16 C-1, `fd567a4`.)* `ci.yml` now runs the suite on MySQL 8.4 too (`test-mysql`). Still SQLite only: local `vendor/bin/sail artisan test` (Collision loads the gitignored `.env.testing`) and the test jobs in `staging.yml`/`production.yml` that gate deploys | `.env.testing` (local, gitignored), `.github/workflows/*.yml` |
-| D6 | *(Mostly resolved by Spec 16 T-15, `4784e9d`, and `cfe8e13`.)* `name` is `sunbites/api`, `ci:check` runs only the tests, and `setup` no longer runs npm. Still left: the `dev` script runs `npx concurrently`, so it needs Node | `composer.json` |
-| D7 | POS staging domain is `staging-pos.sunbites.com.ph` in the POS docs, but the API CORS allow-list hard-codes `pos-staging.sunbites.com.ph`. Staging POS works only if `CORS_ALLOWED_ORIGINS` covers it; the deployed env was not checked | `config/cors.php`, `~/sunbites-pos/infrastructure/README.md` |
+| D5 | *(CI resolved 2026-11-07 by Spec 16 T-24: every workflow tests on MySQL 8.4.)* Still SQLite only: local `vendor/bin/sail artisan test` (Collision loads the gitignored `.env.testing`) | `.env.testing` (local, gitignored) |
+| D6 | *(Resolved by Spec 16 T-15, `4784e9d`, `cfe8e13` and T-22, `1a8ae94`.)* `name` is `sunbites/api`, `ci:check` runs only the tests, and the repository is API-only: no `package.json`, no Node dependency and no `dev` script | `composer.json` |
+| D7 | *(The API's staging environment was removed on 2026-11-07; this affects only frontend staging sites, which belong to Spec 17.)* POS staging domain is `staging-pos.sunbites.com.ph` in the POS docs, but the API CORS allow-list hard-codes `pos-staging.sunbites.com.ph`. Staging POS works only if `CORS_ALLOWED_ORIGINS` covers it; the deployed env was not checked | `config/cors.php`, `~/sunbites-pos/infrastructure/README.md` |
 | D8 | `payment_reminder_days` is seeded as a system configuration but is not read anywhere in `app/` | `database/seeders`, grep of `app/` |

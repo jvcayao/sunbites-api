@@ -65,7 +65,7 @@ tests/
   Support/Contract/         ← contract harness (ShapeExtractor, AssertsApiContract, ContractScenario)
   Fixtures/contracts/       ← contract fixtures: gitignored, local only, skipped in CI
   Unit/
-.github/workflows/          ← ci.yml (PR: SQLite + MySQL 8.4 jobs), staging.yml, production.yml (deploy)
+.github/workflows/          ← ci.yml (PRs: MySQL 8.4), staging.yml (push: MySQL 8.4, no deploy), production.yml (manual: MySQL 8.4, then deploy)
 .kiro/
   steering/                 ← product.md, tech.md, structure.md
   specs/NN-name/            ← requirements.md, design.md, tasks.md (+ HANDOFF.md)
