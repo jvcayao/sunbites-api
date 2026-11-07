@@ -436,8 +436,8 @@
     - Fixtures: unchanged.
     - _Requirements: 15.1, 15.2, 15.3, 15.5_
 
-- [ ] 21. Adopt strict input from Laravel 13.40.0 *(approved 2026-11-07; design §16.5 and §14.1 S11; Req 13.5; HANDOFF §6 step 47)*
-  - [ ] 21.1 Prove the rate-limit buckets, then replace the guards
+- [x] 21. Adopt strict input from Laravel 13.40.0 *(approved 2026-11-07; design §16.5 and §14.1 S11; Req 13.5; HANDOFF §6 step 47)*
+  - [x] 21.1 Prove the rate-limit buckets, then replace the guards
     - Add `tests/Feature/Kitchen/AuthRateLimitTest.php` (5 tests, design §16.5). They must pass on the current code first; paste that run. A failure is a STOP.
     - Replace `AppServiceProvider::scalarInput()` and the `UpdateStudentStatusRequest` guard exactly as design §16.5 shows. Do not touch the guards listed in §16.6.
     - Tests: the new tests and all of `ListInputValidationTest` pass unedited on both drivers. Full verification gate.
