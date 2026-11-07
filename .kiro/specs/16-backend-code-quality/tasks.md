@@ -444,8 +444,8 @@
     - Fixtures: unchanged.
     - _Requirements: 13.5_
 
-- [ ] 22. Remove the frontend leftovers *(approved 2026-11-07; design §17; Req 16; HANDOFF §6 step 48)*
-  - [ ] 22.1 Make the repository API-only
+- [x] 22. Remove the frontend leftovers *(approved 2026-11-07; design §17; Req 16; HANDOFF §6 step 48)*
+  - [x] 22.1 Make the repository API-only
     - Add the logo test to `tests/Feature/EmailTemplateTest.php` first (design §17.4).
     - Delete and edit exactly what design §17.1 lists, in that order. Everything under *Keep* stays.
     - Run `boost:update` once (design §17.5).
