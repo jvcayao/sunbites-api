@@ -1,0 +1,357 @@
+# Spec 17: Frontend Code Quality and Backend Compliance, Implementer Handoff
+
+**You are the implementer. Read this entire file before touching any code, and re-read §1 after every context compaction.**
+
+This spec was written against the real code of both frontends and the backend's contract fixtures. Your job is to **execute it exactly**, one task at a time, not to redesign, improve or interpret it. A separate *spec-owner* session reviews each commit. The two sessions talk directly (§10).
+
+The goal, in the user's words: "screen look and behave exactly the same and only the code underneath changing", and "make sure your FE must comply to BE. and always verify response from BE side."
+
+---
+
+## 1. Non-negotiables (break any of these and the task is rejected)
+
+1. **One commit at a time.** Run exactly one row of §6, verify it, commit it, then **stop and report** (§9). A task that runs in both apps is two steps: POS, report, wait, then portal. Never start the next step until the spec owner or the user says "proceed".
+2. **Never invent a decision.** If the spec doesn't say how to do something you need to do, **stop and ask** (§8). Don't pick "the reasonable option" or "the cleaner way".
+3. **The spec beats your judgement.** If the code differs from what `design.md` describes, and an earlier step of this spec didn't legitimately change it (§5.4), stop and report drift.
+4. **No scope creep.** A bug, smell or typo outside the task goes in your report under "Found, not fixed". Don't fix it.
+5. **Track A changes nothing a user can see.** Markup, classes, copy, requests, query keys, invalidation sets and role outcomes stay identical. Existing test assertions don't change (Req 4.3). The render fixtures prove it, so **a Track A refactor commit that changes the render digest is wrong by definition.**
+6. **The backend is the truth, and it is read-only.** For any code that reads a response or sends a request, read the fixture or backend file first and cite it in the commit body (design §4.1). A frontend type or an MSW mock is never evidence of what the API does. Never edit anything in `~/sunbites-api`.
+7. **Evidence, not claims.** Never say "tests pass" without the pasted output of the command. Never say "verified" about something you didn't run or read.
+8. **Don't simplify what looks redundant.** Design §3 lists 20 hazards (H1–H20) where the "obviously equivalent, simpler" version is wrong. Read them before every Track A step.
+
+---
+
+## 2. Session start checklist (run every time you start or resume)
+
+Run these for the repo your step names, and include the output in your first message:
+
+```bash
+cd ~/sunbites-pos                # or ~/sunbites-portal
+git branch --show-current        # the branch §6 names for your step
+git status --short               # empty; tasks 1.1 and 1.3 expect exactly package.json and package-lock.json
+git log --oneline -5
+node --version
+
+cd ~/sunbites-api
+git rev-parse --short HEAD
+find tests/Fixtures/contracts -type f -name '*.json' | wc -l | tr -d ' '
+(cd tests/Fixtures/contracts && find . -type f -name '*.json' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -c1-64
+```
+
+- **Backend fixtures must be 471 files, digest `e3317d25315716f16fc7d419afba565b77d3d9cd018fbcc30449d3c38f06ed44`.** If they differ, the backend moved: stop and report. The spec owner updates this line if the user approves a new baseline.
+- **Tree not clean, outside tasks 1.1 and 1.3:** stop and ask. Never stash, discard or carry the user's work.
+
+**Before creating a branch** (first step of PR 2, PR 3 and PR 4, in each repo), confirm your `origin/staging` is current:
+
+```bash
+git fetch origin
+git rev-parse origin/staging
+gh api repos/jvcayao/<sunbites-pos|sunbites-portal>/branches/staging --jq .commit.sha
+```
+
+The two SHAs must match. On 2026-11-07 `git fetch` failed with `Permission denied (publickey)` in a Claude session, and the POS's local `origin/staging` was `cef599c` (2026-07-01) while GitHub's was `4141382` (2026-08-05). If the fetch fails or the SHAs differ, stop and ask the user to fetch. Never branch from a stale ref.
+
+**Before your first step in each repo only,** run `npm ci` and the gates in §5.3. Baselines are in design §1.3. In the POS, only `feedback.test.tsx` and `settle-credit-dialog.test.tsx` may fail (task 1.2 fixes them). Any other failure before you change anything: stop and report.
+
+---
+
+## 3. Required reading, in this order
+
+The spec lives in `~/sunbites-api/.kiro/specs/17-frontend-code-quality/`.
+
+| # | File | Why |
+|---|---|---|
+| 1 | `~/sunbites-api/.kiro/steering/product.md`, `tech.md`, `structure.md` | Users, roles, stack, layout, shared contracts |
+| 2 | The app's `AGENTS.md` and `CLAUDE.md` | Next.js rule: read the bundled docs before writing Next code |
+| 3 | `~/sunbites-api/.claude/rules/testing.md` | Testing standards |
+| 4 | `~/sunbites-api/.claude/rules/frontend/frontend-standards.md` | Frontend standards. Where it disagrees with the spec, **the spec wins** (§5.2) |
+| 5 | `~/sunbites-api/.claude/agents/react-component-expert.md` | Component guidance (Req 13.4) |
+| 6 | `requirements.md` | All 14 requirements, decisions Q1–Q8, out of scope |
+| 7 | `design.md` **§1, §3, §4.1–§4.4, §16, §22, §23** in full, then the sections your step cites | Decisions, hazards, backend compliance, gates |
+| 8 | `tasks.md` **ground rules** in full, then your task block | Exact sub-tasks and tests |
+
+Re-read #7 (§3 hazards) and #8 (ground rules) at the start of **every** step.
+
+---
+
+## 4. Mandatory tooling (Req 13; the user marked this non-negotiable)
+
+| When | Use |
+|---|---|
+| Any response or request code | Fixture or backend file first (design §4.1). Cite it in the commit body |
+| Next-specific code (shells, `error.tsx`, `PageProps`, config) | The matching guide in `node_modules/next/dist/docs/` |
+| TanStack Query, Zod, Zustand, Base UI APIs | That package's installed `.d.ts` or bundled docs. Never memory |
+| Any step that changes components | `frontend-design:frontend-design` skill as a **guard**: confirm the look is unchanged. For FB-02 it is the **design lead** |
+| Writing or changing tests | `.claude/rules/testing.md` |
+| Track B (PR 2 and PR 4) | `superpowers:test-driven-development`: failing test first |
+| Task 1.2 | `superpowers:systematic-debugging` |
+| Before claiming any step done | `superpowers:verification-before-completion` |
+
+- **No sub-agents and no workflows.** The final `react-component-expert` review (task 8.1) is run by the spec owner, read-only.
+- **The `simplify` skill is not used.** The user rejected it for this spec (Q8).
+
+### Reading a fixture
+
+Slug: lowercase method, `__`, then the URI with every run of characters outside `a-z0-9{}` replaced by `_` and the ends trimmed. For example, `GET /api/v1/reports/inventory` is `get__api_v1_reports_inventory@ok.json`, and other variants follow `@`. Design §4.2 explains the shape tokens (`string:decimal2`, `__list__`, and so on). Fixtures record shape only. For enum values read the backend code, for request keys read the Form Request, and for roles read the `role:` middleware (design §4.1).
+
+---
+
+## 5. How to execute one step
+
+### 5.1 Before writing code
+
+1. Read the task block in `tasks.md` and every design section it cites.
+2. Open and read **every file you will touch**, in full.
+3. Compare the code with the design's description of it, using the **quoted code and names** (§5.4). If it differs, go to §8.
+4. Read the docs in §4 for the APIs you will use. Note them for the tooling log.
+
+### 5.2 While writing code
+
+**Commands.** The frontends are plain Node projects: use `npm` and `npx`, not Sail. Sail only applies in `~/sunbites-api`, where the one command you may need is `vendor/bin/sail artisan route:list --path=api --except-vendor --json` (task 4.3). If Sail isn't running, start it with `vendor/bin/sail up -d`.
+
+**Never:**
+- edit `~/sunbites-api`, including ticking `tasks.md`. The spec owner ticks boxes and edits spec docs
+- run the backend test suite or any Artisan command other than `route:list`. You don't need them, and the test database is shared with other sessions
+- edit `components/ui/*` in Track A (H20), or import across repos (H16)
+- edit the `AGENTS.md` managed block (Req 12.4)
+- relax `onUnhandledRequest: "error"` (H18)
+- re-record render fixtures in a refactor commit. `RENDER_FIXTURES=record` runs only in characterization commits (design §6.2)
+- move or rename a test file that has render fixtures (design §6.2). The fixture path includes it
+- change a query key's value or a mutation's invalidation set in Track A (H2, H13), even where the key looks inconsistent
+- remove a `Number()` or `parseFloat` conversion (H1)
+- commit `.render-fixtures/`, `.contract-capture/` or any contract fixture. Never `git add -f`
+- add or bump a dependency other than `undici` (task 3.1) and `babel-plugin-react-compiler@1.0.0` (task 7). Never run `npm update`
+- run two test runs at once in the same repo: `.render-fixtures/` and `.contract-capture/` are shared
+
+**The spec wins over older standards text.** `frontend-standards.md` predates this spec, and task 10.1 updates it. It shows data fetching in a Server Component, but here the token lives in the browser, so data fetching stays client-side and `page.tsx` is a thin server shell (design §7.1). It also refers to `ErrorMessage` and `EmptyState` components that don't exist in either app. Don't create them.
+
+### 5.3 After writing code (the verification gate, in this order)
+
+Run in the app root. All must pass:
+
+```bash
+npm run type-check
+npm run lint
+npx jest --ci
+npm run build
+npm run test:contract                              # from task 4.1, when the commit touches lib/api, types, mocks or tests
+TZ=Asia/Manila RENDER_FIXTURES=compare npx jest    # every Track A refactor commit (task 6.1 on)
+```
+
+Then:
+1. **Digests.**
+   - Backend fixtures: same command as §2. A change means the backend moved: stop.
+   - Render fixtures (from the first characterization commit), run from the app root:
+     ```bash
+     find .render-fixtures -type f | wc -l | tr -d ' '
+     (cd .render-fixtures && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -c1-64
+     ```
+     A refactor commit's digest must equal the previous commit's.
+2. **Flake gate.** Run the full suite 3 times in a row for the baselines (tasks 1.2, 1.3), for `undici` (task 3.1), and before each PR is handed over (design §22).
+3. **Hazard review.** Re-read `git diff` against every hazard the task names. Write one line per hazard in your report.
+4. **Size check** (tasks 6.2 and 8.3): the design §8 command prints none of the files the step covered.
+
+**A new test failure blocks the commit.** Fix it within the task's scope. If the only fix would go outside the task, or would change behaviour, an assertion or a fixture, stop and report (§8).
+
+### 5.4 Line numbers and earlier steps
+
+Line numbers in `design.md` were taken on 2026-10-31, before any Spec 17 code change. After earlier steps edit a file, they drift. **Locate code by the quoted snippet or name, not by line number.**
+
+If an earlier step of this spec moved the code (for example, task 6.1 moves a page's body to `_components/x-screen.tsx`), follow it there. That isn't drift. Drift is code that differs in a way **no earlier Spec 17 step explains**. Report that.
+
+---
+
+## 6. Commit order (authoritative)
+
+Each row is one commit per app, unless it says otherwise. "Both" means POS first, then portal, stopping after each. Subjects are exact, except that `<area>`, `<file>` and similar placeholders are filled in as `tasks.md` describes.
+
+### PR 1: Upgrade and green baseline (branches already exist)
+
+| Task | App | Branch | Commit subject |
+|---|---|---|---|
+| 1.1 | POS | `bump-latest-upgrade-pos` | `chore(deps): upgrade Next 16.4.3 and React 19.3.1` |
+| 1.2 | POS | same | `test: make feedback toast and settle-credit tests deterministic` |
+| 1.3 | Portal | `bump-latest-upgrade-portal` | `chore(deps): refresh lockfile and upgrade Next 16.4.3 and React 19.3.1` |
+| 1.4 | both | | no commit. Report. The user pushes and opens PR 1 in each repo. **Wait for the merge** |
+
+### PR 2: Track B1 (branch `fix/spec17-contract-fixes`, from `origin/staging` after PR 1 merges)
+
+| Task | App | Commit subject |
+|---|---|---|
+| 2.1 | POS | `fix(reports): F-1 show inventory snapshot rows and statuses` |
+| 2.2 | POS | `fix(pos): F-3 clear the cart when the branch changes` |
+| 2.3 | Portal | `fix(wallet): F-2 format wallet amounts with separators` |
+| 2.4 | both | no commit. Report with the design §5.4 smoke steps. The user opens PR 2. **Wait for the merge** |
+
+### PR 3: Track A (branch `refactor/spec17-code-quality`, from `origin/staging` after PR 2 merges)
+
+| Task | App | Commit subject |
+|---|---|---|
+| 3.1 | both | `chore(test): upgrade undici to 6.29.1 in the Jest polyfill` |
+| 3.2 | both | `chore: modernise tsconfig, add build to PR CI` |
+| 3.3 | both | `test: count every source file in coverage; add render fixtures` |
+| 4.1 | both | `test: add local contract check against backend fixtures` |
+| 4.2 | both | `test: shape MSW data like the backend fixtures` |
+| 4.3 | both | **no commit, no code change.** Report the Appendix B tables. **Wait:** the spec owner gets the user's decision on each proposed F-item |
+| 4.4 | both | `refactor(types): match API response types to the backend` (only the rows the spec owner marks "A") |
+| 5.1–5.6 | POS | `test(<area>): characterize <area> before refactor` |
+| 5.7–5.9 | Portal | `test(<area>): characterize <area> before refactor` |
+| 6.1 | both | `refactor(app): thin page shells and auth hydration hook` |
+| 6.2.a–f | POS | `refactor(<area>): split <file> into components` |
+| 6.2.g | Portal | `refactor(<area>): split <file> into components` |
+| 6.3 | both, per area | `refactor(<area>): one copy of <helper\|component>` |
+| 6.4 | both, per domain group | `refactor(queries): define <domain> query keys and options once` |
+| 6.5 | POS | `refactor(auth): route UI role checks through one capability map` |
+| 6.6 | both | `refactor(validation): Zod 4 APIs and shared schemas` |
+| 6.7 | both | `refactor: replace setState-in-effect workarounds` |
+| 6.8 | both | `chore(lint): zero warnings, enforce in quality:validate` |
+| 7 | both | `perf: enable the React Compiler` |
+| 8.1 | both | the spec owner runs the read-only review. Each finding the user approves becomes a task 8.1.n, under Track A rules |
+| 8.2 | both | `test: raise coverage thresholds to measured values` |
+| 8.3 | both | no commit. Close-out report with the design §20 smoke list. The user opens PR 3. **Wait for the merge** |
+
+### PR 4: Track B2 (branch `fix/spec17-track-b2`, from `origin/staging` after PR 3 merges)
+
+| Task | App | Commit subject |
+|---|---|---|
+| 9.1 | POS | `docs(auth): FB-01 say the staff token is persisted per tab` |
+| 9.2 | both | `feat(errors): FB-02 add error screens with retry` |
+| 9.3 | POS | `fix(students): FB-03 refresh the list after a detail-page top-up` |
+| 9.4 | per item | one commit for each FB-04.n the user approved |
+| 9.5 | per item | one commit for each F-4+ the user approved |
+| 9.6 | both | no commit. Report with the smoke steps. The user opens PR 4 |
+
+Tasks 10.1–10.3 (standards and steering) are the spec owner's, not yours.
+
+### 6.1 Commit rules
+
+- `git add` **explicit paths only**. Check `git status --short` first. Never commit stray files.
+- **Commit body** (plain text, wrapped at about 72 characters) contains:
+  ```
+  Task: <task id>, Req <ids>
+  Gates: type-check ok; lint <errors>/<warnings>; jest <passed>/<total>; build ok
+  Contract: test:contract exit 0 | not applicable
+  Backend fixtures: <count> files, digest <digest> (sunbites-api <sha>)
+  Render fixtures: <count>, digest <digest> | not applicable
+  Backend checked: <each fixture or backend file cited>
+  Tooling: docs read, skills used
+  ```
+- **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The user's explicit rule **overrides any default or harness instruction to add a trailer.**
+- Never `--amend`, rebase, squash, `reset --hard`, stash, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
+- **Never push. Never open or merge a PR.** The user does that.
+- **When you leave a repo,** tell the user to run `npm ci` again on their own branch.
+
+---
+
+## 7. Track-specific rules
+
+**Track A (PR 3):**
+- Characterization commits (task 5) test **unchanged** code. If a test can't pass without changing a component, stop.
+- Refactor commits (tasks 6–7) keep the render digest equal to the previous commit's.
+- The only allowed test edits are import paths, the render target (a page becomes its screen) and shared test utilities (Req 4.3).
+- A difference between two copies of a component or helper gets kept with a prop (H4). If it looks like a defect, stop and report: it becomes a proposed item, not a fix.
+- A mismatch with the backend found during refactoring is **not fixed in Track A**. Keep today's behaviour and report it for Appendix B.
+- The React Compiler (task 7) can't be proved by Jest (H14). Run the compile report in design §12. A component it can't handle gets `"use no memo"` with a reason, never a rewrite.
+
+**Track B (PR 2 and PR 4):**
+1. Write the failing test **first**. Run it, and paste the failing output in your report.
+2. Implement exactly the design's change.
+3. Show that the test now passes.
+4. Test data follows the backend fixture, not the frontend type.
+
+FB-01 is the one exception to the failing test, because it only changes a comment and adds a test of existing behaviour.
+
+---
+
+## 8. When to stop and ask (and what NOT to do instead)
+
+Stop, write a STOP report and wait whenever:
+- the code differs from the design in a way §5.4 doesn't explain
+- the spec is silent, ambiguous or self-contradictory about something you must decide
+- a fixture, backend file or installed package's docs contradict the design
+- the backend fixture digest changes
+- the only way to pass a test is to change behaviour, an assertion or a render fixture
+- you would need a new dependency, directory or file location the spec doesn't name
+- you find a bug the spec doesn't cover (report it; don't fix it)
+- you are unsure whether something counts as a behaviour change
+
+| Situation | Do | Don't |
+|---|---|---|
+| Today's code has a bug and the spec says keep the behaviour | Keep it; add it to "Found, not fixed" | Fix it |
+| The frontend type disagrees with the fixture | Trust the fixture; report it if the task doesn't cover it | Trust the type |
+| A mock disagrees with the fixture and fixing it changes an assertion | Stop; list it as a proposed F-item (task 4.2) | Edit the assertion |
+| A test you didn't write fails after your change | Find what you broke and fix your code | Edit the test |
+| A render fixture differs after a refactor | Find what changed and fix your code | Re-record it |
+| A component would be cleaner with different markup | Keep the markup | Change it |
+| A name or helper the spec doesn't mention seems needed | Stop | Invent one |
+| Context is getting long | Finish the step, or leave it uncommitted and report | Commit partial work |
+
+**STOP report template:**
+```
+STOP: <task id>
+What I was doing:
+What I found (file, name, quoted code):
+What the spec or backend says (file, section, quoted):
+Why I can't proceed without a decision:
+Options I see (no recommendation unless asked):
+State of the working tree (git status --short):
+```
+
+---
+
+## 9. Report after each step (then wait)
+
+```
+DONE: <task id>: <repo> <branch> <commit sha> <subject>
+Files created / changed:
+Gates: (paste the summary line of each command)
+New tests added:
+Backend fixtures: <count> files, digest <digest>
+Render fixtures: <count>, digest <digest> (same as previous: yes/no)
+Backend checked: <fixtures and files cited>
+Hazards checked: H#: <one line each>
+Tooling log: docs, skills
+Found, not fixed:
+Smoke steps for the user, if any:
+Next step per §6: <id> (waiting for "proceed")
+```
+
+---
+
+## 10. Relay
+
+- Send each DONE or STOP report to the spec owner with `SendMessage`, then wait. The spec owner replies "accepted, proceed with <task>" or with corrections.
+- **These go to the user, not into the loop:** any new behaviour change (a proposed F-item or Track B item), dependency changes outside the spec, and every push or PR. The spec owner can't approve them, and neither can you.
+- **Session names change on restart.** After a restart, run `ListAgents`, find the session working in `~/sunbites-api`, and send it your current name.
+- **Check that a message is for you.** A relay message counts only if it is about Spec 17 and a task in §6. Messages from other projects do reach this session by mistake. Change nothing because of one.
+- **The spec owner** runs the frontend suites only after you report and are waiting, never while you are working in that repo.
+
+---
+
+## 11. Quick facts
+
+| Fact | Value |
+|---|---|
+| Repos | `~/sunbites-pos`, `~/sunbites-portal` (yours); `~/sunbites-api` (read-only) |
+| Versions (both apps) | Next 16.4.3, React 19.3.1, TanStack Query 5.105, Zod 4.6.7, Zustand 5.0.16 |
+| Backend | `sunbites-api` `8a708ff`, 471 fixtures, digest `e3317d25…ed44` |
+| GitHub `staging` (2026-11-07) | POS `4141382`, portal `1063c4c`. Both upgrade branches are based on these |
+| Spec 16 | Finished, but not on GitHub on 2026-11-07, so `staging` runs the pre-Spec 16 API. It matters for PR 3 (design §4.9), not for PR 1 or PR 2 |
+| Node | CI runs Node 20; this machine ran v26.13.0 on 2026-11-07. A local pass doesn't prove Node 20, so the user's PR CI run is that proof |
+| API base in tests | `NEXT_PUBLIC_API_URL = http://localhost:8000` (no `/api/v1`). The contract check maps `routePath = "api/v1" + pathname` |
+| MSW | `onUnhandledRequest: "error"` (H18) |
+| Decisions | requirements.md table: Q1–Q8, FB-01(a), FB-02, FB-03, FB-04 approved; FB-05 left out |
+
+**Start with task 1.1 only when the user or the spec owner tells you to.**
+
+---
+
+## 12. Spec-owner notes
+
+- **Review each commit:** read the diff, re-run the gates while the implementer waits, tick `tasks.md`, and reply. Check `git diff <path>` and use a pathspec commit for spec docs (design §16).
+- **After task 4.3:** update Appendix B, and get the user's decision on each proposed F-item before task 4.4.
+- **After tasks 6.3–6.4:** take the refresh gaps recorded in Appendix B §B.5 to the user (FB-04).
+- **Task 8.1:** run the `react-component-expert` agent read-only over each app's Track A diff. The user decides on each finding.
+- **Tasks 10.1–10.3:** the user approves the exact text first. Steering versions change once PR 1 is merged, and D1 once FB-01 is merged.
+- **Spec 16 ordering:** before PR 3 reaches `staging`, confirm Spec 16 has merged if any commit relies on design §4.9. Tell the user at PR 1 that this dependency exists.
+- **PR descriptions:** list any exceptions in `__tests__/contract/exceptions.json`, the design §20 smoke list and any rejected review findings. No AI attribution.
