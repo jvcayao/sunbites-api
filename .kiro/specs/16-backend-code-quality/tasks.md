@@ -468,10 +468,10 @@
 ---
 
 - [ ] 24. Staging deploy removed, CI on MySQL *(approved 2026-11-07; design §18; Req 17; HANDOFF §6 steps 50 and 51)*
-  - [ ] 24.1 Revert `16f9fac`
+  - [x] 24.1 Revert `16f9fac`
     - Follow design §18.2. `git diff 9ba8f46 HEAD --name-only -- . ':!.kiro'` must print nothing.
     - _Requirements: 17.1_
-  - [ ] 24.2 Remove the deploy job and align the test jobs
+  - [x] 24.2 Remove the deploy job and align the test jobs
     - Make exactly the changes in design §18.3. `production.yml`'s `validate` and `deploy` jobs stay byte-identical.
     - Tests: none new. Full local verification gate, 1693 tests with no skips. Run every audit command in design §18.4 and paste the output.
     - Fixtures: unchanged.
@@ -479,6 +479,9 @@
   - [ ] 24.3 Name `main` in the production deploy and correct the docs note
     - Make exactly the changes in design §18.6 and run its audit. No PHP changes.
     - _Requirements: 17.4, 17.7_
+  - [ ] 24.4 Bring the deployment docs up to date
+    - Follow the rules in design §18.7 and run its audit. No PHP changes.
+    - _Requirements: 17.8_
 
 ---
 
@@ -637,6 +640,7 @@
 | 16.1–16.6 | T-22.1 |
 | 17.1–17.6 | T-24.1, T-24.2 |
 | 17.7 | T-24.3, plus the user's Laravel Cloud setting |
+| 17.8 | T-24.4 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
 | 12.6, 12.7 | T-19.1 |

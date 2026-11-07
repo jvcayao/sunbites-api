@@ -281,6 +281,7 @@ A Track A change and a Track B change are never combined in one PR.
 5. The audit in design §18.4 SHALL return its expected result.
 6. The API SHALL NOT be affected: both local suites pass with no skips, the fixture digest stays unchanged and `route:list --path=api --except-vendor` still lists 163 routes.
 7. Production SHALL deploy only through the `Deploy to Production` workflow. The user turns off push-to-deploy in the Laravel Cloud dashboard, and the docs SHALL say so (design §18.6).
+8. The deployment docs SHALL describe the single Cloud environment, and no `cloud` command in them SHALL name an environment other than `main` (design §18.7, task T-24.4).
 
 ---
 

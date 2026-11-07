@@ -197,6 +197,7 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 50 | T-24.1 | `Revert "chore(ci): remove the staging workflow and references"` |
 | 51 | T-24.2 | `chore(ci): drop the staging deploy and run every job on MySQL` |
 | 52 | T-24.3 | `chore(ci): name the main environment in the production deploy` |
+| 53 | T-24.4 | `docs(infra): describe the one Cloud environment and manual release` |
 
 **Authorised extra commit (2026-11-07):** right after step 47 (T-21), `docs(http): correct the strict input docblock`. T-21's docblock on `UpdateStudentStatusRequest::rules()` says an unknown value reads as an empty string, but an unknown string stays as it is and `tryFrom()` is what rejects it. Replace the first paragraph of that docblock, comment only, with:
 ```
@@ -206,7 +207,7 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 ```
 Run Pint and `ListInputValidationTest` on both drivers. T-22's full gate follows straight after, so report this commit together with T-22.
 
-**T-24 (staging deploy removed, CI on MySQL) was approved on 2026-11-07,** after the user removed the staging environment from Laravel Cloud. The flow stays PR branch → `staging` → `main`. Step 50 reverts `16f9fac`, which implemented an earlier, wrong version of this spec (`ade5048`). Step 51 makes the change (design §18). Both may edit the workflow files named there. Report those two steps together. Step 52 (design §18.6) follows the review of step 51.
+**T-24 (staging deploy removed, CI on MySQL) was approved on 2026-11-07,** after the user removed the staging environment from Laravel Cloud. The flow stays PR branch → `staging` → `main`. Step 50 reverts `16f9fac`, which implemented an earlier, wrong version of this spec (`ade5048`). Step 51 makes the change (design §18). Both may edit the workflow files named there. Report those two steps together. Step 52 (design §18.6) follows the review of step 51, and step 53 (design §18.7) follows step 52. Report those two together.
 
 **Authorised extra commit (2026-11-07):** right after step 49 (T-23), `test(dates): always assert the portal monthly status`, as design §16.7 (T-23.2) states. Report it as usual.
 
@@ -259,7 +260,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 52, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 53, stop. The user pushes and opens the PR.
 
 ---
 

@@ -2123,11 +2123,10 @@ Stage explicit paths only. `.kiro/specs/17-*` has another session's uncommitted 
 ### 18.5 Checked and deliberately not changed
 
 - **`production.yml`'s `deploy` job:** it runs `cloud deploy "Sunbites API Prod" production`. Laravel Cloud has no environment with that name, but it still works: `EnvironmentResolver` (CLI v0.4.2) falls back to the branch and then to the sole environment, so it resolves to `main`. The job's last eight runs succeeded. T-24.2 leaves this job alone; T-24.3 names `main` explicitly (§18.6), so it no longer depends on that fallback in a CLI version that GitHub installs fresh on every run. *(Corrected 2026-11-07: an earlier version of this note said the job fails. It does not.)*
-- **`config/cors.php`, the `.env.example` comment, `.claude/agents/git-workflow.md`, `LazyLoadingGuardTest`:** the user asked to remove only the deploy, and the branch flow in `git-workflow.md` is still right.
+- **`config/cors.php`, `LazyLoadingGuardTest`:** the user asked to remove only the deploy.
 - **Local test commands:** `vendor/bin/sail artisan test` and `composer test` still use SQLite through the gitignored `.env.testing`, and this spec's gates still run on both drivers. The user's request covers the CI workflows.
 - **Frontends:** `~/sunbites-pos`, `~/sunbites-portal` and `.kiro/specs/17-*` belong to the frontend session.
-- **`infrastructure/` and `docs/laravel-cloud-deployment.md`:** the staging sections stay as history under the note.
-- **Steering:** `.kiro/steering/` still says `staging.yml` deploys and CI uses SQLite. Changing it is the user's to approve.
+- **Steering:** the user approved the update on 2026-11-07, and the spec owner made it.
 
 ### 18.6 T-24.3: production deploys only through `production.yml` *(user decision, 2026-11-07)*
 
@@ -2151,3 +2150,54 @@ git grep -n 'deploys to production' -- docs infrastructure   # 0 lines
 git diff HEAD~1 --name-only                                  # exactly: production.yml and the 3 docs
 ```
 The ruby check in §18.4 must still print `identical` and the same job lists.
+
+### 18.7 T-24.4: bring the deployment docs up to date *(user approved, 2026-11-07)*
+
+The user asked for every doc that needs it to be updated. A note at the top is not enough, for a safety reason: **18 Cloud CLI commands use the same resolver (§18.1), so with one environment any name it cannot match means `main`.** A command copied from these docs, such as `cloud environment:variables staging --action=set --key=PORTAL_APP_URL --value=...`, would now change production.
+
+**Facts to use (read-only checks, 2026-11-07):**
+
+| Item | Value |
+|---|---|
+| Cloud app | `Sunbites API Prod`, region `ap-southeast-1` |
+| Cloud environment | `main`, branch `main`, the only one. Domain `api.sunbites.com.ph` |
+| Build command | `composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader` |
+| Deploy command | `php artisan migrate --force` |
+| Compute | Instance `App`, size `flex-1gb` |
+| Queue worker | `php artisan queue:work database --tries=3 --sleep=3 --quiet` |
+| Scheduler | On for instance `App` (`usesScheduler`), so no `schedule:run` background process is needed |
+| Bucket | `sunbites_api_prod_bucket` (private) |
+| WebSockets | `reverb-websocket` |
+| GitHub Actions environment | `production`: allowed branch `main`, holds `CLOUD_API_TOKEN`, **no required reviewers** |
+| Release | `Deploy to Production` workflow only. Push-to-deploy is off |
+| Branch flow | PR branch → `staging` → `main`. `staging` is a git branch that runs tests only |
+
+Database cluster names could not be read (`database-cluster:list` returns a 400 from the CLI itself), so keep what the docs say about the production database and do not invent names.
+
+**Rules for `infrastructure/*.md` and `docs/laravel-cloud-deployment.md`:**
+1. Describe what exists now. Remove the instructions, sections, table rows, checklist items and cost rows for the deleted staging environment, and recalculate cost totals.
+2. Every `cloud` command names `"Sunbites API Prod"` and `main`, never `staging`, `production` or `sunbites-api`.
+3. **Never turn a staging command into a `main` command mechanically.** Many carry staging values (`--value="https://portal-staging..."`) or are destructive (`migrate:fresh`). If the doc has a production version of that command, keep it and name `main`. If it does not, replace the command with a sentence saying what was done on the old staging environment at the time. No `migrate:fresh` command may remain in a form that can be copied.
+4. `infrastructure/05-cicd.md`: replace the embedded YAML, which is out of date, with a table of the three workflows and a pointer to `.github/workflows/`. Describe the MySQL 8.4 test job, the branch flow, the secret's real location (the GitHub `production` environment), and the release steps. Remove the claims about reviewer approval, and do not add a monitor step the workflow does not have.
+5. `infrastructure/07-scheduled-tasks.md`: correct the claim that `schedule:run` must be registered as a background process (use the Scheduler fact above), and add the missing `pre-registrations:expire` task, daily at 00:00, to its table (`routes/console.php`). `infrastructure/02-environments.md`: the Scheduler checklist item follows the same fact.
+5a. `infrastructure/README.md`: update the Naming Convention table to the facts above. Change the `02-environments.md` line to "Production environment configuration".
+6. `docs/laravel-cloud-deployment.md` is a record of how the first deployment went: keep every issue and its cause. Update the Environments and CI/CD sections. Under issue 2 (Vite), add that the repository is now API-only. Under issue 7 (CORS), keep the code sample, which still matches `config/cors.php`.
+7. Add this under the title of `infrastructure/README.md` and `docs/laravel-cloud-deployment.md`: `> **Cloud CLI warning:** with one environment, the CLI treats any environment name it cannot match as \`main\`. Always type \`main\`. A command naming another environment still acts on production.`
+8. In the 2026-11-07 notes, remove the last sentence ("Staging deploy steps below are historical.").
+
+**Two more files:**
+- `.env.example` L5: `# Local: http://api.sunbites.test | Production: https://api.sunbites.com.ph`
+- `.claude/agents/git-workflow.md`: under `## Branch Strategy`, add `In \`sunbites-api\`, merging to \`main\` does not deploy: production deploys only through the Deploy to Production workflow.` The flow itself stays.
+
+**Not touched:** `.kiro/specs/17-*`, the frontend repositories, `.kiro/steering/` (the spec owner updates it), `CLAUDE.md`, `AGENTS.md`, `docs/superpowers/`, and the `Sentry`/`Flare` setup content except its staging mentions. There is no PHP change, so no suite run; the spec owner re-runs the final gates.
+
+**Audit (paste the output in the report and commit body):**
+```bash
+git grep -nE 'cloud [a-z:-]+( "[^"]+"| [a-z-]+)? (staging|production)\b' -- infrastructure docs/laravel-cloud-deployment.md   # 0 lines
+git grep -nE 'cloud [a-z:-]+ sunbites-api' -- infrastructure docs/laravel-cloud-deployment.md                                  # 0 lines
+git grep -nE 'api-staging|sunbites-staging|sunbites_staging|APP_ENV=staging|Sunbites \(Staging\)' -- infrastructure docs/laravel-cloud-deployment.md .env.example   # 0 lines
+git grep -nE 'cloud command:run.*migrate:fresh' -- infrastructure docs/laravel-cloud-deployment.md                             # 0 lines
+git grep -nIi 'sqlite' -- infrastructure                                                                                       # 0 lines
+git grep -nIi 'staging' -- infrastructure                                                                                      # paste it: only the branch, the removal note and "old staging" history may remain
+git diff HEAD~1 --name-only                                                                                                    # only infrastructure/, the record doc, .env.example, git-workflow.md
+```
