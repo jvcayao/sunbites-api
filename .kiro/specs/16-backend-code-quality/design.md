@@ -2107,7 +2107,7 @@ The note: `> **2026-11-07:** the staging environment was removed from Laravel Cl
 
 ```bash
 ls .github/workflows                                # exactly: ci.yml production.yml staging.yml
-git grep -nIiE 'sqlite|artisan test' -- .github     # 0 lines
+git grep -nIiE 'sqlite|artisan test' -- .github | grep -vE ':[0-9]+:[[:space:]]*#'   # 0 lines (the job's explanatory comment is allowed)
 git grep -nI 'cloud deploy' -- .github              # exactly 1 line, in production.yml
 git grep -nE 'environment: staging|CLOUD_API_TOKEN' -- .github/workflows/staging.yml   # 0 lines
 ruby -ryaml -e 'n=%w[ci staging production]; w=n.map{|f|YAML.load_file(".github/workflows/#{f}.yml")}; t=w.map{|y|j=y["jobs"]["test"].dup; j.delete("needs"); j}; puts(t.uniq.size==1 ? "identical" : "DIFFERENT"); n.zip(w).each{|f,y|puts "#{f}: #{y["jobs"].keys.join(",")}"}; puts w[0][true]["pull_request"]["branches"].join(","); puts w[1][true]["push"]["branches"].join(",")'
