@@ -2,7 +2,7 @@
 
 ## Introduction
 
-The Sunbites API (Laravel **13.35.0** when this spec was written, **13.39.0** since `336a826` on 2026-10-30; PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on 2026-10-09 on MySQL 8.4 (Sail `testing` schema) and on SQLite (CI's driver), using the gate commands in design §11.1. It also grew feature by feature across Specs 01–15, and the code shows it:
+The Sunbites API (Laravel **13.35.0** when this spec was written, **13.39.0** since `336a826` on 2026-10-30, **13.40.0** since T-20 on 2026-11-07; PHP 8.5) works and has a strong regression net (94 feature test files, 951 tests, all passing on 2026-10-09 on MySQL 8.4 (Sail `testing` schema) and on SQLite (CI's driver), using the gate commands in design §11.1. It also grew feature by feature across Specs 01–15, and the code shows it:
 - 83 controller methods (48 files) validate inline.
 - About 200 `response()->json([...])` calls hand-build response arrays.
 - Business rules live in controllers (Checkout 308 lines, Reminders 360, Analytics 535).
@@ -227,6 +227,7 @@ A Track A change and a Track B change are never combined in one PR.
 2. Only the attributes marked *Adopt* in design §14.5 (the complete Laravel 13.35 attribute inventory) SHALL be introduced. The Form Request attributes marked *Forbidden* (hazard H17) SHALL NOT be used. The idioms rejected in design §14.3 SHALL NOT be introduced either: `final` classes, `declare(strict_types=1)`, PHP 8.4+ syntax while `composer.json` requires `php: ^8.3`, `whereLike()` replacing `lower(...) like`, and converting `Carbon::create*()` month loops to immutable dates (hazard H16).
 3. WHEN all Track A and Track B commits and T-17 are done THEN task T-18 SHALL run the audit commands in design §14.4, and every command SHALL return its expected result (0 hits), or list an exception with its reason, in the T-18 commit body.
 4. Every backend task SHALL end by running Laravel Pint through Sail (`vendor/bin/sail bin pint --dirty --format agent`) as required by `.claude/rules/backend/laravel-pint.md`, and before the branch is pushed `vendor/bin/sail bin pint --format agent` SHALL report no changes (CI runs `pint --test` on the whole repo).
+5. *(approved 2026-11-07)* Hand-written guards that read list-safe input SHALL use the strict input API added in Laravel 13.40.0 wherever it is a behaviour-identical replacement for valid input (design §14.1 S11, task T-21). The rate-limit buckets those guards feed SHALL be proven by tests before and after the change.
 
 ### Requirement 14: MySQL test job in CI *(approved 2026-10-12)*
 
@@ -239,6 +240,33 @@ A Track A change and a Track B change are never combined in one PR.
 3. The job SHALL use only throwaway, CI-local credentials for the service container. It SHALL NOT use any repository secret, and SHALL NOT connect to any staging or production resource.
 4. `staging.yml` and `production.yml` SHALL NOT change in this spec.
 5. The job SHALL be added in the commit directly after T-1 (task C-1), so every later Spec 16 commit is checked on both engines when the PR runs.
+
+### Requirement 15: Laravel 13.40.0 upgrade and dependency security *(approved 2026-11-07)*
+
+**User Story:** As the product owner, I want this branch to ship on dependencies with no known advisories, verified on the framework version it ships with, so that the PR does not merge known vulnerabilities.
+
+#### Acceptance Criteria
+
+1. The user's `composer upgrade` of 2026-11-07 (design §16.1) SHALL be committed as task T-20, with every package version and reference identical to the user's lock.
+2. WHEN T-20 is committed THEN `composer audit` SHALL report no advisories.
+3. `composer.json` SHALL require `laravel/framework` `^13.40`, because T-21 uses an API that 13.40.0 added.
+4. Design §1.2 and §14.5 SHALL be re-verified on 13.40.0 before any step runs on it (HANDOFF §2; done in design §16.2).
+5. The API SHALL NOT be affected: both suites pass with no skips, the fixture digest stays unchanged and `route:list --path=api --except-vendor` still lists 163 routes.
+6. `composer audit` SHALL NOT be added to CI *(user decision, 2026-11-07)*. No workflow file changes in this requirement.
+7. The test suite SHALL pass on any date. Tests that read the current month SHALL pin it (task T-23), and the app's behaviour in April and May, which are not school months, SHALL be covered by tests.
+
+### Requirement 16: API-only repository *(approved 2026-11-07)*
+
+**User Story:** As the product owner, I want this repository to contain only the JSON API, so that no frontend tooling, dependency or asset is left behind from before the Next.js apps existed.
+
+#### Acceptance Criteria
+
+1. The frontend toolchain, stylesheets, icons, ignore rules, environment variables and port mapping listed in design §17.1 SHALL be removed in task T-22.
+2. `composer.json` SHALL NOT call Node: the `dev` script SHALL be removed.
+3. Transactional email SHALL keep working: `resources/views/**` and `public/images/sunbites.png` SHALL stay, and a test SHALL prove the logo the email layout uses exists.
+4. Every audit command in design §17.3 SHALL return its expected result.
+5. The tooling the frontend session uses for the two Next.js apps (design §17.1 *Keep*) SHALL stay, and `~/sunbites-pos` and `~/sunbites-portal` SHALL NOT be touched.
+6. The API SHALL NOT be affected: both suites pass with no skips, the fixture digest stays unchanged and `route:list --path=api --except-vendor` still lists 163 routes.
 
 ---
 

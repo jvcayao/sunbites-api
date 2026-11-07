@@ -31,7 +31,7 @@ The refactor has two tracks:
 | Track B | B-27 (list input returns 500: six untyped `exists` rules and four `(string)` casts of raw input; found in the final QA for the same pattern as B-26) | **Approved** 2026-10-31 (the user's final-QA instruction to find and fix the same scenario) |
 | CI | Add a MySQL 8.4 test job to `ci.yml` (task C-1, §15) | **Approved** 2026-10-12 |
 
-### 1.2 Verified framework facts (installed `laravel/framework` v13.39.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) and on 13.39.0 on 2026-10-30 (`336a826`), each after a `composer update`)
+### 1.2 Verified framework facts (installed `laravel/framework` v13.40.0; first verified on 13.33.0 on 2026-09-26, re-verified on 13.35.0 on 2026-10-09, on 13.37.0 on 2026-10-17 (`5b5d5e3`), on 13.38.0 on 2026-10-23 (`880d4c0`, a PHP security patch) on 13.39.0 on 2026-10-30 (`336a826`) and on 13.40.0 on 2026-11-07 (§16.2), each after a `composer update`)
 
 | Fact | Verified in |
 |---|---|
@@ -1322,7 +1322,7 @@ Replace the `abort_unless(..., 403, 'You do not have access to this student.')` 
 All work happens on the **current branch, `bump-laravel-13-latest`** (decided 2026-10-09: no new branch), following `.claude/agents/git-workflow.md`'s commit conventions:
 - **Branch:** `bump-laravel-13-latest`; start commit **`3454977`** (`<spec16-start-sha>`). Never commit on `main`.
 - **First commit:** the spec, steering update and Pint rule (`docs(spec16): …`), then T-1 onward.
-- **One commit per task group** (T-1 … T-19, C-1) and **one commit per approved Track B item**. Commit subjects follow `type(scope): description` (imperative, < 72 chars), for example:
+- **One commit per task group** (T-1 … T-23, C-1) and **one commit per approved Track B item**. Commit subjects follow `type(scope): description` (imperative, < 72 chars), for example:
   - `test(contract): freeze API response shapes for all 165 routes` (T-1)
   - `refactor(pos): extract checkout, void and stock services` (T-3)
   - `chore(deps): remove fortify and laravel-cart` (T-17)
@@ -1578,6 +1578,7 @@ A full scan of `app/` against Laravel 13.35 idioms, the project's `laravel-best-
 | S8 | Laravel 13 attributes | model attributes (§4.5.5), `#[Scope]`, `#[UsePolicy]`, `#[Authorize]`, `#[Tries]`/`#[Backoff]`, `ShouldQueueAfterCommit` | as designed | T-2, T-12, T-14, T-16 | see each section |
 | S9 | `casts()` method and `Attribute::make()` everywhere | 1 `$casts` property, 1 legacy accessor | §4.5.3 | T-12 | Same casts and accessor |
 | S10 | Generic docblocks for static analysis | 6 models missing `@use HasFactory<…>`, 52 relations without `@return Relation<Model, $this>` | §4.5.5 | T-16 | Docblocks only |
+| S11 | `$request->string($key, strict: true)` (added in 13.40.0) instead of a hand-written list guard | 2: `AppServiceProvider::scalarInput()` (2 callers), `UpdateStudentStatusRequest::rules()` | §16.5 | T-21 | Strings and numbers give the same value. Invalid input only changes which rate-limit bucket a rejected request counts against, never a response |
 
 ### 14.2 Already aligned (verified; no change)
 
@@ -1632,6 +1633,8 @@ Any unexpected hit is fixed in the T-18 commit, behaviour-identically. If it can
 
 *Re-checked on 13.38.0 (2026-10-23): no attribute class was added after 13.35.0. Every class under `Illuminate/**/Attributes/` is in the table below.*
 
+*Re-checked on 13.40.0 (2026-11-07): 13.40.0 changed nothing under `Attributes/`. The 80 files there include one attribute this table had missed, `#[WithoutMigrationEvents]` (now listed), and `Queue/Attributes/ReadsQueueAttributes`, which is a trait, not an attribute.*
+
 Source: every class under `vendor/laravel/framework/src/Illuminate/**/Attributes/` in the installed 13.35.0 (listed 2026-10-09). The article *"PHP Attributes in Laravel 13: A Comprehensive Guide"* (msaied.com) was cross-checked. It covers the Eloquent model attributes (`Fillable`, `Guarded`, `Unguarded`, `Hidden`, `Visible`, `Appends`, `Touches`, `Table`, `Connection`) and the queue attributes (`Tries`, `Timeout`, `Backoff`), states that attributes are optional and that properties remain supported, and is fully consistent with the table below. Each attribute's applicability was verified with `rg` against `app/`, `database/factories` and `tests/`.
 
 **Use only what this table says. Do not add any attribute marked N/A or Forbidden.**
@@ -1663,6 +1666,7 @@ Source: every class under `vendor/laravel/framework/src/Illuminate/**/Attributes
 | Resources | `#[Collects]`, `#[PreserveKeys]` | N/A | no `ResourceCollection` subclass declares `$collects`/`$preserveKeys` |
 | Testing (Laravel) | `#[Seed]`, `#[Seeder]`, `#[SetUp]`, `#[TearDown]` | Not used | all 80 existing seeding calls are `$this->seed(PermissionSeeder::class)` in `setUp()`. `#[Seed]`/`#[Seeder]` seed during migration (`CanConfigureMigrationCommands`), not per test, so new tests follow the existing `setUp()` pattern for consistency |
 | Testing (Laravel) | `#[UnitTest]` | N/A | pure unit tests already extend `PHPUnit\Framework\TestCase` (e.g. `tests/Unit/CreditEnumsTest.php`) |
+| Testing (Laravel) | `#[WithoutMigrationEvents]` | N/A | no test silences migration events (0 uses) |
 | Testing (PHPUnit 12) | `#[DataProvider]`, `#[Test]`, `#[Group]`, … | Use only if needed | 0 docblock annotations exist (PHPUnit 12 removed them). Tests are named `test_*`, so `#[Test]` is not needed. Providers must be static and literal (§4.1.5) |
 
 **Unit test base classes in this spec:**
@@ -1755,3 +1759,226 @@ Every Track A commit must leave this table unchanged, except the route count aft
 2. The existing `test` job is unchanged: `git diff HEAD~1 -- .github/workflows/ci.yml` shows only added lines after the `test` job.
 3. The job's command is equivalent to the local MySQL gate (§11.1), and the MySQL gate passes, including the T-1 contract suite.
 4. The implementer **cannot** run GitHub Actions. The first real run happens when the user opens the PR. The user confirms both jobs are green on the PR page.
+
+## 16. Laravel 13.40.0 upgrade (tasks T-20, T-21 and T-23; Req 15 and 13.5; approved 2026-11-07)
+
+The user ran `composer upgrade` on the host on 2026-11-07, after step 45, and asked for the backend to be verified against it and aligned with it.
+
+### 16.1 What the upgrade changed
+
+25 packages moved; none were added or removed. `composer.json` did not change, and `maatwebsite/excel` (`4.x-dev`, the cause of B-19) stayed on reference `90b012ef86`.
+
+| Package | From | To |
+|---|---|---|
+| `laravel/framework` | 13.39.0 | 13.40.0 |
+| `symfony/console`, `finder`, `http-foundation`, `http-kernel`, `routing`, `translation`, `yaml` | 8.1.10 | 8.1.11 |
+| `symfony/filesystem` | 8.1.9 | 8.1.11 |
+| `symfony/deprecation-contracts`, `event-dispatcher-contracts`, `translation-contracts` | 3.7.1 | 3.8.1 |
+| `symfony/service-contracts` | 3.7.3 | 3.8.1 |
+| `spatie/laravel-activitylog` | 5.1.3 | 5.1.4 |
+| `spatie/flare-client-php` | 3.5.1 | 3.6.0 |
+| `spatie/flare-daemon` | 0.3.1 | 0.3.2 |
+| `spatie/laravel-error-share` | 1.0.10 | 1.0.11 |
+| `phpunit/phpunit` | 12.5.42 | 12.5.43 |
+| `sentry/sentry` | 4.35.0 | 4.36.0 |
+| `resend/resend-php` | 1.17.0 | 1.18.0 |
+| `aws/aws-sdk-php` | 3.402.4 | 3.403.1 |
+| `filp/whoops` | 2.18.7 | 2.19.2 |
+| `league/commonmark` | 2.10.6 | 2.10.7 |
+| `league/uri`, `league/uri-interfaces` | 7.9.1 | 7.10.0 |
+
+Side effects of running it on the host: `post-update-cmd` ran `boost:update`, which changed the PHPUnit version in three `.claude/skills/testing-best-practices/` files, and the host's Composer 2.8.12 moved `plugin-api-version` from 2.9.0 to 2.6.0 (Sail's Composer 2.10.3 writes 2.9.0).
+
+**Why it ships in this PR.** The lock committed at `8a708ff` fails `composer audit`: 8 advisories across 5 packages, none of which the audit reported on 2026-10-31. The upgrade fixes all of them.
+
+| Package | Advisory | Issue |
+|---|---|---|
+| `symfony/http-foundation` | CVE-2026-118514 | HEAD requests bypass the `methods` option of access control |
+| `symfony/http-foundation` | PKSA-pr6q-2w5s-kzzf | Path rules enforced in front of PHP can be bypassed |
+| `symfony/http-foundation` | PKSA-nxjs-s6hn-vb6m | The `private_ranges` trusted-proxies shortcut trusts clients presenting an IPv4-mapped address |
+| `symfony/http-foundation` | PKSA-b2gg-vk1g-6d5q | Generated URLs can point to a host chosen by the client |
+| `symfony/http-kernel` | PKSA-3gxv-7xhq-mgmz | Inline fragments let untrusted forwarded headers set the host, scheme and port |
+| `symfony/routing` | CVE-2026-118516 | Host placeholders can match the start of the path in compiled URL matchers |
+| `symfony/filesystem` | PKSA-g499-cm4q-v35y | `Path` treats any prefix before `://` as a root, letting paths escape |
+| `symfony/yaml` | PKSA-nktx-f1n1-b4yd | Exponential and quadratic parse times in the YAML parser |
+
+### 16.2 Re-verification on 13.40.0 (HANDOFF §2)
+
+Method: the framework's `v13.39.0...v13.40.0` comparison (47 commits, 105 files), checked against every file §1.2 and B-27 cite.
+
+| File | Changed? | Effect on this spec |
+|---|---|---|
+| `Foundation/Bootstrap/HandleExceptions` | Yes | `handleError()` now returns `false` for suppressed errors. Reported warnings still throw `ErrorException`, so B-27's premise holds |
+| `Foundation/Configuration/Middleware` | Yes | Additive: `replace()` also takes an array, and `insertBefore()`/`insertAfter()` are new. The priority list that §1.2 relies on is untouched |
+| `Support/Traits/InteractsWithData` | Yes | Adds an optional `$strict` to `string()`, `boolean()`, `integer()` and `float()`. It defaults to `false`, and non-strict results are unchanged. T-21 uses it |
+| `Database/Concerns/ManagesTransactions` | Yes | A nested concurrency error now rolls back to its savepoint, and a lost connection during rollback clears the PDO. No app code relies on the old behaviour |
+| `Authorize`, `GuardsAttributes`, `HidesAttributes`, `Queue/Attributes/Tries`, `Backoff`, `Configuration/Exceptions`, `ValidatesWhenResolvedTrait`, `ShouldQueueAfterCommit`, `SendQueuedNotifications`, `SendQueuedMailable`, `DatabaseTransactionsManager`, `request.stub`, `JsonResource`, `Exceptions/Handler`, `ValidatesAttributes`, `Password`, `FormRequest` | No | §1.2 stands, line numbers included |
+| Anything under `Attributes/` | No | See the note in §14.5 |
+
+### 16.3 Verified on the upgraded `vendor/` before T-20 (spec owner, 2026-11-07)
+
+| Check | Result |
+|---|---|
+| MySQL and SQLite gates | 1684 tests, 4288 assertions, 0 skips, digest `e3317d25…` unchanged |
+| `--display-deprecations --display-phpunit-deprecations --display-notices --display-warnings` | Nothing reported |
+| Full suite under a faked clock, 13 runs on SQLite. In `phpunit.xml`'s UTC: 2027-01-31, 2027-03-31, 2028-02-29, 2027-08-31, 2026-12-31 23:30, 2027-04-15, 2027-05-20 and 2027-06-01 00:30 Manila time (still May 31 in UTC). In production's Asia/Manila: today, 2027-06-01 00:30, 2026-12-01 00:30, 2027-01-31 23:30 and 2027-04-01 00:30 | All 1684 pass on all 9 dates outside April and May, so there are no month-end, leap-day, year-end or timezone bugs. All 4 April and May runs show the same 3 tests failing or skipping (§16.7). B-25 only surfaced because a gate ran on a month-end date, so this closes that gap. The temporary PHPUnit extension lived in the container's `/tmp`, and it also fakes bavix's `ClockService`, which uses `new DateTimeImmutable` and so ignores `Carbon::setTestNow()` |
+| Production-style install in the container's `/tmp`: `composer install --no-dev`, with route cache on | Boots and lists 163 API routes |
+| Live HTTP | `/up` 200, unauthenticated API 401, login with a list `email` 422, the removed `/broadcasting/auth` 404 |
+
+### 16.4 T-20: commit the upgrade
+
+Commit what the user upgraded and this section verified. **Do not run `composer upgrade` or `composer update` again**: a newer release would not be covered by §16.3.
+
+```bash
+cp composer.lock <your scratchpad>/lock-user.json
+docker compose exec -T -u sail laravel.test composer require 'laravel/framework:^13.40' --no-update --no-scripts --no-interaction
+docker compose exec -T -u sail -e COMPOSER_IPRESOLVE=4 laravel.test composer update --lock --no-install --no-scripts --no-interaction
+```
+
+`COMPOSER_IPRESOLVE=4` is needed because Packagist times out from the container over IPv6. `--no-scripts` keeps the Boost and publish hooks from rewriting tracked files. The `--lock` run writes Sail's `plugin-api-version` back to 2.9.0 and refreshes `content-hash`.
+
+Expected results (any difference is a STOP):
+- `diff <your scratchpad>/lock-user.json composer.lock` shows only `content-hash` and `plugin-api-version`.
+- `git diff composer.json` is one line: `^13.7` to `^13.40`.
+- `vendor/bin/sail composer validate` reports only the existing `maatwebsite/excel` warning.
+- `composer audit` (with the same `COMPOSER_IPRESOLVE=4`) reports no advisories.
+- Both gates pass, the digest is unchanged and there are 163 routes.
+
+Commit these five paths only: `composer.json`, `composer.lock` and the three `.claude/skills/testing-best-practices/` files (`SKILL.md`, `rules/assertions.md`, `rules/performance.md`). There is no PHP change, so Pint reports no changes, and the commit body records `search-docs: not applicable (no code)`.
+
+### 16.5 T-21: adopt strict input (§14.1 S11)
+
+`scalarInput()` was written in B-27 because no framework method read input safely. Laravel 13.40.0 added one. The 13.x docs do not describe `strict` yet, so the evidence is the source: `InteractsWithData::string()` L266-L275.
+
+**Tests first.** The only rate-limit test, `Kitchen\AuthTest` L90, reaches the 5-per-IP limit first, so nothing proves the per-email and per-token buckets work. Add `tests/Feature/Kitchen/AuthRateLimitTest.php` (`make:test --phpunit Kitchen/AuthRateLimitTest`, `RefreshDatabase`, `Notification::fake()` where a reset email could send). Vary the address with `withServerVariables(['REMOTE_ADDR' => …])` so the IP limit never fires:
+1. `test_login_is_limited_per_email_across_ip_addresses`: 10 attempts from 10 addresses, then the 11th from a new address gets 429.
+2. `test_login_limit_for_one_email_does_not_block_another_email`: after that, another email from a new address does not get 429.
+3. `test_password_email_is_limited_per_email_across_ip_addresses`: 5 attempts, then the 6th gets 429.
+4. `test_password_reset_is_limited_per_email_across_ip_addresses`: the same on `/auth/password/reset`.
+5. `test_password_reset_without_email_is_limited_per_token_across_ip_addresses`: 5 attempts with the same token and no email, the 6th gets 429, and a different token does not.
+
+These describe existing behaviour, so **they must pass on the current code before you change it.** Paste that run in your report. A failure there is a real gap in rate limiting: STOP and report it.
+
+**Then change two files:**
+
+```php
+// app/Providers/AppServiceProvider.php: delete scalarInput() and its docblock
+RateLimiter::for('login', fn (Request $request) => [
+    Limit::perMinute(5)->by($request->ip()),
+    Limit::perMinute(10)->by('login:'.$request->string('email', strict: true)),
+]);
+
+RateLimiter::for('password-reset', fn (Request $request) => [
+    Limit::perMinute(3)->by($request->ip()),
+    Limit::perMinute(5)->by('pwd-reset:'.$request->string('email', $request->string('token', strict: true), strict: true)),
+]);
+
+// app/Http/Requests/Kitchen/UpdateStudentStatusRequest.php: delete $status and update the docblock
+Rule::when(
+    EnrollmentStatus::tryFrom($this->string('enrollment_status', strict: true)->value())?->requiresReason() ?? false,
+    // the two rule arrays are unchanged
+),
+```
+
+**Behaviour.** Strings and numbers give the same value, so existing rate-limit buckets do not move and valid requests behave the same. The only difference is which bucket a rejected request counts against: `true` or a list `email` now falls back to the token or an empty key. Validation still returns 422, and no response changes. `UpdateStudentStatusRequest` is identical for every input.
+
+All 14 `ListInputValidationTest` tests and the new tests must pass unedited after the change, on both drivers, with the digest unchanged. The commit body records the `search-docs` queries and that the source is the evidence for `strict`.
+
+### 16.6 Checked and deliberately not changed
+
+- **`composer audit` in CI:** the user decided on 2026-11-07 not to add it. CI runs Pint and the tests only. Run the audit by hand before a PR, as this spec does.
+- **Major versions** that `composer outdated --direct` reports (`phpunit/phpunit` 13, `spatie/laravel-permission` 8): each is its own upgrade, outside `composer upgrade`'s constraints.
+- **The three `is_scalar` guards** in `WaiveCreditRequest`, `VoidWalletTopUpRequest` and `SettleCreditRequest`, and the `is_string` guards in `ReplyFeedbackRequest` and `StoreFeedbackRequest`: they must leave a list in place so its `string` rule returns 422. `string(strict: true)` would turn the list into an empty string.
+- **`$request->enum()`:** it passes the raw value to `tryFrom()`, so a list raises a `TypeError`. Do not use it for unvalidated input.
+- **`$request->integer()` calls:** they stay non-strict, because `strict` would change responses for invalid input, which the contract freeze forbids.
+- **Other 13.40.0 additions** (`$middleware->insertBefore()`, `Queue::whenJobRunsLongerThan()`, `Schedule::whenTaskRunsLongerThan()`, commit-ID methods): the code has no use for them.
+- **`phpunit.xml`'s `APP_TIMEZONE=UTC`:** it stays. The suite also passes in production's Asia/Manila (§16.3), so nothing relies on the difference.
+
+### 16.7 T-23: pin the month-dependent tests
+
+The faked-clock runs in §16.3 found three tests that read the real current month with no handling for April and May, which are not school months. **Any CI run in April or May would fail**, the same kind of date bug as B-25, and it would first have appeared in April 2027.
+
+| Test | In April and May |
+|---|---|
+| `Reports\BillingReportTest::test_default_school_month_and_year_filters_to_current_school_period` | Error: its Arrange writes `strtolower(now()->format('F'))`, and `may` is not a `SchoolMonth` |
+| `StudentDetailTest::test_subscription_student_pos_lookup_includes_monthly_status` | Fails: asserts a monthly status that is correctly `null` then |
+| `StudentDetailTest::test_monthly_subscription_status_counts_completed_subscription_orders_only` | Skips itself, breaking the zero-skips rule |
+
+**This is not an app bug.** Every caller of `SchoolMonth::fromMonthNumber()` handles `null`: `BillingReportController::withDefaultPeriod()` falls back to the whole school year, `Student::currentMonthSubscriptionStatus()` returns `null`, and `AnalyticsController`, `PaymentController` and `EnrollmentService` skip the month. But no test proves that behaviour.
+
+**Named edits to existing tests** (the only ones allowed):
+1. Add `$this->travelTo('2026-11-15');` as the first line of each of the three tests above.
+2. In the third test, delete the `if ($status === null) { $this->markTestSkipped(…); }` block.
+
+**New tests** (they describe existing behaviour, so they pass without any app change):
+3. `BillingReportTest::test_default_filters_cover_the_whole_school_year_during_the_summer_break`: `travelTo('2027-05-20')`, then create payments for `june` 2026 and `march` 2027 (both school year 2026) and `june` 2025 (the previous one). `GET /api/v1/reports/billing` with no filters returns exactly the first two.
+4. `StudentDetailTest::test_subscription_student_pos_lookup_has_no_monthly_status_during_the_summer_break`: `travelTo('2027-05-20')`. The lookup returns 200 and `student.subscription_monthly_status` is `null`.
+
+No app code changes in T-23. After it, the suite has 1692 tests (1684, plus 5 in T-21, 1 in T-22 and 2 here). The spec owner re-runs the faked April and May dates to prove the fix.
+
+## 17. API-only repository (task T-22; Req 16; approved 2026-11-07)
+
+The user's instruction: remove every frontend leftover, because this repository is a clean API only. No app code is involved: `app/`, `config/`, `routes/`, `bootstrap/`, `database/`, `tests/`, `lang/`, `phpunit.xml` and `pint.json` have no reference to Inertia, Vite, Wayfinder, Ziggy, Tailwind, React or npm (`git grep`, 2026-11-07, excluding the false positives `invItem` and `reactivate`).
+
+### 17.1 Inventory (`git ls-files` at `8a708ff`)
+
+**Delete, tracked (`git rm`):**
+- Toolchain: `package.json`, `package-lock.json`, `pnpm-workspace.yaml`, `.npmrc`, `vite.config.ts`, `tsconfig.json`, `eslint.config.js`, `.prettierrc`, `.prettierignore`, `components.json`
+- Assets: `resources/css/app.css`, `public/favicon.ico`, `public/favicon.svg`, `public/apple-touch-icon.png`
+- Tooling: `.claude/skills/tailwindcss-development/`
+
+**Delete, gitignored on disk (do this before editing `.gitignore`):** `node_modules/` (282 MB), `public/build/`.
+
+**Edit:**
+| File | Change |
+|---|---|
+| `composer.json` | Remove the `dev` script (`npx concurrently …`). Sail already runs the server. `scripts` is not part of `content-hash` |
+| `boost.json` | Remove `tailwindcss-development` from `skills` |
+| `.env.example` | Remove `VITE_APP_NAME="${APP_NAME}"` and one of the blank lines around it. Do not touch `.env` |
+| `compose.yaml`, `compose-bkup.yaml` | Remove the `'${VITE_PORT:-5173}:${VITE_PORT:-5173}'` port mapping |
+| `.gitignore` | Remove `/bootstrap/ssr`, `/node_modules`, `/public/build`, `/public/fonts-manifest.dev.json`, `/public/hot`, `/resources/js/actions`, `/resources/js/routes`, `/resources/js/wayfinder`, `npm-debug.log`, `yarn-error.log` |
+| `.gitattributes` | Remove `*.css diff=css`, `*.html diff=html` and `.github/workflows/browser-tests.yml export-ignore` |
+
+**Keep, because they look related but are not leftovers:**
+- `public/index.php`, `public/.htaccess`, `public/robots.txt`, and `public/images/sunbites.png` (the logo in `resources/views/components/emails/layout.blade.php`).
+- `resources/views/**` (transactional emails) and `routes/web.php` (`GET /` returns JSON and `ExampleTest` covers it).
+- `config/cors.php` and the Sanctum config: the two frontends need them to reach the API.
+- `.claude/rules/frontend/`, `.claude/agents/react-component-expert.md` and the frontend notes in other agents: Spec 17 depends on them (its tasks 8.1 and 10.1) and they govern the Next.js apps, not this repository.
+- `.kiro/specs/17-*`, `.kiro/steering/**` and `docs/**`: planning documents. `.kiro/specs/17-*` belongs to the frontend session.
+- `vendor/laravel/sail` (its image includes Node) and the `laravel/pail` dev dependency: vendor-managed, and Pail has no Node dependency.
+
+### 17.2 Why this cannot break a deploy or a frontend
+
+- **Laravel Cloud (verified 2026-11-07, read-only, environment `main`):** the build command is `composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader`, and the deploy command is `php artisan migrate --force`. Neither runs npm.
+- **GitHub workflows:** no `npm` or `node` step in `ci.yml`, `staging.yml` or `production.yml`.
+- **Email:** `asset('images/sunbites.png')` is the only `public/` asset the code references, and there is no `@vite` or `Vite::` anywhere.
+- **Frontends:** no config in `~/sunbites-pos` or `~/sunbites-portal` references this repository, and they have their own toolchains.
+
+### 17.3 Audit (paste the output in the T-22 report and commit body)
+
+```bash
+git ls-files | grep -E '(^|/)(package(-lock)?\.json|pnpm-workspace\.yaml|\.npmrc|vite\.config\.|tsconfig\.json|eslint\.config\.|\.prettier|components\.json)'   # 0 lines
+git ls-files resources | grep -v '^resources/views/'                                                # 0 lines
+git ls-files public                                                                                 # exactly: .htaccess, images/sunbites.png, index.php, robots.txt
+git grep -nIE 'VITE_|@vite|Vite::|npx |npm ' -- app bootstrap config database routes resources tests composer.json compose.yaml compose-bkup.yaml .env.example .github .gitattributes   # 0 lines
+git grep -nIi 'inertia' -- app bootstrap config database routes resources tests composer.json       # 0 lines
+grep -nE 'node_modules|npm-debug|yarn-error|public/(build|hot)|resources/js|bootstrap/ssr' .gitignore   # 0 lines
+ls -d node_modules public/build                                                                     # both: No such file
+vendor/bin/sail composer validate                                                                   # only the existing maatwebsite/excel warning
+vendor/bin/sail artisan route:list --path=api --except-vendor                                       # 163 routes
+```
+
+### 17.4 Test
+
+Add one test to the existing `tests/Feature/EmailTemplateTest.php`: render a mailable that uses `<x-emails.layout>`, assert the HTML contains `images/sunbites.png`, and `assertFileExists(public_path('images/sunbites.png'))`. It guards the one asset this wipe must not take with it. It passes before and after the deletions.
+
+### 17.5 Regenerate Boost's output
+
+After the edits, run `vendor/bin/sail artisan boost:update` once, so the next `composer update` does not produce a surprise diff. Expected: `CLAUDE.md` changes only in the "Frontend Bundling" sentence, because that text depends on whether a `dev` script exists. If it recreates the Tailwind skill or changes anything else, STOP and report.
+
+### 17.6 Known remainder (not part of T-22)
+
+- **Boost's generated guidance:** `CLAUDE.md` still has its "Frontend Bundling" and `sail npm` lines. They come from `vendor/laravel/boost/.ai/foundation.blade.php` unconditionally and return on every `composer update`, so do not hand-edit them. The project section of `CLAUDE.md` already says there is no frontend.
+- **`AGENTS.md`:** a Boost copy from 2026-09-25 that `boost.json` no longer maintains (`agents` lists only `claude_code`). It is not a frontend resource, so it stays.
+- **`compose-bkup.yaml`:** it looks stale but is not frontend. Only its Vite line goes.
+- **Steering:** `.kiro/steering/tech.md` D6 and its Laravel version row need a small update, which is the user's to approve.

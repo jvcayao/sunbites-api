@@ -190,6 +190,12 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 43 | T-19 | `refactor(spec16): apply laravel-simplifier pass` |
 | 44 | B-26 | `fix(security): B-26 reject a staff role sent as a list` |
 | 45 | B-27 | `fix(api): B-27 return 422 for list input instead of 500` |
+| 46 | T-20 | `chore(deps): update to Laravel 13.40.0 and Symfony 8.1.11` |
+| 47 | T-21 | `refactor(http): use strict string input from Laravel 13.40` |
+| 48 | T-22 | `chore(repo): remove frontend leftovers from the API` |
+| 49 | T-23 | `test(dates): pin month-dependent tests to a school month` |
+
+**T-20 to T-23 (the Laravel 13.40.0 upgrade, the API-only repository and the month-dependent tests) were approved on 2026-11-07,** after the user ran `composer upgrade` and asked for the backend to be aligned with it, for every frontend leftover to be removed, and for a final QA of the same kind of scenario. They are steps 46 to 49, in that order, one at a time, each reported and accepted before the next (design §16 and §17). They are Track A: no API change and the digest stays unchanged. The §2 clean-tree check has two exceptions: T-20 starts with the user's uncommitted `composer.lock` and three skill files, and `.kiro/specs/17-*` belongs to the frontend session and must never be staged. Design §1.2 is already re-verified on 13.40.0 (design §16.2). **Do not add `composer audit` to CI** (user decision).
 
 **B-27 (list input returns 500: six untyped `exists` rules, four `(string)` casts, two rate-limiter keys and the reset token) was approved on 2026-10-31,** under the user's final-QA instruction to find and fix the same scenario as B-26. It is step 45 (design §5.25). Any gate failure is a STOP.
 
@@ -238,13 +244,13 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 45, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 49, stop. The user pushes and opens the PR.
 
 ---
 
 ## 7. Track-specific rules
 
-**Track A (T-1 … T-19, plus C-1):**
+**Track A (T-1 … T-23, plus C-1):**
 - Zero behaviour change. The fixture digest stays unchanged after T-1 (design §4.1.7). Existing tests are not edited, except the named edits in the `tasks.md` ground rules: T-12.3 (one line), T-17.1 (`TestCase` helper), B-01 (Arrange-only branch links), B-16 (two Act lines in `InventoryTest`), B-04 (deletions), B-05 (`BillingReportTest` seeds).
 - T-1 creates fixtures in **record mode**: MySQL gate first, then SQLite overrides only where shapes differ (design §4.1.2). Contract tests use `app.debug = false`. Recording happens **only** in T-1. The fixtures are gitignored, so the T-1 commit holds the harness and the tests, not the fixtures (T-1.8).
 
@@ -313,7 +319,7 @@ Next step per §6: <id> (waiting for "proceed")
 
 | Fact | Value |
 |---|---|
-| Repo | `~/sunbites-api` (Laravel 13.39.0 since `336a826` on 2026-10-30; T-1 to T-6 ran on 13.35.0, T-7 to B-20 on 13.37.0, B-20 to T-15 on 13.38.0. PHP 8.5, Sail) |
+| Repo | `~/sunbites-api` (Laravel 13.40.0 since T-20 on 2026-11-07; T-1 to T-6 ran on 13.35.0, T-7 to B-20 on 13.37.0, B-20 to T-15 on 13.38.0, T-16 to B-27 on 13.39.0. PHP 8.5, Sail) |
 | Branch / start SHA | `bump-laravel-13-latest` / `3454977` |
 | MySQL gate | design §11.1 (direct `vendor/bin/phpunit` with `-e DB_CONNECTION=mysql -e DB_DATABASE=testing` and credentials read from `.env`) + `[path] [--filter=name]` |
 | SQLite gate | `docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit [path] [--filter=name]` |
@@ -333,5 +339,8 @@ Next step per §6: <id> (waiting for "proceed")
 - **Tooling-order notes:** in T-9 and B-12 + B-13, `search-docs` (and, in T-9, the skills) ran after the code was written. Each time the implementer re-checked the code against the results, and nothing needed to change. The commit bodies say so.
 - **Dependency commits on this branch:** `5b5d5e3` (Laravel 13.37.0), `880d4c0` (13.38.0, a PHP security patch), `4784e9d` (T-15 composer metadata) and `336a826` (13.39.0, including symfony/mime 8.1.10). Both were verified by the full MySQL and SQLite gates with the contract fixtures unchanged.
 - **Security patch:** `symfony/mime` 8.1.7 → 8.1.10 for CVE-2026-45070 (email header injection; medium). It arrived with the user's `composer update` to Laravel 13.39.0 (`336a826`); `composer audit` is clean.
+- **Laravel 13.40.0 and security advisories (T-20):** the lock at `8a708ff` failed `composer audit` with 8 Symfony advisories published after 2026-10-31. The user's `composer upgrade` fixes them (design §16.1).
+- **API-only repository (T-22):** every frontend leftover is removed (design §17). Laravel Cloud's build and the workflows do not run npm, so deploys are unaffected.
+- **Month-dependent tests (T-23):** three tests would have failed or skipped on any CI run in April or May. They are pinned, and the app's April and May behaviour is now tested (design §16.7).
 - **Data check after deploy (B-22):** pre-registration birthdays edited in production before B-22 may be one or more days early, and so may the students approved from them. Pre-registrations are not audit-logged, so this is a manual check.
 - **Staging smoke tests:** the design §13.3 list, plus login → branch select → dashboard (B-02), References → Inventory → Archived/Unarchive (B-16) and Reports → Inventory → Export (B-19).

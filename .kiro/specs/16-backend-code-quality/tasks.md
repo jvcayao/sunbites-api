@@ -21,12 +21,12 @@
   - Read the current code of every file you will touch.
   - If the code differs from what the design describes, **stop and report**. Do not adapt silently.
 - **Delivery (Q3, design §6; updated 2026-10-09):** **do not create a new branch.** All commits go on the current branch, `bump-laravel-13-latest`. Confirm with `git branch --show-current` before every commit, and never commit on `main`.
-  - **One commit per task group** (T-1 … T-19, C-1) and **one commit per approved Track B item**, in the order of design §6.
+  - **One commit per task group** (T-1 … T-23, C-1) and **one commit per approved Track B item**, in the order of design §6.
   - Subjects use `type(scope): description` (imperative, < 72 chars) per `.claude/agents/git-workflow.md`.
   - **No `Co-Authored-By`, `Signed-off-by` or AI attribution** in commits or the PR.
   - `<spec16-start-sha>` = **`3454977`** (HEAD of `bump-laravel-13-latest` on 2026-10-09, before any Spec 16 commit). Record it in the T-1 commit body.
   - The first commit is the spec/steering/rules documents: `docs(spec16): add backend code quality spec, steering update and pint rule`.
-  - After T-19, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
+  - After T-23, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
 - **Track A commits must not change any contract fixture:** the fixture digest (design §4.1.7) stays identical. Track B commits change only the fixtures listed in the task, proven by the per-file hash diff. **Fixtures are gitignored and are never committed:** never `git add -f` them.
 - **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), T-17.1 (`tests/TestCase.php` unused Fortify helper), B-01 (Arrange-only: branch links in `ParentAccountManagementTest` and `DashboardTest`, design §5.1), B-16 (one Act line in two `InventoryTest` tests, design §5.14), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
 - **`make:request` generates `authorize(): bool { return false; }`** (verified in the framework stub). Every Form Request in this spec MUST change it to `return true;`, since authorization lives in route middleware and `#[Authorize]`. Leaving `false` makes the endpoint return 403 for everyone. The contract suite catches this, but check it anyway.
@@ -428,6 +428,40 @@
 
 ---
 
+- [ ] 20. Commit the Laravel 13.40.0 upgrade *(approved 2026-11-07; design §16.4; Req 15; HANDOFF §6 step 46)*
+  - [ ] 20.1 Commit the user's `composer upgrade`
+    - Follow design §16.4 exactly. Do not run `composer upgrade` or `composer update` again.
+    - The lock may differ from the user's only in `content-hash` and `plugin-api-version`. `composer.json` changes one line (`^13.40`).
+    - Tests: none new. Full verification gate, plus `composer validate` and `composer audit` with no advisories.
+    - Fixtures: unchanged.
+    - _Requirements: 15.1, 15.2, 15.3, 15.5_
+
+- [ ] 21. Adopt strict input from Laravel 13.40.0 *(approved 2026-11-07; design §16.5 and §14.1 S11; Req 13.5; HANDOFF §6 step 47)*
+  - [ ] 21.1 Prove the rate-limit buckets, then replace the guards
+    - Add `tests/Feature/Kitchen/AuthRateLimitTest.php` (5 tests, design §16.5). They must pass on the current code first; paste that run. A failure is a STOP.
+    - Replace `AppServiceProvider::scalarInput()` and the `UpdateStudentStatusRequest` guard exactly as design §16.5 shows. Do not touch the guards listed in §16.6.
+    - Tests: the new tests and all of `ListInputValidationTest` pass unedited on both drivers. Full verification gate.
+    - Fixtures: unchanged.
+    - _Requirements: 13.5_
+
+- [ ] 22. Remove the frontend leftovers *(approved 2026-11-07; design §17; Req 16; HANDOFF §6 step 48)*
+  - [ ] 22.1 Make the repository API-only
+    - Add the logo test to `tests/Feature/EmailTemplateTest.php` first (design §17.4).
+    - Delete and edit exactly what design §17.1 lists, in that order. Everything under *Keep* stays.
+    - Run `boost:update` once (design §17.5).
+    - Tests: full verification gate. Run every audit command in design §17.3 and paste the output.
+    - Fixtures: unchanged.
+    - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6_
+
+- [ ] 23. Pin the month-dependent tests *(approved 2026-11-07; design §16.7; Req 15.7; HANDOFF §6 step 49)*
+  - [ ] 23.1 Make the suite pass on any date
+    - Make the named edits to the 3 existing tests and add the 2 new tests in design §16.7. No app code changes.
+    - Tests: full verification gate, 1692 tests with no skips. The spec owner re-runs the faked April and May dates.
+    - Fixtures: unchanged.
+    - _Requirements: 15.7_
+
+---
+
 ## Track B (26 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17, B-25–B-27 on 2026-10-31; one commit each; failing test first)
 
 - [x] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
@@ -575,6 +609,11 @@
 | 9.2–9.4 | nothing to implement (keep as is / prohibition) |
 | 10.2–10.27 | B-01 … B-27 |
 | 14.1–14.5 | C-1.1 |
+| 13.5 | T-21.1 |
+| 15.1, 15.2, 15.3, 15.5 | T-20.1 |
+| 15.7 | T-23.1 |
+| 15.4, 15.6 | nothing to implement (done in design §16.2; prohibition) |
+| 16.1–16.6 | T-22.1 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
 | 12.6, 12.7 | T-19.1 |
