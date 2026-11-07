@@ -277,9 +277,10 @@ A Track A change and a Track B change are never combined in one PR.
 1. The branch flow SHALL stay: PR branch → `staging` → `main`. `staging.yml` and the `staging` branch SHALL stay, and `ci.yml` SHALL keep running on pull requests to both `staging` and `main`.
 2. `staging.yml` SHALL NOT deploy: its `deploy` job SHALL be removed, and a push to `staging` SHALL run tests only (task T-24).
 3. `ci.yml`, `staging.yml` and `production.yml` SHALL each have one `test` job, identical in all three apart from `production.yml`'s `needs: validate`, which runs Pint and the full suite on MySQL 8.4. No workflow SHALL use SQLite.
-4. `production.yml`'s `validate` and `deploy` jobs SHALL NOT change.
+4. `production.yml`'s `validate` job SHALL NOT change, and its `deploy` job SHALL change only to name the `main` environment (task T-24.3, user decision).
 5. The audit in design §18.4 SHALL return its expected result.
 6. The API SHALL NOT be affected: both local suites pass with no skips, the fixture digest stays unchanged and `route:list --path=api --except-vendor` still lists 163 routes.
+7. Production SHALL deploy only through the `Deploy to Production` workflow. The user turns off push-to-deploy in the Laravel Cloud dashboard, and the docs SHALL say so (design §18.6).
 
 ---
 

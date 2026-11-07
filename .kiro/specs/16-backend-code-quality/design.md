@@ -2016,9 +2016,9 @@ The user removed the staging environment from Laravel Cloud. **The branch flow d
 ### 18.1 What this means for the PR
 
 - **The PR targets `staging`.** Merging it runs the tests and deploys nothing.
-- **The `staging` → `main` PR deploys to production.** Laravel Cloud's only environment is `main`, with `usesPushToDeploy = true`, branch `main` and deploy command `php artisan migrate --force` (read-only check, 2026-11-07). Each recent release deployed twice: once on the merge, and again about two minutes later from `production.yml`.
-- **What that merge carries:** 135 commits and 427 files relative to `main`. It has 0 migrations and no new `env()` reads, and `.env.example` only loses `VITE_APP_NAME`, so no production schema or environment change is needed.
-- **Smoke tests move.** There is no staging site any more, so run the §13.3 list locally before the `staging` → `main` PR, with both frontends against this branch on Sail. Repeat login, checkout and one report on production right after the deploy.
+- **The `staging` → `main` PR does not deploy, once the user has turned off push-to-deploy (§18.6).** Production then deploys only through `Deploy to Production`, whose deploy command is `php artisan migrate --force`. Before that decision, Laravel Cloud's only environment, `main`, had `usesPushToDeploy = true` (read-only check, 2026-11-07), and each recent release deployed twice: once on the merge, and again about two minutes later from `production.yml`.
+- **What that release carries:** 135 commits and 427 files relative to `main`. It has 0 migrations and no new `env()` reads, and `.env.example` only loses `VITE_APP_NAME`, so no production schema or environment change is needed.
+- **Smoke tests move.** There is no staging site any more, so run the §13.3 list locally before running `Deploy to Production`, with both frontends against this code on Sail. Repeat login, checkout and one report on production right after the deploy.
 
 **Why the deploy job must go first (verified read-only, 2026-11-07).** With one environment left, the same resolver turns any name into `main`: `cloud environment:get staging` returns `main`. So today a push to `staging` would pass its tests and then start a deployment of the production environment. GitHub runs the workflow file in the pushed commit, so merging this PR into `staging` is safe, because that commit no longer has the job. **Nothing else may be pushed to `staging` before this PR merges.**
 
@@ -2122,9 +2122,32 @@ Stage explicit paths only. `.kiro/specs/17-*` has another session's uncommitted 
 
 ### 18.5 Checked and deliberately not changed
 
-- **`production.yml`'s `deploy` job:** it runs `cloud deploy "Sunbites API Prod" production`. Laravel Cloud has no environment with that name, but it still works: `EnvironmentResolver` (CLI v0.4.2) falls back to the branch and then to the sole environment, so it resolves to `main`. The job's last eight runs succeeded. Whether to name `main` explicitly, and whether to keep push-to-deploy, is the user's decision. *(Corrected 2026-11-07: an earlier version of this note said the job fails. It does not.)*
+- **`production.yml`'s `deploy` job:** it runs `cloud deploy "Sunbites API Prod" production`. Laravel Cloud has no environment with that name, but it still works: `EnvironmentResolver` (CLI v0.4.2) falls back to the branch and then to the sole environment, so it resolves to `main`. The job's last eight runs succeeded. T-24.2 leaves this job alone; T-24.3 names `main` explicitly (§18.6), so it no longer depends on that fallback in a CLI version that GitHub installs fresh on every run. *(Corrected 2026-11-07: an earlier version of this note said the job fails. It does not.)*
 - **`config/cors.php`, the `.env.example` comment, `.claude/agents/git-workflow.md`, `LazyLoadingGuardTest`:** the user asked to remove only the deploy, and the branch flow in `git-workflow.md` is still right.
 - **Local test commands:** `vendor/bin/sail artisan test` and `composer test` still use SQLite through the gitignored `.env.testing`, and this spec's gates still run on both drivers. The user's request covers the CI workflows.
 - **Frontends:** `~/sunbites-pos`, `~/sunbites-portal` and `.kiro/specs/17-*` belong to the frontend session.
 - **`infrastructure/` and `docs/laravel-cloud-deployment.md`:** the staging sections stay as history under the note.
 - **Steering:** `.kiro/steering/` still says `staging.yml` deploys and CI uses SQLite. Changing it is the user's to approve.
+
+### 18.6 T-24.3: production deploys only through `production.yml` *(user decision, 2026-11-07)*
+
+After reviewing the GitHub and Laravel Cloud history, the user chose to make the `Deploy to Production` workflow the only way to release, because every release was deploying twice and production went live before that workflow's tests had finished.
+
+**The user turns off push-to-deploy on `main` in the Laravel Cloud dashboard,** before the `staging` → `main` PR. The CLI has no option for it. The spec owner checks `usesPushToDeploy` read-only before sign-off and reports the result, and until it is off, a merge to `main` still deploys.
+
+**T-24.3 changes (no PHP, so no suite run; the spec owner re-runs the final gates):**
+
+| File | Change |
+|---|---|
+| `.github/workflows/production.yml` | The last line becomes `run: cloud deploy "Sunbites API Prod" main -n`. Nothing else changes. `environment: production` stays: it is the GitHub Actions environment that holds `CLOUD_API_TOKEN`, not a Cloud environment |
+| `infrastructure/README.md`, `infrastructure/05-cicd.md`, `docs/laravel-cloud-deployment.md` | In the note, replace `Merging to \`main\` deploys to production.` with `Merging to \`main\` does not deploy: production deploys only through the Deploy to Production workflow.` |
+| `infrastructure/README.md` | Production's Deploy column becomes `Manual: Deploy to Production workflow` |
+
+**Audit:**
+```bash
+git grep -n 'cloud deploy' -- .github                        # exactly 1 line: production.yml, ... main -n
+git diff HEAD~1 -- .github/workflows/production.yml          # one changed line
+git grep -n 'deploys to production' -- docs infrastructure   # 0 lines
+git diff HEAD~1 --name-only                                  # exactly: production.yml and the 3 docs
+```
+The ruby check in §18.4 must still print `identical` and the same job lists.

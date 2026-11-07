@@ -476,6 +476,9 @@
     - Tests: none new. Full local verification gate, 1693 tests with no skips. Run every audit command in design §18.4 and paste the output.
     - Fixtures: unchanged.
     - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5, 17.6_
+  - [ ] 24.3 Name `main` in the production deploy and correct the docs note
+    - Make exactly the changes in design §18.6 and run its audit. No PHP changes.
+    - _Requirements: 17.4, 17.7_
 
 ---
 
@@ -633,6 +636,7 @@
 | 15.4, 15.6 | nothing to implement (done in design §16.2; prohibition) |
 | 16.1–16.6 | T-22.1 |
 | 17.1–17.6 | T-24.1, T-24.2 |
+| 17.7 | T-24.3, plus the user's Laravel Cloud setting |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
 | 12.6, 12.7 | T-19.1 |
