@@ -1,11 +1,13 @@
 # Sunbites API — Infrastructure
 
-Laravel API backend deployed to **Laravel Cloud** with two environments.
+> **2026-11-07:** the staging environment was removed from Laravel Cloud. The `staging` branch stays and runs tests only. Merging to `main` deploys to production. CI runs on MySQL 8.4, not SQLite. Staging deploy steps below are historical.
+
+Laravel API backend deployed to **Laravel Cloud** with one environment.
 
 | Environment | Branch | URL | Deploy |
 |-------------|--------|-----|--------|
-| Staging | `staging` | `https://api-staging.sunbites.com.ph` | Auto on push |
-| Production | `main` | `https://api.sunbites.com.ph` | Manual trigger |
+| Staging | `staging` | none | Tests only, no deploy |
+| Production | `main` | `https://api.sunbites.com.ph` | On merge to `main` |
 
 ---
 

@@ -1,5 +1,7 @@
 # Laravel Cloud Deployment — Full Process & Troubleshooting Record
 
+> **2026-11-07:** the staging environment was removed from Laravel Cloud. The `staging` branch stays and runs tests only. Merging to `main` deploys to production. CI runs on MySQL 8.4, not SQLite. Staging deploy steps below are historical.
+
 This document covers the complete deployment of the Sunbites API to Laravel Cloud, including every issue encountered and how it was resolved. It serves as a runbook for future deployments and a reference for the team.
 
 ---
