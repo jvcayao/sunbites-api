@@ -274,6 +274,8 @@ class StudentDetailTest extends TestCase
 
     public function test_subscription_student_pos_lookup_includes_monthly_status(): void
     {
+        $this->travelTo('2026-11-15');
+
         $student = Student::factory()->subscription()->enrolled()->create([
             'branch_id' => $this->branch->id,
             'qr_code' => 'SB-MONTHLY001X',
@@ -308,6 +310,29 @@ class StudentDetailTest extends TestCase
         $this->assertEquals(0, $status['categories']['meal']['used']);
     }
 
+    /**
+     * T-23 (design §16.7): April and May are not school months, so a subscription
+     * student's lookup during the summer break must have a null monthly status for that
+     * reason, not because of their student type or a missing branch config.
+     */
+    public function test_subscription_student_pos_lookup_has_no_monthly_status_during_the_summer_break(): void
+    {
+        $this->travelTo('2027-05-20');
+
+        $student = Student::factory()->subscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+            'qr_code' => 'SB-SUMMERBRK01',
+        ]);
+
+        $response = $this->asManager()->postJson('/api/v1/pos/students/lookup', [
+            'type' => 'qr',
+            'value' => 'SB-SUMMERBRK01',
+        ]);
+
+        $response->assertOk();
+        $this->assertNull($response->json('student.subscription_monthly_status'));
+    }
+
     public function test_non_subscription_student_pos_lookup_has_null_monthly_status(): void
     {
         $student = Student::factory()->nonSubscription()->enrolled()->create([
@@ -326,6 +351,8 @@ class StudentDetailTest extends TestCase
 
     public function test_monthly_subscription_status_counts_completed_subscription_orders_only(): void
     {
+        $this->travelTo('2026-11-15');
+
         $student = Student::factory()->subscription()->enrolled()->create([
             'branch_id' => $this->branch->id,
         ]);
@@ -388,10 +415,6 @@ class StudentDetailTest extends TestCase
         ]);
 
         $status = $student->currentMonthSubscriptionStatus();
-
-        if ($status === null) {
-            $this->markTestSkipped('Current month is not a school month.');
-        }
 
         $mealStatus = $status['categories']['meal'];
         $this->assertEquals(2, $mealStatus['used']);

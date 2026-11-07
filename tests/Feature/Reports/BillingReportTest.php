@@ -108,6 +108,8 @@ class BillingReportTest extends TestCase
 
     public function test_default_school_month_and_year_filters_to_current_school_period(): void
     {
+        $this->travelTo('2026-11-15');
+
         $this->assertDefaultFiltersToCurrentSchoolPeriod();
     }
 
@@ -123,6 +125,48 @@ class BillingReportTest extends TestCase
         $this->travelTo('2026-10-15');
 
         $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    /**
+     * T-23 (design §16.7): April and May are not school months, so `withDefaultPeriod()`
+     * falls back to the whole school year instead of a single month.
+     */
+    public function test_default_filters_cover_the_whole_school_year_during_the_summer_break(): void
+    {
+        $this->travelTo('2027-05-20');
+
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $juneThisSchoolYear = StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => 2026,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $marchThisSchoolYear = StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'march',
+            'year' => 2027,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => 2025,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->sort()->values()->all();
+        $expected = collect([$juneThisSchoolYear->id, $marchThisSchoolYear->id])->sort()->values()->all();
+        $this->assertSame($expected, $ids);
     }
 
     /**
