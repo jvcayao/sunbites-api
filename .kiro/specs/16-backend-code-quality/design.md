@@ -1932,6 +1932,13 @@ The faked-clock runs in §16.3 found three tests that read the real current mont
 
 No app code changes in T-23. After it, the suite has 1692 tests (1684, plus 5 in T-21, 1 in T-22 and 2 here). The spec owner re-runs the faked April and May dates to prove the fix.
 
+**T-23.2, added after the T-23 review.** Comparing per-test assertion counts between a May run and a November run (`--log-junit`) found one more test: `Portal\SubscriptionStatusTest::test_portal_students_list_includes_monthly_status_for_subscription_student` wraps its assertions in `if ($studentData['subscription_monthly_status'] !== null)`. It made 3 assertions instead of 8 in April and May, so it passed without failing and the date runs could not flag it. Worse, it would pass in every month if the status regressed to always `null`. It is the only test whose count differs between those two runs.
+
+1. Named edit: add `$this->travelTo('2026-11-15');` as its first line, add `$this->assertNotNull($studentData['subscription_monthly_status']);` and remove the `if`, so its assertions always run.
+2. New test: `test_portal_students_list_has_null_monthly_status_during_the_summer_break`. `travelTo('2027-05-20')`, then a subscription student attached to the parent gets 200 and a `null` `subscription_monthly_status`.
+
+After this the suite has 1693 tests, and a May run and a November run must report the same assertion count.
+
 ## 17. API-only repository (task T-22; Req 16; approved 2026-11-07)
 
 The user's instruction: remove every frontend leftover, because this repository is a clean API only. No app code is involved: `app/`, `config/`, `routes/`, `bootstrap/`, `database/`, `tests/`, `lang/`, `phpunit.xml` and `pint.json` have no reference to Inertia, Vite, Wayfinder, Ziggy, Tailwind, React or npm (`git grep`, 2026-11-07, excluding the false positives `invItem` and `reactivate`).

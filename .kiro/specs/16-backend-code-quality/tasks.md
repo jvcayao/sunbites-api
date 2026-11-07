@@ -454,9 +454,14 @@
     - _Requirements: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6_
 
 - [ ] 23. Pin the month-dependent tests *(approved 2026-11-07; design §16.7; Req 15.7; HANDOFF §6 step 49)*
-  - [ ] 23.1 Make the suite pass on any date
+  - [x] 23.1 Make the suite pass on any date
     - Make the named edits to the 3 existing tests and add the 2 new tests in design §16.7. No app code changes.
     - Tests: full verification gate, 1692 tests with no skips. The spec owner re-runs the faked April and May dates.
+    - Fixtures: unchanged.
+    - _Requirements: 15.7_
+  - [ ] 23.2 Remove the conditional assertions from the portal monthly status test
+    - Make the named edit and add the new test in design §16.7 (T-23.2). No app code changes.
+    - Tests: full verification gate, 1693 tests with no skips. The spec owner confirms a May run and a November run report the same assertion count.
     - Fixtures: unchanged.
     - _Requirements: 15.7_
 

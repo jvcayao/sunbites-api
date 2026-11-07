@@ -203,6 +203,8 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 ```
 Run Pint and `ListInputValidationTest` on both drivers. T-22's full gate follows straight after, so report this commit together with T-22.
 
+**Authorised extra commit (2026-11-07):** right after step 49 (T-23), `test(dates): always assert the portal monthly status`, as design §16.7 (T-23.2) states. Report it as usual.
+
 **T-20 to T-23 (the Laravel 13.40.0 upgrade, the API-only repository and the month-dependent tests) were approved on 2026-11-07,** after the user ran `composer upgrade` and asked for the backend to be aligned with it, for every frontend leftover to be removed, and for a final QA of the same kind of scenario. They are steps 46 to 49, in that order, one at a time, each reported and accepted before the next (design §16 and §17). They are Track A: no API change and the digest stays unchanged. The §2 clean-tree check has two exceptions: T-20 starts with the user's uncommitted `composer.lock` and three skill files, and `.kiro/specs/17-*` belongs to the frontend session and must never be staged. Design §1.2 is already re-verified on 13.40.0 (design §16.2). **Do not add `composer audit` to CI** (user decision).
 
 **B-27 (list input returns 500: six untyped `exists` rules, four `(string)` casts, two rate-limiter keys and the reset token) was approved on 2026-10-31,** under the user's final-QA instruction to find and fix the same scenario as B-26. It is step 45 (design §5.25). Any gate failure is a STOP.
@@ -252,7 +254,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 49, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 49 and its authorised extra commit, stop. The user pushes and opens the PR.
 
 ---
 
