@@ -9,6 +9,8 @@ return [
             'http://localhost:3001',
             'https://pos.sunbites.com.ph',
             'https://portal.sunbites.com.ph',
+            'https://pos-staging.sunbites.com.ph',
+            'https://portal-staging.sunbites.com.ph',
         ],
         array_map('trim', explode(',', env('CORS_ALLOWED_ORIGINS', '')))
     )),

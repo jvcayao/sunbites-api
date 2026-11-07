@@ -14,9 +14,8 @@ use ReflectionMethod;
 use Tests\TestCase;
 
 /**
- * Lazy loading throws in the test suite and is only logged in other non-production
- * environments such as `local`, so an untested lazy load never breaks a page (Spec 16
- * T-13, design §4.5.4, H14).
+ * Lazy loading throws in the test suite and is only logged in `local` and `staging`, so an
+ * untested lazy load never breaks a page (Spec 16 T-13, design §4.5.4, H14).
  */
 class LazyLoadingGuardTest extends TestCase
 {
@@ -47,9 +46,9 @@ class LazyLoadingGuardTest extends TestCase
         $this->assertLazyLoadIsLoggedIn('local');
     }
 
-    public function test_a_lazy_load_is_logged_not_thrown_in_any_other_environment(): void
+    public function test_a_lazy_load_is_logged_not_thrown_in_staging(): void
     {
-        $this->assertLazyLoadIsLoggedIn('preview');
+        $this->assertLazyLoadIsLoggedIn('staging');
     }
 
     private function assertLazyLoadIsLoggedIn(string $environment): void

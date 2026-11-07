@@ -16,23 +16,22 @@ Before ANY commit:
 
 ## Branch Strategy
 
-This describes `sunbites-api`, where merging to `main` deploys to production. The Next.js apps follow their own repositories' workflows.
-
 ```
-main (production, deploys on merge)
-  └── feature/TICKET-123-add-user-auth
-  └── bugfix/TICKET-456-fix-login-error
-  └── hotfix/TICKET-789-critical-security-fix
+main (production)
+  └── staging
+        └── feature/TICKET-123-add-user-auth
+        └── bugfix/TICKET-456-fix-login-error
+        └── hotfix/TICKET-789-critical-security-fix
 ```
 
 ### Branch Types
 
 | Type | Pattern | Base | Merges To |
 |------|---------|------|-----------|
-| Feature | `feature/TICKET-description` | main | main |
-| Bugfix | `bugfix/TICKET-description` | main | main |
-| Hotfix | `hotfix/TICKET-description` | main | main |
-| Release | `release/v1.2.0` | main | main |
+| Feature | `feature/TICKET-description` | staging | staging |
+| Bugfix | `bugfix/TICKET-description` | staging | staging |
+| Hotfix | `hotfix/TICKET-description` | main | main → staging |
+| Release | `release/v1.2.0` | staging | main → staging |
 
 ## Commit Messages
 
@@ -83,7 +82,7 @@ type(scope): short description
 
 ```bash
 git fetch origin
-git rebase origin/main
+git rebase origin/staging
 php artisan test --compact
 vendor/bin/pint --dirty --format agent
 npm run type-check
@@ -113,18 +112,20 @@ Short description of change
 
 | Direction | Strategy | Reason |
 |-----------|----------|--------|
-| Feature → Main | Squash and merge | Clean single commit per feature |
+| Feature → Staging | Squash and merge | Clean single commit per feature |
+| Staging → Main | Merge commit | Preserves history for release tracking |
 
 ## Protected Branches
 
 | Branch | Rules |
 |--------|-------|
 | `main` | Require PR, require reviews, require CI pass |
+| `staging` | Require PR, require CI pass |
 
 ## Release Process
 
 ```bash
-# 1. Create release branch from main
+# 1. Create release branch from staging
 git checkout -b release/v1.2.0
 
 # 2. Update version in composer.json / package.json as needed
@@ -133,6 +134,9 @@ git checkout -b release/v1.2.0
 git checkout main && git pull origin main
 git tag -a v1.2.0 -m "Release v1.2.0"
 git push origin v1.2.0
+
+# 4. Merge back to staging
+git checkout staging && git merge main && git push origin staging
 ```
 
 ## Secrets Prevention

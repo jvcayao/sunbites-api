@@ -96,9 +96,8 @@ class AppServiceProvider extends ServiceProvider
 
         Model::preventLazyLoading(! $this->app->isProduction());
 
-        // Throw only in the test suite. Every other non-production environment, such as `local`
-        // (developers running the POS/portal against the local API), logs instead, so an untested
-        // lazy load never breaks a page.
+        // Throw only in the test suite. `local` (developers running the POS/portal against the
+        // local API) and `staging` log instead, so an untested lazy load never breaks a page.
         if (! $this->app->environment('testing')) {
             Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
                 Log::warning('Lazy loading violation', ['model' => $model::class, 'relation' => $relation]);
