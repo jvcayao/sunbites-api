@@ -2016,9 +2016,11 @@ The user removed the staging environment from Laravel Cloud. **The branch flow d
 ### 18.1 What this means for the PR
 
 - **The PR targets `staging`.** Merging it runs the tests and deploys nothing.
-- **The `staging` → `main` PR deploys to production.** Laravel Cloud's only environment is `main`, with `usesPushToDeploy = true`, branch `main` and deploy command `php artisan migrate --force` (read-only check, 2026-11-07). Its recent deployments are merges from `staging` to `main`.
+- **The `staging` → `main` PR deploys to production.** Laravel Cloud's only environment is `main`, with `usesPushToDeploy = true`, branch `main` and deploy command `php artisan migrate --force` (read-only check, 2026-11-07). Each recent release deployed twice: once on the merge, and again about two minutes later from `production.yml`.
 - **What that merge carries:** 135 commits and 427 files relative to `main`. It has 0 migrations and no new `env()` reads, and `.env.example` only loses `VITE_APP_NAME`, so no production schema or environment change is needed.
 - **Smoke tests move.** There is no staging site any more, so run the §13.3 list locally before the `staging` → `main` PR, with both frontends against this branch on Sail. Repeat login, checkout and one report on production right after the deploy.
+
+**Why the deploy job must go first (verified read-only, 2026-11-07).** With one environment left, the same resolver turns any name into `main`: `cloud environment:get staging` returns `main`. So today a push to `staging` would pass its tests and then start a deployment of the production environment. GitHub runs the workflow file in the pushed commit, so merging this PR into `staging` is safe, because that commit no longer has the job. **Nothing else may be pushed to `staging` before this PR merges.**
 
 ### 18.2 Correcting the earlier attempt
 
@@ -2120,7 +2122,7 @@ Stage explicit paths only. `.kiro/specs/17-*` has another session's uncommitted 
 
 ### 18.5 Checked and deliberately not changed
 
-- **`production.yml`'s `deploy` job:** it runs `cloud deploy "Sunbites API Prod" production`, but Laravel Cloud's only environment is `main`, and the CLI exits with "Unable to resolve environment" when the name does not match. So that job fails today, and push-to-deploy already deploys on merge. Retargeting or removing it is the user's decision. It is manual (`workflow_dispatch`), so nothing runs it on merge.
+- **`production.yml`'s `deploy` job:** it runs `cloud deploy "Sunbites API Prod" production`. Laravel Cloud has no environment with that name, but it still works: `EnvironmentResolver` (CLI v0.4.2) falls back to the branch and then to the sole environment, so it resolves to `main`. The job's last eight runs succeeded. Whether to name `main` explicitly, and whether to keep push-to-deploy, is the user's decision. *(Corrected 2026-11-07: an earlier version of this note said the job fails. It does not.)*
 - **`config/cors.php`, the `.env.example` comment, `.claude/agents/git-workflow.md`, `LazyLoadingGuardTest`:** the user asked to remove only the deploy, and the branch flow in `git-workflow.md` is still right.
 - **Local test commands:** `vendor/bin/sail artisan test` and `composer test` still use SQLite through the gitignored `.env.testing`, and this spec's gates still run on both drivers. The user's request covers the CI workflows.
 - **Frontends:** `~/sunbites-pos`, `~/sunbites-portal` and `.kiro/specs/17-*` belong to the frontend session.
