@@ -17,10 +17,9 @@ class UpdateStudentStatusRequest extends FormRequest
     }
 
     /**
-     * `string(..., strict: true)` reads the status before it is validated as an empty
-     * string for a missing, unknown or non-scalar value, so `tryFrom()` always receives a
-     * string and `requiresReason()` falls through to the `enrollment_status` rule (a 422)
-     * instead of throwing.
+     * `string(..., strict: true)` reads a missing or list value as an empty string, and
+     * `tryFrom()` returns null for that or any unknown value, so the `enrollment_status`
+     * rule can return a 422 instead of this method throwing.
      *
      * @return array<string, mixed>
      */
