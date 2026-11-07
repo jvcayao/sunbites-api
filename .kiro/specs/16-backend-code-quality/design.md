@@ -1832,16 +1832,32 @@ Commit what the user upgraded and this section verified. **Do not run `composer 
 ```bash
 cp composer.lock <your scratchpad>/lock-user.json
 docker compose exec -T -u sail laravel.test composer require 'laravel/framework:^13.40' --no-update --no-scripts --no-interaction
-docker compose exec -T -u sail -e COMPOSER_IPRESOLVE=4 laravel.test composer update --lock --no-install --no-scripts --no-interaction
+cat <your scratchpad>/lock_meta.php | docker compose exec -T -u sail laravel.test php
 ```
 
-`COMPOSER_IPRESOLVE=4` is needed because Packagist times out from the container over IPv6. `--no-scripts` keeps the Boost and publish hooks from rewriting tracked files. The `--lock` run writes Sail's `plugin-api-version` back to 2.9.0 and refreshes `content-hash`.
+where `lock_meta.php` is:
+
+```php
+<?php
+Phar::loadPhar('/usr/bin/composer', 'composer.phar');
+require 'phar://composer.phar/vendor/autoload.php';
+$hash = Composer\Package\Locker::getContentHash(file_get_contents('composer.json'));
+$api = Composer\Plugin\PluginInterface::PLUGIN_API_VERSION;
+$lock = file_get_contents('composer.lock');
+$lock = preg_replace('/"content-hash": "[0-9a-f]{32}"/', '"content-hash": "'.$hash.'"', $lock, 1, $a);
+$lock = preg_replace('/"plugin-api-version": "[^"]+"/', '"plugin-api-version": "'.$api.'"', $lock, 1, $b);
+if ($a !== 1 || $b !== 1) { fwrite(STDERR, "anchors not found\n"); exit(1); }
+file_put_contents('composer.lock', $lock);
+echo "hash $hash, api $api\n";
+```
+
+**Why not `composer update --lock`** *(corrected 2026-11-07)*: the container cannot reach `repo.packagist.org` (IPv4 times out and IPv6 is refused, while the host and GitHub respond), so that command fails with curl error 28. It cannot run offline either, because the upgrade ran on the host and those versions are not in the container's Composer cache. It would only rewrite two lines, so this script writes them with Composer's own `Locker::getContentHash()` and `PLUGIN_API_VERSION`. Verified by the spec owner on a copy: expected `content-hash` `8084a95dc459e7951e7e71b70a8bfaec` and `plugin-api-version` `2.9.0`, exactly two changed lines, `composer validate` accepts the lock with the network disabled, and the same function reproduces the hash committed at `8a708ff`.
 
 Expected results (any difference is a STOP):
 - `diff <your scratchpad>/lock-user.json composer.lock` shows only `content-hash` and `plugin-api-version`.
 - `git diff composer.json` is one line: `^13.7` to `^13.40`.
 - `vendor/bin/sail composer validate` reports only the existing `maatwebsite/excel` warning.
-- `composer audit` (with the same `COMPOSER_IPRESOLVE=4`) reports no advisories.
+- `composer audit` reports no advisories. If it warns that Packagist "could not be fully loaded", its result may be stale: say so in your report and do not treat it as a STOP. The spec owner verifies the advisories separately.
 - Both gates pass, the digest is unchanged and there are 163 routes.
 
 Commit these five paths only: `composer.json`, `composer.lock` and the three `.claude/skills/testing-best-practices/` files (`SKILL.md`, `rules/assertions.md`, `rules/performance.md`). There is no PHP change, so Pint reports no changes, and the commit body records `search-docs: not applicable (no code)`.
