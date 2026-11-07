@@ -21,12 +21,12 @@
   - Read the current code of every file you will touch.
   - If the code differs from what the design describes, **stop and report**. Do not adapt silently.
 - **Delivery (Q3, design §6; updated 2026-10-09):** **do not create a new branch.** All commits go on the current branch, `bump-laravel-13-latest`. Confirm with `git branch --show-current` before every commit, and never commit on `main`.
-  - **One commit per task group** (T-1 … T-23, C-1) and **one commit per approved Track B item**, in the order of design §6.
+  - **One commit per task group** (T-1 … T-24, C-1) and **one commit per approved Track B item**, in the order of design §6.
   - Subjects use `type(scope): description` (imperative, < 72 chars) per `.claude/agents/git-workflow.md`.
   - **No `Co-Authored-By`, `Signed-off-by` or AI attribution** in commits or the PR.
   - `<spec16-start-sha>` = **`3454977`** (HEAD of `bump-laravel-13-latest` on 2026-10-09, before any Spec 16 commit). Record it in the T-1 commit body.
   - The first commit is the spec/steering/rules documents: `docs(spec16): add backend code quality spec, steering update and pint rule`.
-  - After T-23, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
+  - After T-24, stop and tell the user. **Do not push** unless the user asks; the user pushes, opens the PR and merges it, preferably without squash (design §6).
 - **Track A commits must not change any contract fixture:** the fixture digest (design §4.1.7) stays identical. Track B commits change only the fixtures listed in the task, proven by the per-file hash diff. **Fixtures are gitignored and are never committed:** never `git add -f` them.
 - **Existing tests must not be edited**, except where a task explicitly names the edit: T-12.3 (one line), T-17.1 (`tests/TestCase.php` unused Fortify helper), B-01 (Arrange-only: branch links in `ParentAccountManagementTest` and `DashboardTest`, design §5.1), B-16 (one Act line in two `InventoryTest` tests, design §5.14), B-04 (deletions), B-05 (`BillingReportTest` seed fix, design §5.5).
 - **`make:request` generates `authorize(): bool { return false; }`** (verified in the framework stub). Every Form Request in this spec MUST change it to `return true;`, since authorization lives in route middleware and `#[Authorize]`. Leaving `false` makes the endpoint return 403 for everyone. The contract suite catches this, but check it anyway.
@@ -467,6 +467,16 @@
 
 ---
 
+- [ ] 24. Remove the staging environment *(approved 2026-11-07; design §18; Req 17; HANDOFF §6 step 50)*
+  - [ ] 24.1 Delete the workflow and every reference to it
+    - Add `tests/Feature/CorsOriginsTest.php` first (design §18.2). The staging test must fail before the edit; paste that run.
+    - Delete `.github/workflows/staging.yml` and make every edit in design §18.2. `production.yml` stays as it is (§18.4).
+    - Tests: full verification gate, 1695 tests with no skips. Run every audit command in design §18.3 and paste the output.
+    - Fixtures: unchanged.
+    - _Requirements: 17.1, 17.2, 17.3, 17.5, 17.6_
+
+---
+
 ## Track B (26 items approved: B-01–B-05 and B-07–B-16 on 2026-10-09, B-17–B-19 on 2026-10-12, B-20–B-24 on 2026-10-17, B-25–B-27 on 2026-10-31; one commit each; failing test first)
 
 - [x] B-01. Cross-branch access *(design §5.1; after T-9 and T-7)*
@@ -478,6 +488,7 @@
   - Create `EnsureActiveBranch` via `make:middleware`, register the alias, apply it to the group with the exact allowlist, and remove the dead `MealPlannerController` checks.
   - Failing tests: a branch-scoped list without a header returns 422 with the exact message; each allowlisted route works without a header; the matrix test still passes.
   - Fixtures: new `422-no-branch` variants.
+  *(Superseded 2026-11-07: there is no staging environment. See design §18.)*
   - **Staging smoke test before production.**
   - _Requirements: 10.3_
 - [x] B-03. Stock race *(design §5.3; after T-3 and T-7)*
@@ -619,6 +630,8 @@
 | 15.7 | T-23.1 |
 | 15.4, 15.6 | nothing to implement (done in design §16.2; prohibition) |
 | 16.1–16.6 | T-22.1 |
+| 17.1, 17.2, 17.3, 17.5, 17.6 | T-24.1 |
+| 17.4 | nothing to implement (the user opens the PR; design §18.1) |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
 | 12.6, 12.7 | T-19.1 |

@@ -238,7 +238,7 @@ A Track A change and a Track B change are never combined in one PR.
 1. `.github/workflows/ci.yml` SHALL gain a second job, `test-mysql`, that runs the full PHPUnit suite against a temporary MySQL 8.4 service container, alongside the existing SQLite `test` job (which SHALL stay unchanged).
 2. The job SHALL call `vendor/bin/phpunit` directly with `DB_CONNECTION=mysql` and the service's connection settings, never `php artisan test` (design §11.1 explains why).
 3. The job SHALL use only throwaway, CI-local credentials for the service container. It SHALL NOT use any repository secret, and SHALL NOT connect to any staging or production resource.
-4. `staging.yml` and `production.yml` SHALL NOT change in this spec.
+4. `staging.yml` and `production.yml` SHALL NOT change in this spec. *(Superseded for `staging.yml` by Req 17, approved 2026-11-07.)*
 5. The job SHALL be added in the commit directly after T-1 (task C-1), so every later Spec 16 commit is checked on both engines when the PR runs.
 
 ### Requirement 15: Laravel 13.40.0 upgrade and dependency security *(approved 2026-11-07)*
@@ -268,6 +268,19 @@ A Track A change and a Track B change are never combined in one PR.
 5. The tooling the frontend session uses for the two Next.js apps (design §17.1 *Keep*) SHALL stay, and `~/sunbites-pos` and `~/sunbites-portal` SHALL NOT be touched.
 6. The API SHALL NOT be affected: both suites pass with no skips, the fixture digest stays unchanged and `route:list --path=api --except-vendor` still lists 163 routes.
 
+### Requirement 17: No staging environment *(approved 2026-11-07)*
+
+**User Story:** As the product owner, I want this repository to stop referencing the staging environment I removed from Laravel Cloud, so that nothing deploys to it, depends on it or conflicts with it.
+
+#### Acceptance Criteria
+
+1. `.github/workflows/staging.yml` SHALL be deleted, and `ci.yml` SHALL run on pull requests to `main` only (task T-24).
+2. `config/cors.php` SHALL NOT allow the `pos-staging` and `portal-staging` origins, and SHALL keep allowing both production origins and both local origins. Tests SHALL prove both.
+3. The audit in design §18.3 SHALL return its expected result.
+4. The single PR SHALL target `main`. Because merging to `main` deploys to production (design §18.1), the smoke tests SHALL run locally before the merge.
+5. The API SHALL NOT be affected: both suites pass with no skips, the fixture digest stays unchanged and `route:list --path=api --except-vendor` still lists 163 routes.
+6. Other sessions' files and the frontend repositories SHALL NOT be touched.
+
 ---
 
 ## Cross-Cutting Requirements
@@ -284,7 +297,7 @@ A Track A change and a Track B change are never combined in one PR.
 - **Tooling (non-negotiable):** Laravel Boost + `laravel-best-practices` on every PHP task, `testing-best-practices` on every test change, and a final `laravel-simplifier` pass over all backend changes (Req 12).
 - **Test environment:** never run config/route/event caching locally during this work (hazard H18).
 - **Existing tests:** never edited, except the edits named in `tasks.md` ground rules (T-12.3, T-17.1, B-01, B-04, B-05, B-16).
-- **Frontend integration:** every commit is checked against the FE integration matrix in design §13. After the single PR merges to `staging`, the full page checklist (design §13.3) is run on staging before promoting to `main`.
+- **Frontend integration:** every commit is checked against the FE integration matrix in design §13. *(Superseded 2026-11-07: the PR targets `main` and the smoke tests run before the merge; design §18.)* After the single PR merges to `staging`, the full page checklist (design §13.3) is run on staging before promoting to `main`.
 - **Delivery (Q3, updated 2026-10-09):** all work is committed on the **current branch `bump-laravel-13-latest`** (no new branch); start commit `3454977`; one commit per task group and per approved Track B item; `type(scope): description` subjects with no AI attribution trailers; the user opens and merges the single PR, preferably **without squash** so each area stays revertible (design §6).
 - **Code style:** Pint through Sail after every backend task (`.claude/rules/backend/laravel-pint.md`); PHP 8.3-compatible syntax only (`composer.json` `php: ^8.3`); hazard H16 (Carbon mutability) applies to every date-loop edit.
 - **Testing:** every commit runs the full suite with the **MySQL gate** and the **SQLite gate** (design §11.1), plus `vendor/bin/sail bin pint --dirty --format agent`. Contract fixtures are recorded with `app.debug = false` (design §4.1.2).
