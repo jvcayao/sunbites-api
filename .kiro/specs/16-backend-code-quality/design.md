@@ -1328,9 +1328,9 @@ All work happens on the **current branch, `bump-laravel-13-latest`** (decided 20
   - `chore(deps): remove fortify and laravel-cart` (T-17)
   - `fix(reports): B-12 stop exposing staff PII in sales and billing rows`
 - **No `Co-Authored-By`, `Signed-off-by` or any AI attribution** in commits or the PR (project rule in `git-workflow.md`; it overrides any default attribution).
-*(Superseded 2026-11-07: there is no staging environment. See design §18.)*
 - **The PR:** after the last commit (T-19), the AI stops. **The user pushes `bump-laravel-13-latest`, opens the single PR** to `staging`, reviews and merges. The AI never pushes unless asked, and never creates or merges PRs.
 - **Merge method:** `git-workflow.md` says feature→staging PRs are squash-merged. A squash collapses the per-area commits, so a single area could no longer be reverted after merge. **For this PR, merge with "Create a merge commit" or "Rebase and merge"** so each area stays individually revertible. *(Decision for the user at merge time.)*
+*(Updated 2026-11-07: the flow stays PR branch → `staging` → `main`, but `staging` no longer deploys, so smoke tests run locally. See design §18.)*
 - **Staging:** pushing to `staging` deploys (`staging.yml`). After the PR merges into `staging`, run the full §13.3 smoke checklist (all rows) on staging before releasing `staging` → `main`.
 
 Commit order on the branch: **the authoritative, numbered order is `HANDOFF.md` §6** (45 commits after the spec commits). The graph below shows the Track A dependencies only. Notably, B-02 is placed after T-7 and T-9 (not right after T-6) because it removes branch checks in `MealPlannerController` that T-7's design still describes.
@@ -1379,7 +1379,7 @@ Track B commits are placed after the Track A commit they depend on (listed per i
 
 - There are no schema or data migrations.
 - Each **commit** is independently revertible (one commit per area, §6). Keep it that way by merging the PR without squashing.
-*(Superseded 2026-11-07: there is no staging environment. See design §18.)*
+*(Updated 2026-11-07: the flow stays PR branch → `staging` → `main`, but `staging` no longer deploys, so smoke tests run locally. See design §18.)*
 - After the single PR merges to `staging` (auto-deploy via `staging.yml` → Laravel Cloud), run the complete §13.3 checklist before promoting `staging` → `main`.
 - B-02 additionally needs the login → branch → dashboard smoke test.
 - **Rollback:** before merge, `git revert <commit>` on the branch. After merge, revert the specific area's commit on `staging` (requires a non-squash merge), or revert the merge commit for everything. Fixtures are not in git (§4.1.7). Reverting a Track A commit leaves them valid. After reverting a Track B commit, re-record only the fixtures that item listed, then check the per-file hash diff.
@@ -1544,7 +1544,7 @@ Agent: `laravel:laravel-simplifier` (installed via the Laravel plugin). Its defa
 
 ### 13.3 Staging smoke checklist per task (run before promoting to production)
 
-*(Superseded 2026-11-07: there is no staging environment. See design §18.)*
+*(Updated 2026-11-07: the flow stays PR branch → `staging` → `main`, but `staging` no longer deploys, so smoke tests run locally. See design §18.)*
 Log in to staging POS (`staging-pos.sunbites.com.ph`) and portal (`portal-staging.sunbites.com.ph`). After the single PR is merged into `staging` (auto-deployed), click through **every** row below (the PR contains all tasks) and confirm each page loads and the listed action works. Record the result as a PR comment before promoting to `main`. While developing, the same rows can be checked locally (POS `localhost:3000`, portal `localhost:3001` against Sail) per task.
 
 | Task | POS pages | Portal pages |
@@ -2009,77 +2009,120 @@ After the edits, run `vendor/bin/sail artisan boost:update` once, so the next `c
 - **`compose-bkup.yaml`:** it looks stale but is not frontend. Only its Vite line goes.
 - **Steering:** `.kiro/steering/tech.md` D6 and its Laravel version row need a small update, which is the user's to approve.
 
-## 18. No staging environment (task T-24; Req 17; approved 2026-11-07)
+## 18. Staging deploy removed, CI on MySQL (task T-24; Req 17; approved 2026-11-07)
 
-The user removed the staging environment from Laravel Cloud. `.github/workflows/staging.yml` must be deleted and nothing here may use it. **This section supersedes every earlier mention in this spec of `staging` as a branch, PR target, deploy target or smoke-test environment.** Those mentions stay as the record of how earlier steps ran.
+The user removed the staging environment from Laravel Cloud. **The branch flow does not change: PR branch → `staging` → `main`.** `staging.yml` and the `staging` branch stay, and only the deploy to staging goes. The user also asked for the CI jobs to be aligned, because they still use SQLite while production runs MySQL.
 
-### 18.1 What this changes for the PR
+### 18.1 What this means for the PR
 
-- **The PR targets `main`.** `staging` and `main` are both already contained in this branch, so there are no conflicts.
-- **Merging deploys to production.** Laravel Cloud's only environment is `main`, with `usesPushToDeploy = true`, branch `main` and deploy command `php artisan migrate --force` (read-only check, 2026-11-07). Its recent deployments are merges to `main`.
+- **The PR targets `staging`.** Merging it runs the tests and deploys nothing.
+- **The `staging` → `main` PR deploys to production.** Laravel Cloud's only environment is `main`, with `usesPushToDeploy = true`, branch `main` and deploy command `php artisan migrate --force` (read-only check, 2026-11-07). Its recent deployments are merges from `staging` to `main`.
 - **What that merge carries:** 135 commits and 427 files relative to `main`. It has 0 migrations and no new `env()` reads, and `.env.example` only loses `VITE_APP_NAME`, so no production schema or environment change is needed.
-- **Smoke tests move.** Run the §13.3 list locally before the merge, with both frontends against this branch on Sail, and repeat login, checkout and one report on production right after the deploy.
-- **Rollback:** revert on `main`, which redeploys. With no migrations, there is nothing to reverse in the database.
+- **Smoke tests move.** There is no staging site any more, so run the §13.3 list locally before the `staging` → `main` PR, with both frontends against this branch on Sail. Repeat login, checkout and one report on production right after the deploy.
 
-### 18.2 T-24: the changes
+### 18.2 Correcting the earlier attempt
 
-**Delete:** `.github/workflows/staging.yml` (`git rm`).
+`ade5048` misread the instruction and specified removing staging altogether, and `16f9fac` implemented that spec correctly. It was never pushed. Commits are never amended (HANDOFF §6.1), so revert it first, as its own commit:
 
-**Edit:**
+```bash
+git revert --no-commit 16f9fac
+git status --short    # only 16f9fac's paths are staged; .kiro/specs/17-* stays unstaged
+git commit            # subject below, with a body saying the spec's scope was wrong
+```
+
+Then `git diff 9ba8f46 HEAD --name-only -- . ':!.kiro'` must print nothing. That proves the CORS origins, `CorsOriginsTest`, `.env.example`, the `AppServiceProvider` comment, `LazyLoadingGuardTest`, `git-workflow.md`, the docs and `staging.yml` are all back as they were. Run `ListInputValidationTest` on both drivers as a quick check; the full gates run in T-24.
+
+### 18.3 T-24: the changes
+
+All three workflows get this one job, copied exactly. It is C-1's `test-mysql` job, with the job ID `test` and the Pint step from the old SQLite job:
+
+```yaml
+  test:
+    name: Run Tests (MySQL 8.4)
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: testing
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -ppassword"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@2.32.0
+        with:
+          php-version: '8.5'
+          extensions: mbstring, pdo, pdo_mysql
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-reqs
+
+      - name: Copy env
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Check code style (Pint)
+        run: ./vendor/bin/pint --test
+
+      # Call PHPUnit directly: `php artisan test` (Collision) clears variables
+      # named in .env, which would silently switch the run back to SQLite.
+      - name: Run tests on MySQL
+        run: vendor/bin/phpunit
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: testing
+          DB_USERNAME: root
+          DB_PASSWORD: password
+```
 
 | File | Change |
 |---|---|
-| `.github/workflows/ci.yml` | Remove `- staging` from `on.pull_request.branches`. One removed line; nothing else in the file changes |
-| `config/cors.php` | Remove `https://pos-staging.sunbites.com.ph` and `https://portal-staging.sunbites.com.ph`. Both production and both local origins stay |
-| `.env.example` L5 | The comment becomes `# Local: http://api.sunbites.test \| Production: https://api.sunbites.com.ph` |
-| `app/Providers/AppServiceProvider.php` | Comment only, see below. The code already checks only for `testing` and production |
-| `tests/Unit/LazyLoadingGuardTest.php` | Named edit, see below |
-| `.claude/agents/git-workflow.md` | See below |
-| `infrastructure/README.md` | Remove the Staging row from the environments table, and change "two environments" to one |
-| `infrastructure/README.md`, `infrastructure/05-cicd.md`, `docs/laravel-cloud-deployment.md` | Add one line under the title: `> **2026-11-07:** the staging environment was removed from Laravel Cloud. Merging to \`main\` deploys to production. Staging sections below are historical.` |
+| `.github/workflows/ci.yml` | `on.pull_request.branches` stays `staging` and `main`. Replace both existing jobs (`test` and `test-mysql`) with the job above |
+| `.github/workflows/staging.yml` | Change `name:` to `Staging Tests`. The trigger stays a push to `staging`. Replace `test` with the job above, and **delete the `deploy` job** |
+| `.github/workflows/production.yml` | Replace `test` with the job above, adding `needs: validate` under `runs-on:`. `validate` and `deploy` stay byte-identical |
+| `infrastructure/README.md` | Change "with two environments" to "with one environment". Environments table: Staging row becomes `\| Staging \| \`staging\` \| none \| Tests only, no deploy \|`, and Production's Deploy column becomes `On merge to \`main\``. Add the note below under the title |
+| `infrastructure/05-cicd.md`, `docs/laravel-cloud-deployment.md` | Add the note below under the title |
 
-`AppServiceProvider` comment:
-```php
-// Throw only in the test suite. Every other non-production environment, such as `local`
-// (developers running the POS/portal against the local API), logs instead, so an untested
-// lazy load never breaks a page.
-```
+The note: `> **2026-11-07:** the staging environment was removed from Laravel Cloud. The \`staging\` branch stays and runs tests only. Merging to \`main\` deploys to production. CI runs on MySQL 8.4, not SQLite. Staging deploy steps below are historical.`
 
-`LazyLoadingGuardTest`: rename `test_a_lazy_load_is_logged_not_thrown_in_staging` to `test_a_lazy_load_is_logged_not_thrown_in_any_other_environment`, change its argument from `'staging'` to `'preview'`, and change the class docblock's "in `local` and `staging`" to "in other non-production environments such as `local`". The test keeps guarding the same code path: any environment other than `testing` and production.
+**No other file changes**, and there are no new tests, so the suite stays at 1693 tests.
 
-`.claude/agents/git-workflow.md`, for this repository:
-- Branch diagram: `main (production, deploys on merge)` directly above the `feature/`, `bugfix/` and `hotfix/` branches.
-- Branch types table: every `Base` and `Merges To` becomes `main`.
-- `git rebase origin/staging` becomes `git rebase origin/main`.
-- Merge strategy: one row, `Feature → Main`, `Squash and merge`, `Clean single commit per feature`.
-- Protected branches: remove the `staging` row.
-- Release process: step 1 says "from main", and remove step 4.
-- Add under the `## Branch Strategy` heading: `This describes \`sunbites-api\`, where merging to \`main\` deploys to production. The Next.js apps follow their own repositories' workflows.`
-
-**Tests first.** Nothing tests CORS today, and a slip in this edit would block both production frontends with nothing to catch it. Add `tests/Feature/CorsOriginsTest.php` (`make:test --phpunit CorsOriginsTest`, `RefreshDatabase`). Each test sends a preflight, `OPTIONS /api/v1/auth/login` with `Origin` and `Access-Control-Request-Method: POST`:
-1. `test_production_frontends_are_allowed_origins`: for `https://pos.sunbites.com.ph` and `https://portal.sunbites.com.ph`, `Access-Control-Allow-Origin` equals the origin. It passes before and after the edit.
-2. `test_staging_frontends_are_not_allowed_origins`: for both removed origins, the header is absent. **It must fail before the edit**; paste that run in your report.
-
-After T-24 the suite has 1695 tests (1693 + 2).
-
-### 18.3 Audit (paste the output in the report and commit body)
+### 18.4 Audit (paste the output in the report and commit body)
 
 ```bash
-ls .github/workflows                                                       # exactly: ci.yml production.yml
-git grep -nIi 'staging' -- .github app bootstrap config database routes resources tests lang phpunit.xml .env.example compose.yaml compose-bkup.yaml composer.json   # 0 lines
-git grep -nIi 'staging' -- .claude/agents/git-workflow.md                  # 0 lines
-ruby -ryaml -e 'YAML.load_file(".github/workflows/ci.yml"); puts "ok"'     # ok
-git diff HEAD~1 -- .github/workflows/ci.yml                                # one removed line
-vendor/bin/sail artisan route:list --path=api --except-vendor              # 163 routes
+ls .github/workflows                                # exactly: ci.yml production.yml staging.yml
+git grep -nIiE 'sqlite|artisan test' -- .github     # 0 lines
+git grep -nI 'cloud deploy' -- .github              # exactly 1 line, in production.yml
+git grep -nE 'environment: staging|CLOUD_API_TOKEN' -- .github/workflows/staging.yml   # 0 lines
+ruby -ryaml -e 'n=%w[ci staging production]; w=n.map{|f|YAML.load_file(".github/workflows/#{f}.yml")}; t=w.map{|y|j=y["jobs"]["test"].dup; j.delete("needs"); j}; puts(t.uniq.size==1 ? "identical" : "DIFFERENT"); n.zip(w).each{|f,y|puts "#{f}: #{y["jobs"].keys.join(",")}"}; puts w[0][true]["pull_request"]["branches"].join(","); puts w[1][true]["push"]["branches"].join(",")'
+# identical / ci: test / staging: test / production: validate,test,deploy / staging,main / staging
+git diff 9ba8f46 HEAD --name-only -- . ':!.kiro'    # exactly the 6 files in the 18.3 table
+vendor/bin/sail artisan route:list --path=api --except-vendor   # 163 routes
 ```
 
-Stage explicit paths only. `.kiro/specs/17-*` has another session's uncommitted changes: never stage them.
+Stage explicit paths only. `.kiro/specs/17-*` has another session's uncommitted changes: never stage them. The implementer cannot run GitHub Actions; the spec owner simulates the job locally, and the first real run happens when the user opens the PR.
 
-### 18.4 Checked and deliberately not changed
+### 18.5 Checked and deliberately not changed
 
-- **`production.yml`:** it runs `cloud deploy "Sunbites API Prod" production`, but Laravel Cloud's only environment is `main`, and the CLI exits with "Unable to resolve environment" when the name does not match. So its deploy job fails today, and push-to-deploy makes it redundant anyway. Whether to retarget or remove it is the user's decision, so T-24 does not touch it. It is manual (`workflow_dispatch`), so nothing runs it on merge.
-- **The `staging` git branch and the GitHub Actions `staging` environment:** they remain on GitHub, and the implementer never pushes. A push to that branch would still run the workflow file on that branch, and the deploy would fail. The user deletes them after the merge.
-- **Frontends:** `~/sunbites-pos` and `~/sunbites-portal` have their own `staging.yml`, and `.kiro/specs/17-*` mentions staging. Those belong to the frontend session.
-- **`.claude/agents/engineering-principles.md` and `.claude/skills/deploying-to-cloud/`:** general guidance about environments, not references to this deployment. The skill is managed by Boost.
-- **`infrastructure/` and `docs/laravel-cloud-deployment.md`:** the staging sections stay as history under the note. Rewriting about 130 mentions is a separate job.
-- **Steering:** `.kiro/steering/` still describes staging, and changing it is the user's to approve.
+- **`production.yml`'s `deploy` job:** it runs `cloud deploy "Sunbites API Prod" production`, but Laravel Cloud's only environment is `main`, and the CLI exits with "Unable to resolve environment" when the name does not match. So that job fails today, and push-to-deploy already deploys on merge. Retargeting or removing it is the user's decision. It is manual (`workflow_dispatch`), so nothing runs it on merge.
+- **`config/cors.php`, the `.env.example` comment, `.claude/agents/git-workflow.md`, `LazyLoadingGuardTest`:** the user asked to remove only the deploy, and the branch flow in `git-workflow.md` is still right.
+- **Local test commands:** `vendor/bin/sail artisan test` and `composer test` still use SQLite through the gitignored `.env.testing`, and this spec's gates still run on both drivers. The user's request covers the CI workflows.
+- **Frontends:** `~/sunbites-pos`, `~/sunbites-portal` and `.kiro/specs/17-*` belong to the frontend session.
+- **`infrastructure/` and `docs/laravel-cloud-deployment.md`:** the staging sections stay as history under the note.
+- **Steering:** `.kiro/steering/` still says `staging.yml` deploys and CI uses SQLite. Changing it is the user's to approve.

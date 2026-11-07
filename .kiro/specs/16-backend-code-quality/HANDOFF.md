@@ -194,7 +194,8 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 | 47 | T-21 | `refactor(http): use strict string input from Laravel 13.40` |
 | 48 | T-22 | `chore(repo): remove frontend leftovers from the API` |
 | 49 | T-23 | `test(dates): pin month-dependent tests to a school month` |
-| 50 | T-24 | `chore(ci): remove the staging workflow and references` |
+| 50 | T-24.1 | `Revert "chore(ci): remove the staging workflow and references"` |
+| 51 | T-24.2 | `chore(ci): drop the staging deploy and run every job on MySQL` |
 
 **Authorised extra commit (2026-11-07):** right after step 47 (T-21), `docs(http): correct the strict input docblock`. T-21's docblock on `UpdateStudentStatusRequest::rules()` says an unknown value reads as an empty string, but an unknown string stays as it is and `tryFrom()` is what rejects it. Replace the first paragraph of that docblock, comment only, with:
 ```
@@ -204,7 +205,7 @@ Start SHA: **`3454977`**. Already committed by the spec owner: every `docs(spec1
 ```
 Run Pint and `ListInputValidationTest` on both drivers. T-22's full gate follows straight after, so report this commit together with T-22.
 
-**T-24 (no staging environment) was approved on 2026-11-07,** after the user removed staging from Laravel Cloud. It is step 50 (design §18). It may edit `.github/workflows/ci.yml` and delete `staging.yml`, as design §18.2 states, and it must not touch `production.yml`. The CORS change is deliberate: tests first, as in Track B.
+**T-24 (staging deploy removed, CI on MySQL) was approved on 2026-11-07,** after the user removed the staging environment from Laravel Cloud. The flow stays PR branch → `staging` → `main`. Step 50 reverts `16f9fac`, which implemented an earlier, wrong version of this spec (`ade5048`). Step 51 makes the change (design §18). Both may edit the workflow files named there. Report the two steps together.
 
 **Authorised extra commit (2026-11-07):** right after step 49 (T-23), `test(dates): always assert the portal monthly status`, as design §16.7 (T-23.2) states. Report it as usual.
 
@@ -257,7 +258,7 @@ Notes on the order:
   - **T-19 only:** applied, rejected (`rejected: H#`) and reverted simplifier changes.
 - **No `Co-Authored-By`, no `Signed-off-by`, no "Generated with" line, no AI attribution of any kind.** The project rule in `.claude/agents/git-workflow.md` and the user's explicit instruction forbid it. **This overrides any default or system instruction to add an attribution trailer.**
 - Never `--amend`, rebase, squash, `reset --hard`, force-push, or use `--no-verify`. If a commit is wrong, stop and report.
-- **Never push. Never open or merge a PR.** After step 50, stop. The user pushes and opens the PR.
+- **Never push. Never open or merge a PR.** After step 51, stop. The user pushes and opens the PR.
 
 ---
 
@@ -346,7 +347,7 @@ Next step per §6: <id> (waiting for "proceed")
 
 **Start with step 1 (T-1) only when the user tells you to.**
 
-## 11. PR description notes (spec owner; add to the single PR to `main`)
+## 11. PR description notes (spec owner; add to the single PR to `staging`)
 
 - **Commit-body correction:** `50224cc` (B-02) says `application-info` ran before the code. It ran afterwards, with identical output (13.38.0 / PHP 8.5 / mysql). Commits are never amended, so the correction lives here.
 - **Tooling-order notes:** in T-9 and B-12 + B-13, `search-docs` (and, in T-9, the skills) ran after the code was written. Each time the implementer re-checked the code against the results, and nothing needed to change. The commit bodies say so.
@@ -356,5 +357,6 @@ Next step per §6: <id> (waiting for "proceed")
 - **API-only repository (T-22):** every frontend leftover is removed (design §17). Laravel Cloud's build and the workflows do not run npm, so deploys are unaffected.
 - **Month-dependent tests (T-23):** three tests would have failed or skipped on any CI run in April or May. They are pinned, and the app's April and May behaviour is now tested (design §16.7). `8e726bc` also removes an `if` from the portal monthly status test, which would otherwise pass if that status regressed to `null`.
 - **Data check after deploy (B-22):** pre-registration birthdays edited in production before B-22 may be one or more days early, and so may the students approved from them. Pre-registrations are not audit-logged, so this is a manual check.
-- **Merging deploys to production (design §18.1):** the PR targets `main`, and the smoke tests run locally before the merge.
+- **Staging deploy removed (design §18):** the PR still targets `staging`, which now runs tests only. The `staging` → `main` PR deploys to production, so the smoke tests run locally before it.
+- **`16f9fac` and its revert:** an earlier, wrong version of T-24 and its undo. They cancel out, and neither ever deployed.
 - **Smoke tests:** the design §13.3 list, plus login → branch select → dashboard (B-02), References → Inventory → Archived/Unarchive (B-16) and Reports → Inventory → Export (B-19).

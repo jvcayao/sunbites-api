@@ -467,13 +467,15 @@
 
 ---
 
-- [ ] 24. Remove the staging environment *(approved 2026-11-07; design §18; Req 17; HANDOFF §6 step 50)*
-  - [ ] 24.1 Delete the workflow and every reference to it
-    - Add `tests/Feature/CorsOriginsTest.php` first (design §18.2). The staging test must fail before the edit; paste that run.
-    - Delete `.github/workflows/staging.yml` and make every edit in design §18.2. `production.yml` stays as it is (§18.4).
-    - Tests: full verification gate, 1695 tests with no skips. Run every audit command in design §18.3 and paste the output.
+- [ ] 24. Staging deploy removed, CI on MySQL *(approved 2026-11-07; design §18; Req 17; HANDOFF §6 steps 50 and 51)*
+  - [ ] 24.1 Revert `16f9fac`
+    - Follow design §18.2. `git diff 9ba8f46 HEAD --name-only -- . ':!.kiro'` must print nothing.
+    - _Requirements: 17.1_
+  - [ ] 24.2 Remove the deploy job and align the test jobs
+    - Make exactly the changes in design §18.3. `production.yml`'s `validate` and `deploy` jobs stay byte-identical.
+    - Tests: none new. Full local verification gate, 1693 tests with no skips. Run every audit command in design §18.4 and paste the output.
     - Fixtures: unchanged.
-    - _Requirements: 17.1, 17.2, 17.3, 17.5, 17.6_
+    - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5, 17.6_
 
 ---
 
@@ -488,7 +490,7 @@
   - Create `EnsureActiveBranch` via `make:middleware`, register the alias, apply it to the group with the exact allowlist, and remove the dead `MealPlannerController` checks.
   - Failing tests: a branch-scoped list without a header returns 422 with the exact message; each allowlisted route works without a header; the matrix test still passes.
   - Fixtures: new `422-no-branch` variants.
-  *(Superseded 2026-11-07: there is no staging environment. See design §18.)*
+  *(Updated 2026-11-07: the flow stays PR branch → `staging` → `main`, but `staging` no longer deploys, so smoke tests run locally. See design §18.)*
   - **Staging smoke test before production.**
   - _Requirements: 10.3_
 - [x] B-03. Stock race *(design §5.3; after T-3 and T-7)*
@@ -630,8 +632,7 @@
 | 15.7 | T-23.1 |
 | 15.4, 15.6 | nothing to implement (done in design §16.2; prohibition) |
 | 16.1–16.6 | T-22.1 |
-| 17.1, 17.2, 17.3, 17.5, 17.6 | T-24.1 |
-| 17.4 | nothing to implement (the user opens the PR; design §18.1) |
+| 17.1–17.6 | T-24.1, T-24.2 |
 | 11.1–11.5 | T-17.1 |
 | 12.1–12.5 | ground rules (every task) + the per-commit Tooling log in the PR |
 | 12.6, 12.7 | T-19.1 |
