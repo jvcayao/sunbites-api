@@ -167,10 +167,10 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
    3. WHEN a branch is selected for the first time (null to a branch), or the page is hard-refreshed, THEN the cart SHALL NOT be touched. That is the same guard `BranchCacheSync` already uses.
 4. Each fix SHALL be one commit in its app's Track B1 PR (Q3). It SHALL start with tests that fail on the current code, and those tests SHALL use the real API shape (string amounts, `items`, uppercase statuses).
 5. Before implementation, each fix SHALL be re-verified against the current fixtures, because the former Spec 17 design was verified on 2026-10-17 and Spec 16 has changed responses since.
-6. **Approved by the user on 2026-11-08 (design §5.5, §5.6, Appendix B.0).** F-4 and F-5 SHALL ship in Track B1 under 3.4. F-16 ships as a hotfix to `main`, ahead of PR 1 and PR 2:
+6. **Approved by the user on 2026-11-08 (design §5.5, §5.6, Appendix B.0).** F-4, F-5 and F-16 SHALL ship in Track B1 under 3.4. F-16 has no separate hotfix (user: "we are going to fix this on one PR"):
    1. **F-4:** the Sales report Customer filter SHALL filter the rows and the export, using the backend's `is_walk_in`.
    2. **F-5:** the Sales and Billing reports SHALL show money with thousands separators.
-   3. **F-16 (live on production):** the portal SHALL show a student whose `enrollment_status` is `unenrolled` instead of crashing. Committed on 2026-11-08 as `81c204e` on the portal's `hotfix/portal-unenrolled-child-crash`, branched from `main` (design §5.6).
+   3. **F-16 (live on production):** the portal SHALL show a student whose `enrollment_status` is `unenrolled` instead of crashing. A trial fix proved the change on 2026-11-08; it was never pushed and isn't shipped (design §5.6).
 
 ### Requirement 4: Behaviour freeze (prerequisite for all Track A work)
 
@@ -415,7 +415,7 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
 | FA-28 | Sales and Billing report money reaches `formatPeso` as a decimal string, so `₱1500.00` has no separator. `contract-gaps.md` wrongly records this as no effect | POS `reports/sales/page.tsx:407-412`, `reports/billing/page.tsx:456` | F-5 (approved 2026-11-08) |
 | FA-29 | The frontend asks for `per_page` on 3 endpoints whose controllers ignore it, so older announcements and notifications can't be reached, and staff recipients stop at 20 | POS `announcements/page.tsx:186`, `notifications/page.tsx:247`, `announcements/create/page.tsx:116` | F-6, F-7, F-8 (proposed; backend) |
 | FA-30 | The UI and the backend disagree on roles: 4 controls shown to supervisors that the API rejects, 6 hidden that it allows | design Appendix B.3 | F-9 to F-14 (proposed) |
-| FA-33 | **A parent with an unenrolled child gets a crash on the portal dashboard and Students list.** The status map has no `unenrolled` entry, the type hides it, and there's no error screen. Live on `main` | portal `components/enrollment-status-badge.tsx:40`, `types/portal.ts:36` | F-16 (approved 2026-11-08; hotfix) |
+| FA-33 | **A parent with an unenrolled child gets a crash on the portal dashboard and Students list.** The status map has no `unenrolled` entry, the type hides it, and there's no error screen. Live on `main` | portal `components/enrollment-status-badge.tsx:40`, `types/portal.ts:36` | F-16 (approved 2026-11-08; PR 2) |
 | FA-34 | Public pre-registration prints `new Date()` on a prerendered page, so the date is the build date until React recovers, with a hydration error | portal `pre-registration-form.tsx:945` | F-17 (proposed; low) |
 | FA-32 | Forms let through input the backend refuses, notably passwords: production requires symbols and rejects breached ones, while the forms check 8 characters | design Appendix B.4 | F-15 (proposed) |
 | FA-31 | The backend moved 10 commits and one Laravel release in one day, and a fixture digest can't detect that. Checked by calling Laravel directly, with no saved snapshot (user, 2026-11-08) | design §4.10 | Req 2.12–2.15 |

@@ -159,9 +159,10 @@ npx jest --ci
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1 npm run build     # on this line only (H22)
 npm run test:contract                              # from task 4.1, every commit
 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest    # every Track A refactor commit (task 6.1 on)
+npm run format:check                               # portal only. First run npx prettier --write on your changed files (POS: not the 10 listed in design §22)
 ```
 
-Extra for tasks 6.1 and 7: the route table must be identical, and the server smoke must pass (design §7.1). Extra for task 7: `COMPILED_TESTS=1 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest --no-cache` (design §12). Before each PR handover: `TZ=UTC npx jest --ci` and the faked-clock sweep (design §22). Before PR 3's handover: `css-diff.cjs` and `compare.mjs` (design §7.1, Appendix C.5 and C.6).
+Extra for tasks 6.1 and 7: the route table must be identical, and the server smoke must pass (design §7.1). Extra for task 7: `COMPILED_TESTS=1 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest --no-cache` (design §12). Before each PR handover: `TZ=UTC npx jest --ci`. Before PR 3's and PR 4's handover, also the faked-clock sweep (design §22). It needs the `TEST_CLOCK` switch that task 3.3 adds to `jest.config.ts`; before that, the sweep tests nothing, so don't run it for PR 1 or PR 2. Before PR 3's handover: `css-diff.cjs` and `compare.mjs` (design §7.1, Appendix C.5 and C.6).
 
 Then:
 1. **Digests.**
@@ -201,6 +202,8 @@ Each row is one commit per app, unless it says otherwise. "Both" means POS first
 
 ### PR 2: Track B1 (branch `fix/spec17-contract-fixes`, from `origin/staging` after PR 1 merges)
 
+Copy the test code; don't write tests from the prose. Portal F-16: design §5.6. POS F-1, F-3, F-4, F-5: design Appendix D, which also says which test goes in which commit. All of it was run on 2026-11-08 against `staging` plus the PR 1 upgrade.
+
 | Task | App | Commit subject |
 |---|---|---|
 | 2.1 | POS | `fix(reports): F-1 show inventory snapshot rows and statuses` |
@@ -208,7 +211,7 @@ Each row is one commit per app, unless it says otherwise. "Both" means POS first
 | 2.3 | Portal | `fix(wallet): F-2 format wallet amounts with separators` |
 | 2.4 | POS | approved 2026-11-08: `fix(reports): F-4 send is_walk_in for the customer filter` |
 | 2.5 | POS | approved 2026-11-08: `fix(reports): F-5 format sales and billing money with separators` |
-| 2.6 | Portal | **done as a hotfix, no commit.** Check that `grep -n unenrolled components/enrollment-status-badge.tsx` prints a line; if not, stop and report |
+| 2.6 | Portal | approved 2026-11-08: `fix(portal): F-16 show unenrolled students instead of crashing` |
 | 2.7 | both | no commit. Report with the design §5.4 smoke steps, which the user runs locally (design §20.1). The user opens PR 2. **Wait for the merge** |
 
 ### PR 3: Track A (branch `refactor/spec17-code-quality`, from `origin/staging` after PR 2 merges)
@@ -376,7 +379,7 @@ Next step per §6: <id> (waiting for "proceed")
 | API base in tests | `http://localhost:8000`, set in `jest.setup.ts`. Don't set it yourself (H22) |
 | MSW | `onUnhandledRequest: "error"` (H18) |
 | POS test status before task 1.2 | `feedback.test.tsx` fails every run. `settle-credit-dialog.test.tsx` fails often, and more often alone than in the full suite |
-| Decisions | requirements.md table: Q1–Q8, FB-01(a), FB-02, FB-03, FB-04 approved; FB-05 left out. F-4, F-5 and F-16 approved on 2026-11-08; F-16 was fixed as a hotfix. F-6 to F-15 and F-17 are **proposed, not approved** (design Appendix B.0). OPS-1: leave the frontends' staging sites alone |
+| Decisions | requirements.md table: Q1–Q8, FB-01(a), FB-02, FB-03, FB-04 approved; FB-05 left out. F-4, F-5 and F-16 approved on 2026-11-08, all in PR 2; F-16 has no separate hotfix. F-6 to F-15 and F-17 are **proposed, not approved** (design Appendix B.0). OPS-1: leave the frontends' staging sites alone |
 
 **Start with task 1.1 only when the user or the spec owner tells you to.**
 
@@ -388,7 +391,7 @@ Next step per §6: <id> (waiting for "proceed")
 - **When the implementer reports backend commits:** follow design §4.10.5. Read each listed commit, call the affected endpoints directly (§4.10.3), update the design and Appendix B, ask the user about any visible effect, then tell the implementer to continue. The contract suite uses SQLite in memory, so it's safe while another session runs the MySQL gate.
 - **After Spec 16 merges:** the branch name in the `Backend:` line changes. That's expected; read the commits it brings like any other backend change (design §4.10.5).
 - **No backend snapshot and no script files live in this repo** (user, 2026-11-08; API-only rule). The backend is checked directly, and the verified scripts are in design Appendix C.
-- **F-16 hotfix** (`81c204e`, design §5.6) is committed, not pushed. The user pushes it, opens the PR to `main`, merges `main` back into `staging`, and then the worktree is removed. **After task 4.3:** update Appendix B, and get the user's decision on any new F-item before task 4.4. **Before PR 4 starts:** get decisions on F-9 to F-15 and F-17. F-6 to F-8 need backend work, so they're the user's call to raise separately.
+- **F-16 ships in PR 2,** task 2.6 (user, 2026-11-08: "one PR"). The trial fix `81c204e` (design §5.6) was never pushed and isn't shipped, so 2.6 must be a new, test-first commit, not a cherry-pick of it. **After task 4.3:** update Appendix B, and get the user's decision on any new F-item before task 4.4. **Before PR 4 starts:** get decisions on F-9 to F-15 and F-17. F-6 to F-8 need backend work, so they're the user's call to raise separately.
 - **After tasks 6.3–6.4:** take the refresh gaps recorded in Appendix B §B.5 to the user (FB-04).
 - **Task 8.1:** run the `react-component-expert` agent read-only over each app's Track A diff. The user decides on each finding.
 - **Tasks 10.1–10.3:** the user approves the exact text first. Steering versions change once PR 1 is merged, and D1 once FB-01 is merged.

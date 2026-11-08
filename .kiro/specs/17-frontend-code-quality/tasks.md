@@ -38,9 +38,10 @@
     - _Requirements: 1.1, 1.2, 1.3_
   - [ ] 1.2 POS: fix the two failing tests (test-only)
     - `app/(kitchen)/references/feedback/feedback.test.tsx`, line `expect(await screen.findByText("Reply sent.")).toBeInTheDocument();`: sonner 2.0.8 renders the text twice in jsdom (H12). Change it to `expect((await screen.findAllByText("Reply sent."))[0]).toBeInTheDocument();`. Verified.
-    - `app/(kitchen)/students/[id]/_components/settle-credit-dialog.test.tsx`: Base UI moves focus just after the dialog opens and steals keystrokes (H21). Add this helper, and call it before `user.clear(amount)` in every test that types into the dialog. Proven: 8 of 12 failed before, 15 of 15 passed after.
+    - `app/(kitchen)/students/[id]/_components/settle-credit-dialog.test.tsx`: Base UI moves focus just after the dialog opens and steals keystrokes (H21). Add this helper just below the `const API = …` line (`waitFor` is already imported), exactly as Prettier formats it. Then add `await focusSettled();` on the line before each of the 5 `await user.clear(amount);` lines. Proven: 8 of 12 failed before, 15 of 15 passed after; re-proven on 2026-11-08 with the upgrade (15 of 15 solo, 325/325 three runs).
       ```ts
-      const focusSettled = () => waitFor(() => expect(document.activeElement).not.toBe(document.body));
+      const focusSettled = () =>
+        waitFor(() => expect(document.activeElement).not.toBe(document.body));
       ```
     - No component changes. Neither cause is visible to users, because nobody can type inside that first tick (Req 1.4). IF the tests still fail after this THEN stop and report.
     - Tests: the settle-credit file passes 15 solo runs with `--runTestsByPath` (it fails more often alone than in the suite), and the full suite passes 3 consecutive runs (Req 1.5).
@@ -54,16 +55,16 @@
 
 ## PR 2: Track B1 contract fixes (Req 3; design §5)
 
-- [ ] 2. Fix F-1, F-2, F-3, F-4 and F-5 (after PR 1 merges). F-16 was fixed as a hotfix
+- [ ] 2. Fix F-1, F-2, F-3, F-4, F-5 and F-16 (after PR 1 merges)
   - [ ] 2.1 F-1: POS inventory report (branch `fix/spec17-contract-fixes` from `origin/staging`)
     - Re-verify design §5.1 against `get__api_v1_reports_inventory@ok.json` and `InventoryItem::status`, and cite both in the commit body.
-    - Write `app/(kitchen)/reports/inventory/page.test.tsx` (design §5.1, 7 tests). Run it, and confirm tests 1, 2, 6 and 7 fail.
+    - Write `app/(kitchen)/reports/inventory/page.test.tsx` by copying design Appendix D.1 (7 tests). Run it, and confirm tests 1, 2, 3, 6 and 7 fail and 4 and 5 pass. IF the result differs THEN stop and report.
     - Apply the design §5.1 edits to `lib/api/reports.ts` and `page.tsx`. Leave `dashboard/page.tsx` unchanged.
     - Tests: the new file passes; all gates pass.
     - Commit `fix(reports): F-1 show inventory snapshot rows and statuses`.
     - _Requirements: 3.1, 3.4, 3.5, 2.3_
   - [ ] 2.2 F-3: clear the POS cart on a branch switch (same branch)
-    - Extend `components/branch-cache-sync.test.tsx` (design §5.3) and confirm the two clearing tests fail.
+    - Extend `components/branch-cache-sync.test.tsx` with design Appendix D.2 and confirm the two emptying tests fail and the null → B test passes.
     - Apply the design §5.3 edit to `components/branch-cache-sync.tsx`.
     - Tests: the extended file passes; all gates pass.
     - Commit `fix(pos): F-3 clear the cart when the branch changes`.
@@ -76,17 +77,21 @@
     - Commit `fix(wallet): F-2 format wallet amounts with separators`.
     - _Requirements: 3.2, 3.4, 3.5, 2.2_
   - [ ] 2.4 F-4, approved 2026-11-08: Sales report Customer filter (POS; design §5.5)
-    - Write `app/(kitchen)/reports/sales/page.test.tsx` and confirm the F-4 test fails. Apply the edit in both places.
+    - Write `app/(kitchen)/reports/sales/page.test.tsx` by copying design Appendix D.3 **without** the test `shows order money with thousands separators (F-5)`, which task 2.5 adds; otherwise the F-4 commit would carry a failing test. Format the new file with Prettier. Confirm the Walk-In and Registered tests fail and "All Customers" passes. Apply the edit in both places (in `exportReport` the old key spans two lines; design §5.5). Don't run Prettier on this file (design §22).
     - Tests: Walk-In sends `is_walk_in=1`, Registered sends `0`, All Customers sends neither, `customer_type` is never sent. All gates pass.
     - Commit `fix(reports): F-4 send is_walk_in for the customer filter`.
     - _Requirements: 3.6, 2.3_
   - [ ] 2.5 F-5, approved 2026-11-08: Sales and Billing money format (POS; design §5.5)
-    - Add the money tests and confirm they fail. They must use values no summary card shows (design §5.5), because a test using a summary value passes before the fix. Apply the edits.
+    - Add the `(F-5)` test from design Appendix D.3 to the Sales test file, as the first test in `describe("SalesReportPage")`, exactly where D.3 has it. Add `app/(kitchen)/reports/billing/page.test.tsx` by copying design Appendix D.4. Confirm both money tests fail. They use values no summary card shows (design §5.5), because a test using a summary value passes before the fix. Apply the edits.
     - Tests: `-₱1,250.00` and `₱2,750.50` in Sales, and a ₱1,000+ amount in Billing. All gates pass.
     - Commit `fix(reports): F-5 format sales and billing money with separators`.
     - _Requirements: 3.6, 2.2_
-  - [x] 2.6 F-16: done as a hotfix on 2026-11-08 (`81c204e`, design §5.6), not part of PR 2.
-    - In the portal's PR 2 branch, `grep -n unenrolled components/enrollment-status-badge.tsx` must print a line. If it doesn't, the hotfix hasn't reached `staging` yet: stop and report. Don't redo the fix.
+  - [ ] 2.6 F-16, approved 2026-11-08: show an unenrolled student instead of crashing (portal, same branch as 2.3; design §5.6)
+    - Re-verify that the backend's `app/Enums/EnrollmentStatus.php` still has exactly `enrolled`, `paused`, `unenrolled`, `banned` and `graduated`. IF it has changed THEN stop and report.
+    - Write `components/enrollment-status-badge.test.tsx` and add the unenrolled case to `app/(portal)/students/page.test.tsx`, copying the code in design §5.6. Confirm the two unenrolled cases fail with `Cannot read properties of undefined (reading 'className')`, and `npm run type-check` fails with TS2820. IF anything else fails THEN stop and report.
+    - Apply the design §5.6 edits to `types/portal.ts` (the two-line, Prettier-formatted form) and `components/enrollment-status-badge.tsx`.
+    - Tests: the new tests pass; all gates pass, including `npm run format:check`. The suite had 108 tests in the 2026-11-08 rehearsal.
+    - Commit `fix(portal): F-16 show unenrolled students instead of crashing`. Write it new: never push, merge or cherry-pick the local branch `hotfix/portal-unenrolled-child-crash`.
     - _Requirements: 3.6, 2.2_
   - [ ] 2.7 Report the commits and the design §5.4 smoke steps, which the user runs locally (design §20.1). The user opens PR 2 in each repo.
 
@@ -304,7 +309,7 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
 | 2.11 | 4.3 |
 | 2.12–2.15 | ground rules (backend checks, direct calls); task 4.3 (design §4.10) |
 | 3.1–3.5 | 2.1–2.3, 2.7 |
-| 3.6 | 2.4, 2.5; 2.6 done as a hotfix |
+| 3.6 | 2.4, 2.5, 2.6 |
 | 4.1, 4.2, 4.6 | 5.1–5.9 |
 | 4.3 | ground rules; every task in 6–8 |
 | 4.4 | 3.3, 5.x, 6.x, 7 |

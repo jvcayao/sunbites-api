@@ -87,6 +87,7 @@ On throwaway clones of both apps, against the backend at `6c800be` (Laravel 13.4
 |---|---|---|
 | The backend still matches its fixtures | `tests/Feature/Contract` on Laravel 13.40, SQLite | **484 tests pass**, digest unchanged |
 | Calling Laravel directly works and leaves nothing behind (2026-11-08) | §4.10.3's commands: a supervisor and a parent on list routes, a manager and an admin on an admin-only route, then the dev database counted | **200, 200, 403, 200 as expected.** No user, role link, branch link, token or activity row remained. Contract suite re-run: 484 pass |
+| PR 1 task 1.2 and all of PR 2 work as written (2026-11-08) | Rehearsed on GitHub's `staging` of each app (POS `4141382`, portal `1063c4c`) plus the uncommitted PR 1 upgrade, in detached worktrees outside the repos (since removed). Each fix was written from this design alone, red first, then green | **All pass:** POS 340/340 three runs plus `TZ=UTC`, portal 108/108 likewise; `tsc` 0, lint unchanged, `next build` succeeds. Task 1.2 re-proven (15/15 solo). **Five gaps found and fixed in this design:** one-line F-16 type and the task 1.2 helper weren't Prettier-clean (§22 Prettier rule); F-1's red list missed test 3; F-1's tests collided with the shared "Rice" fixture (Appendix D.1); F-4's export key spans two lines (§5.5); F-4 and F-5 share a test file, so it's split between tasks 2.4 and 2.5. Also: the faked-clock sweep tests nothing before task 3.3 (`HANDOFF.md` §5.3). Exact test code: §5.6 and Appendix D |
 | Every frontend call has a route | TypeScript AST over both apps against `route:list` | **148 of 148**. 17 routes have no parsed caller, all explained (§4.6) |
 | Response types match | TypeScript checker against every `@ok` fixture | 147 typed calls compared, **78 mismatches**, register in Appendix B.1 |
 | Requests match | AST against Form Requests. Tool validated: it re-found F-1 on its own. Reverse check: required fields never sent, validated by sabotaging its input | **5 real mismatches** (F-1 plus 4 new), Appendix B.2. **No required field missing** across 77 routes |
@@ -578,7 +579,7 @@ This section carries the former Spec 17 design (commit `6a333e8`, verified 2026-
 6. "Waste" plus Apply sends `type=waste` and no `log_type`;
 7. with `last_page: 2`, Next sends `page=2` and no `history_page`.
 
-Tests 1, 2, 6 and 7 fail before the fix.
+Tests 1, 2, 3, 6 and 7 fail before the fix, and 4 and 5 pass. Test 3 fails too because it needs rows, and before the fix none render. The exact file is in Appendix D.1. Its `beforeEach` serves an empty list for `GET /references/inventory`: the shared handler's "Rice" otherwise also appears in the History item dropdown, and `getByText("Rice")` throws after the fix.
 
 ### 5.2 F-2: Portal wallet amounts
 
@@ -604,7 +605,8 @@ Tests 1, 2, 6 and 7 fail before the fix.
 - A → B empties the cart.
 - B → null empties the cart.
 - null → B leaves it unchanged.
-- `beforeEach` calls `clearCart()`, as `cart-panel.test.tsx:65` does. The existing three tests are unchanged.
+- The top-level `beforeEach` calls `useCartStore.getState().clearCart()` (`components/pos/cart-panel.test.tsx:65` does the same in its `afterEach`). The existing three tests are unchanged.
+- The exact additions are in Appendix D.2. Before the fix, the two emptying tests fail and the null → B test passes.
 
 ### 5.4 Full-stack smoke (PR 2; how to run it: §20)
 
@@ -613,6 +615,7 @@ Tests 1, 2, 6 and 7 fail before the fix.
 - **POS:** a multi-branch manager adds items, switches branch and returns to the POS: the cart is empty.
 - **POS (F-4):** Reports → Sales. Choosing Walk-in, then Students, in Customer changes the rows, and the export follows the same choice.
 - **POS (F-5):** Reports → Sales and Reports → Billing. An amount of ₱1,000 or more shows a thousands separator, for example `₱1,500.00`.
+- **Portal (F-16):** unenroll a student in the POS, log in as their parent, and open the dashboard, Students and that student's page. Each shows the child with a grey Unenrolled badge instead of crashing.
 
 ### 5.5 F-4 and F-5 (**approved 2026-11-08**; PR 2)
 
@@ -626,7 +629,7 @@ In `app/(kitchen)/reports/sales/page.tsx`, in both the `params` object and the `
 is_walk_in: customerType === "all" ? undefined : customerType === "walk_in" ? 1 : 0,
 ```
 
-It must be `1` or `0`: `apiClient` sends `String(v)`, and Laravel's `boolean` rule rejects `"true"` (§1.2).
+It must be `1` or `0`: `apiClient` sends `String(v)`, and Laravel's `boolean` rule rejects `"true"` (§1.2). In the `exportReport` call, the old key is split over two lines (`customer_type:` and then `customerType !== "all" ? customerType : undefined,`), so replace both lines with the single line above. Both `GET reports/sales` and its export read `is_walk_in`: `ListSalesReportRequest` extends `ExportSalesReportRequest`, and both reach `SalesReportController::filteredOrders` (checked 2026-11-08). `reports/sales/page.tsx` is one of the 10 POS files Prettier doesn't format (§22), so don't run Prettier on it.
 
 **F-5: Sales and Billing report money has no thousands separator.** `order.total`, `order.discount_amount` and `row.amount` are decimal strings at runtime (`get__api_v1_reports_sales@ok.json`, `get__api_v1_reports_billing@ok.json`), so `formatPeso` shows `₱1500.00` instead of `₱1,500.00`. `contract-gaps.md` wrongly says these have no effect.
 
@@ -634,11 +637,11 @@ It must be `1` or `0`: `apiClient` sends `String(v)`, and Laravel's `boolean` ru
 - `reports/sales/page.tsx`: `Number(order.discount_amount) > 0`, `formatPeso(Number(order.discount_amount))`, `formatPeso(Number(order.total))`.
 - `reports/billing/page.tsx`: `formatPeso(Number(row.amount))`.
 
-**Test.** New file `app/(kitchen)/reports/sales/page.test.tsx`, modelled on `reports/credits/page.test.tsx`. A billing case goes in a new `reports/billing/page.test.tsx`.
+**Test.** New file `app/(kitchen)/reports/sales/page.test.tsx`, modelled on `reports/credits/page.test.tsx`. A billing case goes in a new `reports/billing/page.test.tsx`. The exact files are in Appendix D.3 and D.4.
 - Use values no summary card shows: a test using `₱1,500.00` passed **before** the fix, because the summary card shows that text. `discount_amount: "1250.00"` and `total: "2750.50"` with small summary numbers, asserting `-₱1,250.00` and `₱2,750.50`.
 - Choosing Walk-In sends `is_walk_in=1`, Registered sends `0`, All Customers sends neither, and `customer_type` is never sent.
 
-### 5.6 F-16: an unenrolled child crashes the portal (**approved 2026-11-08; fixed as a hotfix**)
+### 5.6 F-16: an unenrolled child crashes the portal (**approved 2026-11-08**; PR 2)
 
 **The bug.** `components/enrollment-status-badge.tsx` does `const config = statusConfig[status]` and then reads `config.className`, and `statusConfig` has no `unenrolled` entry. The type `StudentSummary["enrollment_status"]` lists only 4 values, so TypeScript can't see the gap.
 
@@ -649,27 +652,73 @@ It must be `1` or `0`: `apiClient` sends `String(v)`, and Laravel's `boolean` ru
 - Production: the same code is on `main` in all three repos, and neither app has an `error.tsx`.
 
 **Change** (portal):
-- `types/portal.ts`: `enrollment_status: "enrolled" | "paused" | "unenrolled" | "graduated" | "banned";`
-- `components/enrollment-status-badge.tsx`: add this entry to `statusConfig`, the same label and neutral colours the POS uses:
+- `types/portal.ts`, in `StudentSummary`: replace the `enrollment_status` line with these two lines, exactly as Prettier formats them. The one-line form passes the tests but fails `npm run format:check`:
   ```ts
-  unenrolled: {
-    label: "Unenrolled",
-    className: "bg-muted text-muted-foreground",
-  },
+    enrollment_status:
+      "enrolled" | "paused" | "unenrolled" | "graduated" | "banned";
+  ```
+- `components/enrollment-status-badge.tsx`: add this entry to `statusConfig`, between `paused` and `graduated`. It's the label and neutral colours the POS uses (`students/page.tsx:77`):
+  ```ts
+    unenrolled: {
+      label: "Unenrolled",
+      className: "bg-muted text-muted-foreground",
+    },
   ```
 
-**Test** (failing first): new `components/enrollment-status-badge.test.tsx`, one test per `EnrollmentStatus` value from the backend enum (`enrolled`, `paused`, `unenrolled`, `banned`, `graduated`), each showing its label. Plus, in `app/(portal)/students/page.test.tsx`, a student who is `unenrolled` shows their name and the badge. The dashboard has no page test on `main`, and the Students page renders the same badge.
+**Test** (failing first). Write both, then run them before changing any code. Expected red: the two `unenrolled` cases fail with `TypeError: Cannot read properties of undefined (reading 'className')`, and `npm run type-check` fails with TS2820 on the new test file until `types/portal.ts` changes. Any other failure means stop and report.
 
-**Done, 2026-11-08** (user: "fix it"):
-- **Commit:** `81c204e` `fix(portal): stop the crash when a parent has an unenrolled child`, on `hotfix/portal-unenrolled-child-crash`, branched from `main` at `48a1d79`. It's in a separate worktree, `~/sunbites-worktrees/portal-hotfix-unenrolled`, so the user's uncommitted upgrade in `~/sunbites-portal` wasn't touched. **Not pushed.**
+1. New file `components/enrollment-status-badge.test.tsx`, one case per value of the backend's `App\Enums\EnrollmentStatus`, each showing its `label()` (`ucfirst`):
+   ```tsx
+   import { render, screen } from "@/__tests__/test-utils";
+   import { EnrollmentStatusBadge } from "./enrollment-status-badge";
+
+   import type { StudentSummary } from "@/types/portal";
+
+   // Every case of the backend's App\Enums\EnrollmentStatus, with its label().
+   const backendStatuses: [StudentSummary["enrollment_status"], string][] = [
+     ["enrolled", "Enrolled"],
+     ["paused", "Paused"],
+     ["unenrolled", "Unenrolled"],
+     ["banned", "Banned"],
+     ["graduated", "Graduated"],
+   ];
+
+   describe("EnrollmentStatusBadge", () => {
+     it.each(backendStatuses)("shows the label for %s", (status, label) => {
+       render(<EnrollmentStatusBadge status={status} />);
+
+       expect(screen.getByText(label)).toBeInTheDocument();
+     });
+   });
+   ```
+2. In `app/(portal)/students/page.test.tsx`, add this test as the last one inside `describe("StudentsPage")`. It uses the file's existing `studentFixture`, `server`, `http`, `HttpResponse` and `API`; change nothing else in the file:
+   ```tsx
+     it("shows an unenrolled student instead of crashing", async () => {
+       server.use(
+         http.get(`${API}/portal/students`, () =>
+           HttpResponse.json({
+             data: [{ ...studentFixture, enrollment_status: "unenrolled" }],
+           }),
+         ),
+       );
+       render(<StudentsPage />);
+       expect(await screen.findByText("Juan Dela Cruz")).toBeInTheDocument();
+       expect(screen.getByText("Unenrolled")).toBeInTheDocument();
+     });
+   ```
+
+The dashboard has no page test on `staging`, and the Students page renders the same badge. Only the badge reads `enrollment_status`: the dashboard, the Students list and the student header (`students/[id]/_components/student-header.tsx:129`) all render it, so this one fix covers all three. On 2026-11-08 the portal suite went from 102 tests to 108.
+
+**Proven on 2026-11-08** by a trial fix (user: "fix it"):
 - **Backend, checked directly (§4.10.3):** with a parent's child set to `unenrolled` inside a rolled-back transaction, `GET portal/dashboard` and `GET portal/students` both return 200 with `"unenrolled"`. There is no student detail endpoint: the detail page takes the student from the list, so its header crashed too.
 - **Tests:** both new tests failed before the fix with the production error, `Cannot read properties of undefined (reading 'className')`, and passed after it. Full suite 108/108 three runs in a row, `tsc` 0 errors, ESLint clean, `next build` succeeds.
-- **Delivery** (`.claude/agents/git-workflow.md`, hotfix row): the user pushes the branch, opens a PR to `main`, and merges `main` back into `staging` afterwards. Then remove the worktree with `git -C ~/sunbites-portal worktree remove ~/sunbites-worktrees/portal-hotfix-unenrolled`.
-- **PR 2:** task 2.6 is done by this hotfix. The portal's PR 2 branch is cut from `staging`, so it has the fix once `main` is merged back.
+- **PR 2 rehearsal, 2026-11-08:** on GitHub's portal `staging` (`1063c4c`, the same code as `main`) plus the uncommitted PR 1 upgrade (Next 16.4.3, React 19.3.1), task 2.3 (F-2, §5.2) and then task 2.6 were applied from this design's text alone. Each red step failed as written, and each fix made it pass. Afterwards: 108/108 three runs in a row, 108/108 with `TZ=UTC`, `tsc` 0, ESLint clean, `npm run format:check` clean, `next build` succeeds. This rehearsal found that the one-line type wasn't Prettier-clean; the change above now gives the formatted form.
+
+**Delivery: PR 2, with no separate hotfix** (user, 2026-11-08: "we are going to fix this on one PR"). Task 2.6 makes the change test-first on the portal's PR 2 branch, next to F-2, so its commit carries that step's `Backend:` line. The trial fix was commit `81c204e` on the local portal branch `hotfix/portal-unenrolled-child-crash`. It was never pushed and isn't shipped: don't push, merge or cherry-pick it. F-16 reaches production with PR 2.
 
 **Open for the user:** whether parents should see an unenrolled child at all. This fix keeps today's data and only stops the crash. Hiding them would be a backend change.
 
-**Full-stack smoke (§20):** unenroll a student in the POS, log in as their parent, and open the dashboard and Students.
+**Full-stack smoke:** §5.4, the F-16 line.
 
 ## 6. Behaviour freeze (Req 4)
 
@@ -1224,7 +1273,7 @@ From the compliance register (§4.5–§4.8). Each one is proposed to the user w
 | PR | Branch (each repo) | Base | Contents | Depends on |
 |---|---|---|---|---|
 | 1 | `bump-latest-upgrade-pos` / `-portal` (existing) | `staging` | the upgrade commit; the green-baseline test fixes (POS) | — |
-| 2 | `fix/spec17-contract-fixes` | `origin/staging` after PR 1 merges | F-1 + F-3 (POS), F-2 (portal), F-4 + F-5 (POS, approved 2026-11-08); one commit each. F-16 shipped separately as a hotfix (§5.6) | PR 1 |
+| 2 | `fix/spec17-contract-fixes` | `origin/staging` after PR 1 merges | F-1 + F-3 (POS), F-2 + F-16 (portal), F-4 + F-5 (POS); F-4, F-5 and F-16 approved 2026-11-08; one commit each | PR 1 |
 | 3 | `refactor/spec17-code-quality` | `origin/staging` after PR 2 merges | Track A, tasks 3–8; one commit per step | PR 2; Spec 16 deployed to production before PR 3 is, if any commit relies on §4.9 |
 | 4 | `fix/spec17-track-b2` | `origin/staging` after PR 3 merges | FB-01, FB-02, FB-03, approved FB-04.n and F-4+; one commit each | PR 3 |
 
@@ -1272,7 +1321,7 @@ This spec exposes no new API. New internal contracts:
 ## 20. Migration and rollout
 
 - No schema or API change. A merge to `staging` runs the frontends' `staging.yml`. Production deploys only by hand, through `production.yml` with the input `DEPLOY`.
-- **Ordering:** PR 1 (security) first, as soon as it is green. F-16 as a hotfix to `main`, approved 2026-11-08 (§5.6). PRs 2–4 in order (§16). Spec 16 reaches production before any frontend change that relies on it (§4.9).
+- **Ordering:** PR 1 (security) first, as soon as it is green. PRs 2–4 in order (§16). PR 2 carries F-16, a crash that is live on production (§5.6). Spec 16 reaches production before any frontend change that relies on it (§4.9).
 
 ### 20.1 Full-stack smoke
 
@@ -1323,7 +1372,12 @@ npx jest --ci                                     # full suite (about 5 s POS, 2
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1 npm run build   # on the command line only, never exported (H22)
 npm run test:contract                             # from task 4.1, every commit: it's cheap
 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest   # every Track A refactor commit
+npm run format:check                              # portal only; POS rule below
 ```
+
+**Prettier.** CI doesn't run it, and nothing else in this spec did until 2026-11-08, when rehearsing PR 1 and PR 2 found two snippets that broke formatting. Rule: a file that is Prettier-clean on `staging` stays clean, and a file that isn't is never reformatted, so a fix's diff shows only the fix.
+- **Portal:** every file is clean on `staging` (checked 2026-11-08, also with the PR 1 upgrade). Run `npx prettier --write <the files you changed>`, then `npm run format:check` must pass.
+- **POS:** these 10 files are unformatted on `staging` (`4141382`): `app/(kiosk)/kiosk/kiosk.test.tsx`, `app/(kitchen)/notifications/page.tsx`, `app/(kitchen)/pre-registrations/page.tsx`, `app/(kitchen)/reports/sales/page.tsx`, `app/(kitchen)/students/[id]/_components/void-topup-dialog.test.tsx`, `app/(kitchen)/students/[id]/_components/void-topup-dialog.tsx`, `app/(kitchen)/students/[id]/_components/wallet-tab.test.tsx`, `components/notification-bell.tsx`, `types/feedback.ts`, `types/meal-planner.ts`. Run `npx prettier --write` on the files you changed **except** those 10. In those 10, match the surrounding code by hand. F-4 and F-5 edit `reports/sales/page.tsx`, which is one of them, so keep the design's snippet as it is there. `format:check` isn't a POS gate.
 
 Also, per §7.1: the route table on tasks 6.1 and 7, and the server smoke on tasks 6.1 and 7. On task 7: `COMPILED_TESTS=1 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest --no-cache`. Before PR 3's handover: `css-diff.cjs` and `compare.mjs` (§7.1, Appendix C.5 and C.6).
 
@@ -1373,7 +1427,7 @@ Each one changes what someone sees, so none is done until the user approves it. 
 
 | ID | What users see today | Evidence | Recommended | Where |
 |---|---|---|---|---|
-| **F-16** | **A parent whose child is unenrolled can't use the portal: the dashboard and Students list crash.** Parents land on the dashboard after login, and there's no error screen yet. **Live on production `main`** | §5.6. Proven at both ends: the backend sends `unenrolled`; the portal throws | **Approved 2026-11-08. Fixed as a hotfix,** `81c204e`, not pushed yet | Hotfix |
+| **F-16** | **A parent whose child is unenrolled can't use the portal: the dashboard and Students list crash.** Parents land on the dashboard after login, and there's no error screen yet. **Live on production `main`** | §5.6. Proven at both ends: the backend sends `unenrolled`; the portal throws | **Approved 2026-11-08,** in PR 2 with no separate hotfix (user: "one PR") | PR 2 |
 | F-4 | **Sales report Customer filter does nothing,** on screen and in the export | sends `customer_type`, backend reads `is_walk_in` | Fix (§5.5), **approved 2026-11-08** | PR 2 |
 | F-5 | **Sales and Billing money shows `₱1500.00`** instead of `₱1,500.00` | decimal string reaches `formatPeso` | Fix (§5.5), **approved 2026-11-08** | PR 2 |
 | F-6 | **Announcements list shows only the newest 15.** Older ones can't be reached: no paging on screen | asks `per_page: 50`, `AnnouncementController` is fixed at `paginate(15)` | Backend: read `per_page`, as `ListParentsRequest` does | Backend |
@@ -2052,4 +2106,619 @@ console.log(`browser compare: ${results.length} screens, ${bad.length} differ, $
 for(const r of bad){console.log(`DIFF ${r.app} ${r.pass} ${r.route}: url ${r.urlSame}, html ${r.htmlSame}, console ${r.errsSame}`);if(r.original){console.log(`  original: ${r.original}`);console.log(`  changed:  ${r.changed}`)}}
 for(const r of results.filter(r=>r.htmlSame&&!r.pngSame))console.log(`LOOK ${r.app} ${r.pass} ${r.route}: same HTML, different pixels (usually a running animation). Screenshots are in ${OUT}`);
 chrome.kill();process.exit(bad.length?1:0);
+```
+
+## Appendix D: Verified PR 2 test code (POS)
+
+Written on 2026-11-08 from §5.1, §5.3 and §5.5 alone, then run on GitHub's POS `staging` (`4141382`) plus the PR 1 upgrade and task 1.2. Each file failed as its task says before the fix, and passed after it. The whole PR 2 rehearsal then gave 340/340 three runs in a row, 340/340 with `TZ=UTC`, `tsc` 0, the same 7 lint warnings as before (0 errors), and a successful `next build`. Copy these exactly. The portal's F-16 tests are in §5.6.
+
+### D.1 F-1: `app/(kitchen)/reports/inventory/page.test.tsx` (new file)
+
+Two details that the prose in §5.1 doesn't make obvious:
+- The shared MSW handler for `GET /references/inventory` serves an item named "Rice". It fills the History item dropdown, so without the override in `beforeEach`, "Rice" appears twice and `getByText("Rice")` throws after the fix.
+- Tests 6 and 7 wait for a History control, not a snapshot row. That way they fail before the fix because of the query key, not because no rows render.
+
+```tsx
+import { http, HttpResponse } from "msw";
+import React from "react";
+import userEvent from "@testing-library/user-event";
+
+import { render, screen, waitFor } from "@/__tests__/test-utils";
+import { server } from "@/__tests__/mocks/server";
+import { useAuthStore } from "@/lib/store/auth";
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => "/reports/inventory",
+}));
+
+jest.mock("@/components/ui/select", () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string;
+    onValueChange: (v: string) => void;
+    children: React.ReactNode;
+  }) => (
+    <select value={value} onChange={(e) => onValueChange(e.target.value)}>
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectItem: ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: React.ReactNode;
+  }) => <option value={value}>{children}</option>,
+}));
+
+jest.mock("@/lib/store/auth", () => {
+  const actual = jest.requireActual(
+    "@/lib/store/auth",
+  ) as typeof import("@/lib/store/auth");
+
+  return {
+    ...actual,
+    useAuthStore: Object.assign(jest.fn(), {
+      getState: actual.useAuthStore.getState,
+      setState: actual.useAuthStore.setState,
+    }),
+  };
+});
+
+const mockUseAuthStore = jest.mocked(useAuthStore);
+
+const managerUser = {
+  id: 2,
+  first_name: "Manager",
+  last_name: "User",
+  full_name: "Manager User",
+  email: "manager@test.com",
+  roles: ["manager"] as string[],
+  branches: [{ id: 1, name: "Main Branch", slug: "main-branch" }],
+};
+
+import InventoryReportPage from "./page";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
+
+const item = (id: number, name: string, status: string) => ({
+  id,
+  name,
+  unit: "kg",
+  quantity: 5,
+  restock_threshold: 10,
+  status,
+});
+
+function serveInventory(
+  overrides: { items?: unknown[]; lastPage?: number } = {},
+  onRequest?: (url: URL) => void,
+) {
+  server.use(
+    http.get(`${API}/reports/inventory`, ({ request }) => {
+      onRequest?.(new URL(request.url));
+      return HttpResponse.json({
+        items: overrides.items ?? [
+          item(1, "Rice", "LOW"),
+          item(2, "Eggs", "OUT"),
+          item(3, "Oil", "OK"),
+        ],
+        summary: {
+          total_items: 3,
+          out_of_stock: 1,
+          below_threshold: 1,
+          over_stock: 0,
+        },
+        logs: {
+          data: [],
+          meta: {
+            current_page: 1,
+            last_page: overrides.lastPage ?? 1,
+            per_page: 25,
+            total: 0,
+          },
+        },
+        discrepancy: [],
+      });
+    }),
+  );
+}
+
+describe("InventoryReportPage", () => {
+  beforeEach(() => {
+    mockUseAuthStore.mockImplementation((selector: unknown) =>
+      typeof selector === "function"
+        ? (selector as (s: unknown) => unknown)({
+            user: managerUser,
+            token: "t",
+            activeBranchId: 1,
+          })
+        : undefined,
+    );
+    // The shared handler's items include "Rice", which would also appear in the
+    // History item dropdown. Serve none so each name appears once.
+    server.use(
+      http.get(`${API}/references/inventory`, () => HttpResponse.json([])),
+    );
+    serveInventory();
+  });
+
+  it("lists the three items", async () => {
+    render(<InventoryReportPage />);
+    expect(await screen.findByText("Rice")).toBeInTheDocument();
+    expect(screen.getByText("Eggs")).toBeInTheDocument();
+    expect(screen.getByText("Oil")).toBeInTheDocument();
+  });
+
+  it("shows the LOW and OUT badges", async () => {
+    render(<InventoryReportPage />);
+    expect(await screen.findByText("LOW ⚠")).toBeInTheDocument();
+    expect(screen.getByText("OUT ✕")).toBeInTheDocument();
+  });
+
+  it("filters to Low and back to All Status", async () => {
+    const user = userEvent.setup();
+    render(<InventoryReportPage />);
+    await screen.findByText("Rice");
+
+    await user.selectOptions(screen.getByDisplayValue("All Status"), "Low");
+    expect(screen.getByText("Rice")).toBeInTheDocument();
+    expect(screen.queryByText("Eggs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Oil")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByDisplayValue("Low"), "All Status");
+    expect(screen.getByText("Eggs")).toBeInTheDocument();
+    expect(screen.getByText("Oil")).toBeInTheDocument();
+  });
+
+  it("shows the empty state when there are no items", async () => {
+    serveInventory({ items: [] });
+    render(<InventoryReportPage />);
+    expect(
+      await screen.findByText("No inventory data found."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an error when the report fails", async () => {
+    server.use(
+      http.get(`${API}/reports/inventory`, () =>
+        HttpResponse.json({ message: "Server error" }, { status: 500 }),
+      ),
+    );
+    render(<InventoryReportPage />);
+    expect(
+      await screen.findByText(
+        "Failed to load inventory data. Please try again.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("sends type=waste, not log_type, when Waste is applied", async () => {
+    const user = userEvent.setup();
+    const urls: URL[] = [];
+    serveInventory({}, (url) => urls.push(url));
+    render(<InventoryReportPage />);
+    await screen.findByRole("button", { name: "Apply" });
+
+    await user.selectOptions(screen.getByDisplayValue("All Types"), "Waste");
+    await user.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(urls.some((u) => u.searchParams.get("type") === "waste")).toBe(
+        true,
+      ),
+    );
+    expect(urls.some((u) => u.searchParams.has("log_type"))).toBe(false);
+  });
+
+  it("sends page=2, not history_page, when Next is clicked", async () => {
+    const user = userEvent.setup();
+    const urls: URL[] = [];
+    serveInventory({ lastPage: 2 }, (url) => urls.push(url));
+    render(<InventoryReportPage />);
+
+    await user.click(await screen.findByRole("button", { name: /Next/ }));
+
+    await waitFor(() =>
+      expect(urls.some((u) => u.searchParams.get("page") === "2")).toBe(true),
+    );
+    expect(urls.some((u) => u.searchParams.has("history_page"))).toBe(false);
+  });
+});
+```
+
+### D.2 F-3: additions to `components/branch-cache-sync.test.tsx`
+
+Change nothing else in the file.
+1. Below `import { useAuthStore } from "@/lib/store/auth";`, add:
+   ```tsx
+   import { useCartStore } from "@/lib/store/cart";
+   ```
+2. In the top-level `beforeEach`, after the `act(() => { useAuthStore.getState().logout(); });` call, add:
+   ```tsx
+   useCartStore.getState().clearCart();
+   ```
+3. After that `beforeEach`, add:
+   ```tsx
+   function addCartItem() {
+     useCartStore.getState().addItem({
+       id: 7,
+       name: "Chicken Adobo",
+       price: 100,
+       category: "meal",
+     });
+   }
+   ```
+4. At the end of `describe("BranchCacheSync")`, after the existing three tests, add:
+   ```tsx
+     it("empties the cart when the active branch switches (A -> B)", async () => {
+       act(() => {
+         useAuthStore.getState().login("token", user);
+         useAuthStore.getState().setActiveBranch(branchA);
+       });
+       renderWithClient();
+       await screen.findByText("branch:1");
+       addCartItem();
+
+       act(() => {
+         useAuthStore.getState().setActiveBranch(branchB);
+       });
+
+       expect(useCartStore.getState().items).toEqual([]);
+     });
+
+     it("empties the cart on logout (B -> null)", async () => {
+       act(() => {
+         useAuthStore.getState().login("token", user);
+         useAuthStore.getState().setActiveBranch(branchB);
+       });
+       renderWithClient();
+       await screen.findByText("branch:2");
+       addCartItem();
+
+       act(() => {
+         useAuthStore.getState().logout();
+       });
+
+       expect(useCartStore.getState().items).toEqual([]);
+     });
+
+     it("leaves the cart alone on first branch selection (null -> B)", async () => {
+       act(() => {
+         useAuthStore.getState().login("token", user);
+       });
+       renderWithClient();
+       await screen.findByText("branch:none");
+       addCartItem();
+
+       act(() => {
+         useAuthStore.getState().setActiveBranch(branchB);
+       });
+
+       expect(useCartStore.getState().items).toHaveLength(1);
+     });
+   ```
+
+### D.3 F-4 and F-5: `app/(kitchen)/reports/sales/page.test.tsx` (new file)
+
+The summary numbers are small so that no summary card shows `₱1,250.00` or `₱2,750.50` (§5.5). "All Customers" passes before the fix: it guards against sending a key for "all".
+
+F-4 and F-5 are separate commits, and each must pass. Task 2.4 therefore copies this file **without** the `(F-5)` test, and task 2.5 adds it back in the same place. The F-4 commit's state was checked on 2026-11-08: F-4 applied, F-5 not, this file without its `(F-5)` test and no billing test gave 338/338 and `tsc` 0.
+
+```tsx
+import { http, HttpResponse } from "msw";
+import React from "react";
+import userEvent from "@testing-library/user-event";
+
+import { render, screen, waitFor } from "@/__tests__/test-utils";
+import { server } from "@/__tests__/mocks/server";
+import { useAuthStore } from "@/lib/store/auth";
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => "/reports/sales",
+}));
+
+jest.mock("@/components/ui/select", () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string;
+    onValueChange: (v: string) => void;
+    children: React.ReactNode;
+  }) => (
+    <select value={value} onChange={(e) => onValueChange(e.target.value)}>
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectItem: ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: React.ReactNode;
+  }) => <option value={value}>{children}</option>,
+}));
+
+jest.mock("@/lib/store/auth", () => {
+  const actual = jest.requireActual(
+    "@/lib/store/auth",
+  ) as typeof import("@/lib/store/auth");
+
+  return {
+    ...actual,
+    useAuthStore: Object.assign(jest.fn(), {
+      getState: actual.useAuthStore.getState,
+      setState: actual.useAuthStore.setState,
+    }),
+  };
+});
+
+const mockUseAuthStore = jest.mocked(useAuthStore);
+
+const adminUser = {
+  id: 1,
+  first_name: "Admin",
+  last_name: "User",
+  full_name: "Admin User",
+  email: "admin@test.com",
+  roles: ["admin"] as string[],
+  branches: [{ id: 1, name: "Main Branch", slug: "main-branch" }],
+};
+
+import SalesReportPage from "./page";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
+
+// Money is a decimal string, as GET reports/sales sends it. The summary numbers are
+// small on purpose: no summary card may show the amounts the rows are checked for.
+const order = {
+  id: 1,
+  receipt_number: "SB-000123",
+  created_at: "2026-08-14T04:00:00.000000Z",
+  student: null,
+  cashier: { id: 3, first_name: "Maris", last_name: "Cayao" },
+  items: [{ name: "Chicken Adobo", quantity: 1, price: "4000.50" }],
+  payment_method: "cash",
+  discount_amount: "1250.00",
+  total: "2750.50",
+};
+
+function serveSales(onRequest?: (url: URL) => void) {
+  server.use(
+    http.get(`${API}/reports/sales`, ({ request }) => {
+      onRequest?.(new URL(request.url));
+      return HttpResponse.json({
+        data: [order],
+        meta: {
+          current_page: 1,
+          last_page: 1,
+          per_page: 25,
+          total: 1,
+          from: 1,
+          to: 1,
+        },
+        summary: {
+          total_revenue: 12,
+          total_orders: 1,
+          avg_order_value: 12,
+          total_discounts: 3,
+          net_revenue: 9,
+        },
+      });
+    }),
+  );
+}
+
+describe("SalesReportPage", () => {
+  beforeEach(() => {
+    mockUseAuthStore.mockImplementation((selector: unknown) =>
+      typeof selector === "function"
+        ? (selector as (s: unknown) => unknown)({
+            user: adminUser,
+            token: "t",
+            activeBranchId: 1,
+          })
+        : undefined,
+    );
+    serveSales();
+  });
+
+  it("shows order money with thousands separators (F-5)", async () => {
+    render(<SalesReportPage />);
+    expect(await screen.findByText("-₱1,250.00")).toBeInTheDocument();
+    expect(screen.getByText("₱2,750.50")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["Walk-In", "1"],
+    ["Registered", "0"],
+  ])(
+    "sends is_walk_in for %s, never customer_type (F-4)",
+    async (label, value) => {
+      const user = userEvent.setup();
+      const urls: URL[] = [];
+      serveSales((url) => urls.push(url));
+      render(<SalesReportPage />);
+      await screen.findByText("SB-000123");
+
+      await user.selectOptions(
+        screen.getByDisplayValue("All Customers"),
+        label,
+      );
+
+      await waitFor(() =>
+        expect(urls.at(-1)?.searchParams.get("is_walk_in")).toBe(value),
+      );
+      expect(urls.some((u) => u.searchParams.has("customer_type"))).toBe(false);
+    },
+  );
+
+  it("sends neither key for All Customers (F-4)", async () => {
+    const urls: URL[] = [];
+    serveSales((url) => urls.push(url));
+    render(<SalesReportPage />);
+    await screen.findByText("SB-000123");
+
+    expect(urls[0].searchParams.has("is_walk_in")).toBe(false);
+    expect(urls[0].searchParams.has("customer_type")).toBe(false);
+  });
+});
+```
+
+### D.4 F-5: `app/(kitchen)/reports/billing/page.test.tsx` (new file)
+
+`total_collected` is 15, so no summary card shows `₱1,500.00`.
+
+```tsx
+import { http, HttpResponse } from "msw";
+import React from "react";
+
+import { render, screen } from "@/__tests__/test-utils";
+import { server } from "@/__tests__/mocks/server";
+import { useAuthStore } from "@/lib/store/auth";
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => "/reports/billing",
+}));
+
+jest.mock("@/components/ui/select", () => ({
+  Select: ({
+    value,
+    onValueChange,
+    children,
+  }: {
+    value: string;
+    onValueChange: (v: string) => void;
+    children: React.ReactNode;
+  }) => (
+    <select value={value} onChange={(e) => onValueChange(e.target.value)}>
+      {children}
+    </select>
+  ),
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectValue: () => null,
+  SelectContent: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  SelectItem: ({
+    value,
+    children,
+  }: {
+    value: string;
+    children: React.ReactNode;
+  }) => <option value={value}>{children}</option>,
+}));
+
+jest.mock("@/lib/store/auth", () => {
+  const actual = jest.requireActual(
+    "@/lib/store/auth",
+  ) as typeof import("@/lib/store/auth");
+
+  return {
+    ...actual,
+    useAuthStore: Object.assign(jest.fn(), {
+      getState: actual.useAuthStore.getState,
+      setState: actual.useAuthStore.setState,
+    }),
+  };
+});
+
+const mockUseAuthStore = jest.mocked(useAuthStore);
+
+const adminUser = {
+  id: 1,
+  first_name: "Admin",
+  last_name: "User",
+  full_name: "Admin User",
+  email: "admin@test.com",
+  roles: ["admin"] as string[],
+  branches: [{ id: 1, name: "Main Branch", slug: "main-branch" }],
+};
+
+import BillingReportPage from "./page";
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost/api/v1";
+
+describe("BillingReportPage", () => {
+  beforeEach(() => {
+    mockUseAuthStore.mockImplementation((selector: unknown) =>
+      typeof selector === "function"
+        ? (selector as (s: unknown) => unknown)({
+            user: adminUser,
+            token: "t",
+            activeBranchId: 1,
+          })
+        : undefined,
+    );
+    server.use(
+      http.get(`${API}/reports/billing`, () =>
+        HttpResponse.json({
+          data: [
+            {
+              id: 1,
+              school_month: "august",
+              year: 2026,
+              status: "paid",
+              amount: "1500.00",
+              recorded_at: null,
+              student: {
+                id: 177,
+                first_name: "Lily",
+                last_name: "Cielo",
+                full_name: "Lily Cielo",
+                grade_level: "Grade 4",
+                section: null,
+                student_number: "SB-0001",
+              },
+              recorder: null,
+            },
+          ],
+          meta: {
+            current_page: 1,
+            last_page: 1,
+            per_page: 25,
+            total: 1,
+            from: 1,
+            to: 1,
+          },
+          summary: {
+            total_subscribers: 1,
+            total_collected: 15,
+            total_outstanding: 0,
+            collection_rate: 100,
+          },
+        }),
+      ),
+    );
+  });
+
+  it("shows the amount with a thousands separator (F-5)", async () => {
+    render(<BillingReportPage />);
+    expect(await screen.findByText("₱1,500.00")).toBeInTheDocument();
+  });
+});
 ```
