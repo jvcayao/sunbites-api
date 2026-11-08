@@ -168,4 +168,20 @@ class ActivityLogTest extends TestCase
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = activity('students')->causedBy($this->admin)->log('students.code_500');
+        activity('students')->causedBy($this->admin)->log('students.code_axb');
+        $underscore = activity('students')->causedBy($this->admin)->log('students.code_a_b');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reports/activity?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

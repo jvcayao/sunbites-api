@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CheckPermission;
+use App\Http\Middleware\EnsureActiveBranch;
 use App\Http\Middleware\SetActiveBranch;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -15,13 +16,14 @@ use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Sentry\Laravel\Integration;
 use Spatie\Permission\Middleware\RoleMiddleware;
 use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
-        channels: __DIR__.'/../routes/channels.php',
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -38,6 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'abilities' => CheckAbilities::class,
             'ability' => CheckForAnyAbility::class,
+            'branch.required' => EnsureActiveBranch::class,
             'permission' => CheckPermission::class,
             'role' => RoleMiddleware::class,
             'role_or_permission' => RoleOrPermissionMiddleware::class,
@@ -52,11 +55,11 @@ return Application::configure(basePath: dirname(__DIR__))
                     return response()->json(['message' => 'Unauthenticated.'], 401);
                 }
 
-                if ($e instanceof AuthorizationException) {
+                if ($e instanceof AccessDeniedHttpException && $e->getPrevious() instanceof AuthorizationException) {
                     return response()->json(['message' => 'Forbidden.'], 403);
                 }
 
-                if ($e instanceof ModelNotFoundException) {
+                if ($e instanceof NotFoundHttpException && $e->getPrevious() instanceof ModelNotFoundException) {
                     return response()->json(['message' => 'Not found.'], 404);
                 }
 

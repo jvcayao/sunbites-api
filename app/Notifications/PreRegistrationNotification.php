@@ -5,10 +5,10 @@ namespace App\Notifications;
 use App\Models\PreRegistration;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Notifications\Notification;
 
-class PreRegistrationNotification extends Notification implements ShouldBroadcast, ShouldQueue
+class PreRegistrationNotification extends Notification implements ShouldBroadcast, ShouldQueueAfterCommit
 {
     use Queueable;
 

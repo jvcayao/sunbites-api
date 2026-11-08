@@ -10,8 +10,12 @@ use App\Models\User;
 use App\Services\ParentProvisioningService;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
+use RuntimeException;
 use Tests\TestCase;
 
 class ParentProvisioningTest extends TestCase
@@ -182,5 +186,36 @@ class ParentProvisioningTest extends TestCase
             ])->assertCreated();
 
         Mail::assertNothingQueued();
+    }
+
+    /**
+     * The welcome mail goes out only when the provisioning transaction commits (Spec 16
+     * T-14.2, design §4.7). No Mail::fake(): only MessageSending is faked, so the mail still
+     * flows through the real sync queue and the array mailer.
+     */
+    public function test_a_rolled_back_provisioning_sends_no_welcome_mail(): void
+    {
+        Event::fake([MessageSending::class]);
+
+        try {
+            DB::transaction(function (): void {
+                $this->service->provision('rollback@example.com', 'Rosa Cruz', $this->student->id, $this->staffUser->id);
+
+                throw new RuntimeException('roll back');
+            });
+        } catch (RuntimeException) {
+            // The rollback is the point of the test.
+        }
+
+        Event::assertNotDispatched(MessageSending::class);
+    }
+
+    public function test_a_committed_provisioning_sends_one_welcome_mail(): void
+    {
+        Event::fake([MessageSending::class]);
+
+        DB::transaction(fn () => $this->service->provision('commit@example.com', 'Rosa Cruz', $this->student->id, $this->staffUser->id));
+
+        Event::assertDispatchedTimes(MessageSending::class, 1);
     }
 }

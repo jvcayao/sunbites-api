@@ -16,6 +16,8 @@ Before ANY commit:
 
 ## Branch Strategy
 
+In `sunbites-api`, merging to `main` does not deploy: production deploys only through the Deploy to Production workflow.
+
 ```
 main (production)
   └── staging

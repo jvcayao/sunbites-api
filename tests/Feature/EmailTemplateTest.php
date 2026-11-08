@@ -40,6 +40,26 @@ class EmailTemplateTest extends TestCase
             ->assertSeeInHtml('Sunbites School Canteen Management System');
     }
 
+    /**
+     * T-22 (design §17.4): guards the one public asset the frontend-leftover removal
+     * must not take with it. The `<x-emails.layout>` logo is the only `public/` file the
+     * app references.
+     */
+    public function test_email_layout_logo_asset_exists(): void
+    {
+        $parent = ParentUser::create([
+            'first_name' => 'Maria',
+            'last_name' => 'Santos',
+            'email' => 'maria@example.com',
+            'password' => bcrypt('password'),
+        ]);
+
+        $mailable = new ParentWelcomeMail($parent, 'test-activation-token');
+
+        $mailable->assertSeeInHtml('images/sunbites.png');
+        $this->assertFileExists(public_path('images/sunbites.png'));
+    }
+
     public function test_wallet_alert_mail_renders_with_branding(): void
     {
         $branch = Branch::factory()->create();

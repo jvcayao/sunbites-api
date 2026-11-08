@@ -2,34 +2,36 @@
 
 namespace App\Models;
 
+use App\Enums\PaymentStatus;
 use App\Enums\SchoolMonth;
 use Database\Factories\StudentMonthlyPaymentFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+#[Fillable([
+    'student_id',
+    'school_month',
+    'year',
+    'status',
+    'amount',
+    'recorded_at',
+    'recorded_by',
+    'voided_at',
+    'voided_by',
+    'void_reason',
+])]
 class StudentMonthlyPayment extends Model
 {
     /** @use HasFactory<StudentMonthlyPaymentFactory> */
     use HasFactory;
 
-    protected $fillable = [
-        'student_id',
-        'school_month',
-        'year',
-        'status',
-        'amount',
-        'recorded_at',
-        'recorded_by',
-        'voided_at',
-        'voided_by',
-        'void_reason',
-    ];
-
     protected function casts(): array
     {
         return [
             'school_month' => SchoolMonth::class,
+            'status' => PaymentStatus::class,
             'year' => 'integer',
             'amount' => 'decimal:2',
             'recorded_at' => 'datetime',
@@ -37,16 +39,19 @@ class StudentMonthlyPayment extends Model
         ];
     }
 
+    /** @return BelongsTo<Student, $this> */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function recorder(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by');
@@ -54,16 +59,16 @@ class StudentMonthlyPayment extends Model
 
     public function isPaid(): bool
     {
-        return $this->status === 'paid';
+        return $this->status === PaymentStatus::Paid;
     }
 
     public function isUnpaid(): bool
     {
-        return $this->status === 'unpaid';
+        return $this->status === PaymentStatus::Unpaid;
     }
 
     public function isVoided(): bool
     {
-        return $this->status === 'voided';
+        return $this->status === PaymentStatus::Voided;
     }
 }

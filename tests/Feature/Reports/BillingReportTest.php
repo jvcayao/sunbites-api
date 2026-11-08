@@ -9,6 +9,7 @@ use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Laravel\Sanctum\Sanctum;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 class BillingReportTest extends TestCase
@@ -107,13 +108,79 @@ class BillingReportTest extends TestCase
 
     public function test_default_school_month_and_year_filters_to_current_school_period(): void
     {
+        $this->travelTo('2026-11-15');
+
+        $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    public function test_default_school_month_and_year_filters_to_current_school_period_in_january(): void
+    {
+        $this->travelTo('2027-01-20');
+
+        $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    public function test_default_school_month_and_year_filters_to_current_school_period_in_october(): void
+    {
+        $this->travelTo('2026-10-15');
+
+        $this->assertDefaultFiltersToCurrentSchoolPeriod();
+    }
+
+    /**
+     * T-23 (design §16.7): April and May are not school months, so `withDefaultPeriod()`
+     * falls back to the whole school year instead of a single month.
+     */
+    public function test_default_filters_cover_the_whole_school_year_during_the_summer_break(): void
+    {
+        $this->travelTo('2027-05-20');
+
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+
+        $juneThisSchoolYear = StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => 2026,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $marchThisSchoolYear = StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'march',
+            'year' => 2027,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => 2025,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id')->sort()->values()->all();
+        $expected = collect([$juneThisSchoolYear->id, $marchThisSchoolYear->id])->sort()->values()->all();
+        $this->assertSame($expected, $ids);
+    }
+
+    /**
+     * Payment `year` is the calendar year, as EnrollmentService writes it (Spec 16 B-05).
+     */
+    private function assertDefaultFiltersToCurrentSchoolPeriod(): void
+    {
         $student = Student::factory()->create(['branch_id' => $this->branch->id]);
 
         // Current period payment — should appear
         StudentMonthlyPayment::create([
             'student_id' => $student->id,
             'school_month' => strtolower(now()->format('F')),
-            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'year' => now()->year,
             'status' => 'unpaid',
             'amount' => 800.00,
         ]);
@@ -123,7 +190,7 @@ class BillingReportTest extends TestCase
         StudentMonthlyPayment::create([
             'student_id' => $student->id,
             'school_month' => $otherMonth,
-            'year' => now()->month >= 6 ? now()->year : now()->year - 1,
+            'year' => now()->year,
             'status' => 'unpaid',
             'amount' => 800.00,
         ]);
@@ -198,6 +265,17 @@ class BillingReportTest extends TestCase
     public function test_manager_can_export_billing_report(): void
     {
         $response = $this->asManager()->getJson('/api/v1/reports/billing/export');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
+    /**
+     * The export has no per_page rule, so a value over the list's max:100 is still accepted (H8).
+     */
+    public function test_export_ignores_a_per_page_above_the_list_limit(): void
+    {
+        $response = $this->asManager()->getJson('/api/v1/reports/billing/export?per_page=500');
 
         $response->assertOk()
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -433,5 +511,134 @@ class BillingReportTest extends TestCase
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
+    }
+
+    // --- School year (Spec 16 B-05): `year` is the school-year start, payment year the calendar year ---
+
+    public function test_january_of_school_year_2026_is_the_january_2027_payment(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $january2027 = $this->unpaidPayment($student, 'january', 2027);
+        $this->unpaidPayment($student, 'january', 2026);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?year=2026&school_month=january');
+
+        $response->assertOk();
+        $this->assertSame([$january2027->id], collect($response->json('data'))->pluck('id')->all());
+    }
+
+    public function test_all_months_of_school_year_2025_run_from_june_2025_to_march_2026(): void
+    {
+        $this->travelTo('2026-04-15 09:00:00');
+        $student = Student::factory()->create(['branch_id' => $this->branch->id]);
+        $june2025 = $this->unpaidPayment($student, 'june', 2025);
+        $march2026 = $this->unpaidPayment($student, 'march', 2026);
+        $this->unpaidPayment($student, 'march', 2025);
+        $this->unpaidPayment($student, 'june', 2026);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reports/billing?year=2025');
+
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing([$june2025->id, $march2026->id], collect($response->json('data'))->pluck('id')->all());
+    }
+
+    private function unpaidPayment(Student $student, string $schoolMonth, int $year): StudentMonthlyPayment
+    {
+        return StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => $schoolMonth,
+            'year' => $year,
+            'status' => 'unpaid',
+            'amount' => 800.00,
+        ]);
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $paymentFor = fn (string $firstName, string $studentNumber): StudentMonthlyPayment => $this->unpaidPayment(
+            Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => $firstName, 'last_name' => 'Reyes', 'student_number' => $studentNumber]),
+            'june',
+            2026,
+        );
+        $fiveHundred = $paymentFor('Ana500', 'N-0001');
+        $paymentFor('Anaaxb', 'N-0002');
+        $underscore = $paymentFor('Anaa_b', 'N-0003');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reports/billing?'.http_build_query(['year' => 2026, 'school_month' => 'june', 'search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
+
+    /**
+     * Rows carry only the student and recorder fields the report shows, not their personal data
+     * (Spec 16 B-12, B-13).
+     */
+    public function test_rows_carry_only_the_student_and_recorder_fields_the_report_shows(): void
+    {
+        $recorder = User::factory()->create(['first_name' => 'Rhea', 'last_name' => 'Santos', 'daily_rate' => 500, 'phone' => '09170000000', 'birthday' => '1990-01-01']);
+        $student = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana', 'last_name' => 'Reyes']);
+        StudentMonthlyPayment::create([
+            'student_id' => $student->id,
+            'school_month' => 'june',
+            'year' => 2026,
+            'status' => 'paid',
+            'amount' => 800.00,
+            'recorded_by' => $recorder->id,
+            'recorded_at' => now(),
+        ]);
+
+        $row = $this->asAdmin()->getJson('/api/v1/reports/billing?year=2026&school_month=june')->assertOk()->json('data.0');
+
+        $keys = fn (array $object): array => collect(array_keys($object))->sort()->values()->all();
+        $this->assertSame(
+            [
+                'student' => ['first_name', 'full_name', 'grade_level', 'id', 'last_name', 'section', 'student_number'],
+                'recorder' => ['first_name', 'full_name', 'id', 'last_name'],
+                'recorder full_name' => 'Rhea Santos',
+                'sensitive keys present' => [],
+            ],
+            [
+                'student' => $keys($row['student']),
+                'recorder' => $keys($row['recorder']),
+                'recorder full_name' => $row['recorder']['full_name'],
+                'sensitive keys present' => array_values(array_intersect(
+                    [...array_keys($row['student']), ...array_keys($row['recorder'])],
+                    ['qr_code', 'daily_rate', 'phone', 'birthday', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'],
+                )),
+            ],
+        );
+    }
+
+    /**
+     * The export's totals and status cells come from the loaded payments. A string compare
+     * against an enum-cast status would make both totals 0 (Spec 16 T-12.3, H2).
+     */
+    public function test_export_totals_and_status_cells_count_paid_and_unpaid_payments(): void
+    {
+        $this->unpaidPayment(Student::factory()->create(['branch_id' => $this->branch->id]), 'june', 2026)
+            ->update(['status' => 'paid', 'amount' => 800.00, 'recorded_at' => now(), 'recorded_by' => $this->admin->id]);
+        $this->unpaidPayment(Student::factory()->create(['branch_id' => $this->branch->id]), 'june', 2026)
+            ->update(['amount' => 500.00]);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/billing/export?year=2026&school_month=june');
+
+        $response->assertOk();
+        $sheet = IOFactory::load($response->baseResponse->getFile()->getPathname())->getActiveSheet();
+        $rows = $sheet->toArray();
+        $summary = collect($rows)->filter(fn (array $row): bool => is_string($row[0]))->mapWithKeys(fn (array $row): array => [$row[0] => $row[1]]);
+        $this->assertSame(
+            ['status cells' => ['paid', 'unpaid'], 'Total Collected' => 800.0, 'Total Outstanding' => 500.0],
+            [
+                'status cells' => collect(array_slice($rows, 1, 2))->pluck(6)->sort()->values()->all(),
+                'Total Collected' => (float) $summary['Total Collected'],
+                'Total Outstanding' => (float) $summary['Total Outstanding'],
+            ],
+        );
     }
 }

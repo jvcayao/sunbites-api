@@ -458,4 +458,95 @@ class ReminderTest extends TestCase
 
         $response->assertForbidden();
     }
+
+    // -------------------------------------------------------------------------
+    // school year (Spec 16 B-05): payment year is the calendar year
+    // -------------------------------------------------------------------------
+
+    public function test_bell_count_includes_a_january_payment_of_the_current_calendar_year(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        $this->seedPayment('january', 2027);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reminders/bell-count');
+
+        $response->assertOk();
+        $this->assertSame(1, $response->json('count'));
+    }
+
+    public function test_eligible_parents_lists_a_january_payment_of_the_current_calendar_year(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        $this->seedPayment('january', 2027);
+
+        $response = $this->asAdmin()->getJson('/api/v1/reminders/eligible-parents');
+
+        $response->assertOk();
+        $parent = collect($response->json('data'))->firstWhere('id', $this->parent->id);
+        $this->assertSame(
+            [['school_month' => 'january', 'year' => 2027]],
+            collect($parent['unpaid_periods'])->map(fn (array $period): array => ['school_month' => $period['school_month'], 'year' => $period['year']])->all(),
+        );
+    }
+
+    public function test_eligible_parents_school_year_filter_is_the_year_the_school_year_starts(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        $this->seedPayment('january', 2027);
+
+        $schoolYear2026 = $this->asAdmin()->getJson('/api/v1/reminders/eligible-parents?school_year=2026');
+        $january2026 = $this->asAdmin()->getJson('/api/v1/reminders/eligible-parents?school_month=january&school_year=2026');
+        $schoolYear2027 = $this->asAdmin()->getJson('/api/v1/reminders/eligible-parents?school_year=2027');
+
+        $this->assertSame(
+            ['school_year=2026' => [$this->parent->id], 'january, school_year=2026' => [$this->parent->id], 'school_year=2027' => []],
+            [
+                'school_year=2026' => collect($schoolYear2026->assertOk()->json('data'))->pluck('id')->all(),
+                'january, school_year=2026' => collect($january2026->assertOk()->json('data'))->pluck('id')->all(),
+                'school_year=2027' => collect($schoolYear2027->assertOk()->json('data'))->pluck('id')->all(),
+            ],
+        );
+    }
+
+    public function test_send_reminds_a_january_payment_due_at_the_end_of_that_january(): void
+    {
+        Notification::fake([PaymentReminderNotification::class]);
+        $this->travelTo('2027-01-20 09:00:00');
+        $this->seedPayment('january', 2027);
+
+        $response = $this->asAdmin()->postJson('/api/v1/reminders/send', ['parent_ids' => [$this->parent->id]]);
+
+        $response->assertOk()->assertJson(['sent' => 1, 'skipped' => 0]);
+        Notification::assertSentTo(
+            $this->parent,
+            PaymentReminderNotification::class,
+            fn (PaymentReminderNotification $notification): bool => $notification->schoolMonth === 'january'
+                && $notification->schoolYear === 2027
+                && $notification->dueDate->toDateString() === '2027-01-31',
+        );
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_eligible_parents_search_matches_percent_and_underscore_literally(): void
+    {
+        $parentOwing = function (string $firstName, string $email): ParentUser {
+            $student = Student::factory()->subscription()->create(['branch_id' => $this->branch->id]);
+            StudentMonthlyPayment::create(['student_id' => $student->id, 'school_month' => 'june', 'year' => 2026, 'amount' => 2970, 'status' => 'unpaid']);
+            $parent = ParentUser::factory()->create(['first_name' => $firstName, 'last_name' => 'Reyes', 'email' => $email]);
+            $parent->students()->attach($student->id, ['linked_at' => now(), 'linked_by' => $this->admin->id, 'wallet_alert_threshold' => 0]);
+
+            return $parent;
+        };
+        $fiveHundred = $parentOwing('Rosa500', 'p1@example.com');
+        $parentOwing('Rosaaxb', 'p2@example.com');
+        $underscore = $parentOwing('Rosaa_b', 'p3@example.com');
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reminders/eligible-parents?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

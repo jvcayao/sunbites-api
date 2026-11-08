@@ -173,6 +173,17 @@ class SalesReportTest extends TestCase
             ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
+    /**
+     * The export has no per_page rule, so a value over the list's max:100 is still accepted (H8).
+     */
+    public function test_export_ignores_a_per_page_above_the_list_limit(): void
+    {
+        $response = $this->asManager()->getJson('/api/v1/reports/sales/export?per_page=500');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
     public function test_voided_orders_excluded_from_sales_report(): void
     {
         Order::factory()->create([
@@ -208,5 +219,37 @@ class SalesReportTest extends TestCase
         $this->assertEquals(90.0, $response->json('summary.total_revenue'));
         $this->assertEquals(10.0, $response->json('summary.total_discounts'));
         $this->assertEquals(80.0, $response->json('summary.net_revenue'));
+    }
+
+    /**
+     * Rows carry only the student and cashier fields the report shows, not their personal data
+     * (Spec 16 B-12, B-13).
+     */
+    public function test_rows_carry_only_the_student_and_cashier_fields_the_report_shows(): void
+    {
+        $cashier = User::factory()->create(['first_name' => 'Carlo', 'last_name' => 'Cruz', 'daily_rate' => 500, 'phone' => '09170000000', 'birthday' => '1990-01-01']);
+        $student = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana', 'last_name' => 'Reyes']);
+        Order::factory()->create(['branch_id' => $this->branch->id, 'student_id' => $student->id, 'cashier_id' => $cashier->id, 'status' => OrderStatus::Completed]);
+
+        $row = $this->asAdmin()->getJson('/api/v1/reports/sales')->assertOk()->json('data.0');
+
+        $keys = fn (array $object): array => collect(array_keys($object))->sort()->values()->all();
+        $this->assertSame(
+            [
+                'student' => ['first_name', 'full_name', 'grade_level', 'id', 'last_name', 'section', 'student_number'],
+                'cashier' => ['first_name', 'full_name', 'id', 'last_name'],
+                'student full_name' => 'Ana Reyes',
+                'sensitive keys present' => [],
+            ],
+            [
+                'student' => $keys($row['student']),
+                'cashier' => $keys($row['cashier']),
+                'student full_name' => $row['student']['full_name'],
+                'sensitive keys present' => array_values(array_intersect(
+                    [...array_keys($row['student']), ...array_keys($row['cashier'])],
+                    ['qr_code', 'daily_rate', 'phone', 'birthday', 'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_confirmed_at'],
+                )),
+            ],
+        );
     }
 }

@@ -7,10 +7,10 @@ use App\Models\Student;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Notifications\Notification;
 
-class CreditSettledNotification extends Notification implements ShouldBroadcast, ShouldQueue
+class CreditSettledNotification extends Notification implements ShouldBroadcast, ShouldQueueAfterCommit
 {
     use Queueable;
 

@@ -60,6 +60,8 @@ class SubscriptionStatusTest extends TestCase
 
     public function test_portal_students_list_includes_monthly_status_for_subscription_student(): void
     {
+        $this->travelTo('2026-11-15');
+
         BranchSubscriptionConfig::factory()->create([
             'branch_id' => $this->branch->id,
             'meal_daily_limit' => 1,
@@ -80,14 +82,35 @@ class SubscriptionStatusTest extends TestCase
         $this->assertNotNull($studentData);
         $this->assertArrayHasKey('subscription_monthly_status', $studentData);
 
-        if ($studentData['subscription_monthly_status'] !== null) {
-            $status = $studentData['subscription_monthly_status'];
-            $this->assertArrayHasKey('month', $status);
-            $this->assertArrayHasKey('year', $status);
-            $this->assertArrayHasKey('categories', $status);
-            $this->assertArrayHasKey('meal', $status['categories']);
-            $this->assertArrayHasKey('remaining', $status['categories']['meal']);
-        }
+        $this->assertNotNull($studentData['subscription_monthly_status']);
+        $status = $studentData['subscription_monthly_status'];
+        $this->assertArrayHasKey('month', $status);
+        $this->assertArrayHasKey('year', $status);
+        $this->assertArrayHasKey('categories', $status);
+        $this->assertArrayHasKey('meal', $status['categories']);
+        $this->assertArrayHasKey('remaining', $status['categories']['meal']);
+    }
+
+    /**
+     * T-23.2 (design §16.7): April and May are not school months, so a subscription
+     * student's portal listing must have a null monthly status for that reason, not
+     * because of their student type.
+     */
+    public function test_portal_students_list_has_null_monthly_status_during_the_summer_break(): void
+    {
+        $this->travelTo('2027-05-20');
+
+        $student = Student::factory()->subscription()->enrolled()->create([
+            'branch_id' => $this->branch->id,
+        ]);
+        $this->attachStudent($student);
+
+        $response = $this->asParent()->getJson('/api/v1/portal/students');
+
+        $response->assertOk();
+        $studentData = collect($response->json('data'))->firstWhere('id', $student->id);
+        $this->assertNotNull($studentData);
+        $this->assertNull($studentData['subscription_monthly_status']);
     }
 
     public function test_portal_students_list_has_null_monthly_status_for_non_subscription_student(): void

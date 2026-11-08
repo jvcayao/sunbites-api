@@ -1,15 +1,7 @@
 /.phpunit.cache
-/bootstrap/ssr
-/node_modules
-/public/build
-/public/fonts-manifest.dev.json
-/public/hot
 /public/storage
 /storage/*.key
 /storage/pail
-/resources/js/actions
-/resources/js/routes
-/resources/js/wayfinder
 /vendor
 .DS_Store
 .env
@@ -20,8 +12,6 @@
 .phpunit.result.cache
 Homestead.json
 Homestead.yaml
-npm-debug.log
-yarn-error.log
 /auth.json
 /.fleet
 /.idea
@@ -30,3 +20,4 @@ yarn-error.log
 /.zed
 .superpowers/
 testing
+/tests/Fixtures/contracts

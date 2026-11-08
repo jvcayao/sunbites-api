@@ -3,41 +3,35 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListFeedbackRequest;
+use App\Http\Requests\Kitchen\ReplyFeedbackRequest;
 use App\Mail\FeedbackReplyMail;
 use App\Models\Feedback;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 class FeedbackController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListFeedbackRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'search' => ['nullable', 'string', 'max:100'],
-            'is_read' => ['nullable', 'boolean'],
-            'category' => ['nullable', 'string'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $query = Feedback::with(['parent:id,first_name,last_name,email', 'student:id,first_name,last_name,student_number'])
+            ->where('branch_id', app('active_branch')->id)
             ->latest('created_at');
 
-        if (app()->bound('active_branch')) {
-            $query->where('branch_id', app('active_branch')->id);
-        }
-
         if (! empty($validated['search'])) {
-            $search = '%'.mb_strtolower($validated['search']).'%';
+            $search = mb_strtolower($validated['search']);
 
-            $query->where(fn ($q) => $q->whereRaw('lower(message) like ?', [$search])
+            $query->where(fn ($q) => $q->whereContainsLiteral('lower(message)', $search)
                 ->orWhereHas('student', fn ($student) => $student
-                    ->whereRaw('lower(first_name) like ?', [$search])
-                    ->orWhereRaw('lower(last_name) like ?', [$search])
-                    ->orWhereRaw('lower(student_number) like ?', [$search]))
+                    ->whereContainsLiteral('lower(first_name)', $search)
+                    ->whereContainsLiteral('lower(last_name)', $search, 'or')
+                    ->whereContainsLiteral('lower(student_number)', $search, 'or'))
                 ->orWhereHas('parent', fn ($parent) => $parent
-                    ->whereRaw('lower(first_name) like ?', [$search])
-                    ->orWhereRaw('lower(last_name) like ?', [$search])));
+                    ->whereContainsLiteral('lower(first_name)', $search)
+                    ->whereContainsLiteral('lower(last_name)', $search, 'or')));
         }
 
         if (isset($validated['is_read'])) {
@@ -75,16 +69,9 @@ class FeedbackController extends Controller
         ]);
     }
 
-    public function reply(Request $request, Feedback $feedback): JsonResponse
+    public function reply(ReplyFeedbackRequest $request, Feedback $feedback): JsonResponse
     {
-        // Sanitize before validating so the length rules apply to what is
-        // actually stored — otherwise markup-only input such as "<br><br>"
-        // satisfies `min` and then persists as an empty reply.
-        $request->merge(['reply' => $this->sanitizeText($request->input('reply'))]);
-
-        $validated = $request->validate([
-            'reply' => ['required', 'string', 'min:5', 'max:2000'],
-        ]);
+        $validated = $request->validated();
 
         $feedback->update([
             'admin_reply' => $validated['reply'],
@@ -107,6 +94,10 @@ class FeedbackController extends Controller
 
     public function markRead(Feedback $feedback): JsonResponse
     {
+        if ($feedback->branch_id !== app('active_branch')->id) {
+            throw (new ModelNotFoundException)->setModel(Feedback::class);
+        }
+
         $feedback->update(['is_read' => true]);
 
         return response()->json(['message' => 'Feedback marked as read.']);

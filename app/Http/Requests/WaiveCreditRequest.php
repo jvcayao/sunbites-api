@@ -48,7 +48,7 @@ class WaiveCreditRequest extends FormRequest
 
         abort_if($student->credit_balance <= 0, 422, 'No outstanding credit to waive.');
 
-        if ($this->filled('reason')) {
+        if ($this->filled('reason') && is_scalar($this->input('reason'))) {
             $this->merge(['reason' => strip_tags((string) $this->input('reason'))]);
         }
     }

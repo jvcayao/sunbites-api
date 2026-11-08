@@ -339,4 +339,20 @@ class PreRegistrationTest extends TestCase
 
         $response->assertUnauthorized();
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = $this->createPreRegWithContact(['first_name' => 'Ana500', 'last_name' => 'Reyes']);
+        $this->createPreRegWithContact(['first_name' => 'Anaaxb', 'last_name' => 'Reyes']);
+        $underscore = $this->createPreRegWithContact(['first_name' => 'Anaa_b', 'last_name' => 'Reyes']);
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/pre-registrations?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

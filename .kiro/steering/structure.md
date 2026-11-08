@@ -10,28 +10,66 @@ inclusion: always
 
 ```
 app/
+  Actions/                  ← single-purpose operations, execute() (DowngradeStudentSubscriptionAction)
+    Parents/                ← Disable/Enable/Restore/SoftDelete parent actions
+    Pos/                    ← CheckoutAction, VoidOrderAction
+    PreRegistrations/       ← ApprovePreRegistrationAction
+    Students/               ← EnrollStudentAction
+    Wallet/                 ← VoidWalletTopUpAction
+  Console/Commands/         ← CreateAdminUser, ExpirePreRegistrations, FixOrphanedSubscriptionPayments
+  Enums/                    ← string-backed enums (PaymentMethod, OrderStatus, SchoolMonth, LedgerEntryType, …)
+  Exports/                  ← maatwebsite/excel export classes (Sales, Students, Wallet, Inventory, Billing)
   Http/
     Controllers/
-      Kitchen/          ← POS/admin controllers (auth:sanctum)
-      Portal/           ← Parent portal controllers (auth:parents)
-      Auth/             ← Staff auth endpoints
-    Requests/           ← Form Request validation classes
-    Resources/          ← Eloquent API Resources
-  Models/               ← Eloquent models
-  Notifications/        ← Laravel notification classes (e.g. PaymentReminderNotification)
-  Policies/             ← Authorization policies
+      Concerns/             ← traits shared by Kitchen + Portal (ResolvesStudentLedger)
+      Kitchen/              ← POS/admin controllers, incl. staff AuthController (auth:sanctum)
+      Portal/               ← parent portal controllers (auth:parents)
+      Public/               ← unauthenticated: branches, pre-registration, kiosk lookup
+      Controller.php        ← base: paginationMeta()
+    Middleware/             ← SetActiveBranch, EnsureActiveBranch (`branch.required`), CheckPermission, ForceConnectionClose
+    Requests/               ← Form Requests; shared at the root (SettleCredit, WaiveCredit, VoidWalletTopUp, StudentLedger)
+      Concerns/             ← shared rule traits (ValidatesOutstandingCredit)
+      Kitchen/              ← kitchen endpoint requests (Concerns/StaffUserRules)
+      Portal/               ← parent portal endpoint requests
+      Public/               ← KioskLookupRequest, StorePublicPreRegistrationRequest
+    Resources/              ← Order, OrderItem, Student, User, CreditLedgerEntry, InventoryItem,
+                              InventoryLog, PosMenuItem, InventoryIngredient resources
+  Jobs/                     ← WalletAlertJob
+  Listeners/                ← AuthEventSubscriber (auth activity logging)
+  Mail/                     ← queued mailables (welcome, reset, pre-reg, feedback reply, wallet alert)
+  Models/
+    Concerns/               ← HasBranch
+    Scopes/                 ← BranchScope
+  Notifications/            ← ShouldQueue + ShouldBroadcast notifications
+  Policies/                 ← OrderPolicy, UserPolicy, ParentStudentPolicy; registered with #[UsePolicy]
+                              on Order, User and Student (the unused ReportPolicy/StudentPolicy were removed in Spec 16 T-2)
+  Providers/                ← AppServiceProvider (only provider)
+  Services/                 ← CreditLedgerService, EnrollmentService, InventoryStockService,
+                              ParentProvisioningService, RecaptchaVerifier, StudentDuplicateService,
+                              StudentLedgerQuery, LedgerEntryFormatter
+bootstrap/app.php           ← routing, middleware aliases, API exception rendering
 routes/
-  kitchen-api.php       ← /api/v1/ routes — POS/admin
-  portal-api.php        ← /api/v1/portal/ routes — parent portal
-  channels.php          ← Reverb private channel authorization
-config/
-  sunbites.php          ← school months, fallback business rule defaults
-resources/views/emails/ ← Transactional email Blade templates only
+  api.php                   ← /api/health + /api/v1 mount + /api/v1/public group
+  kitchen-api.php           ← /api/v1/        POS/admin
+  portal-api.php            ← /api/v1/portal/ parent portal
+  channels.php              ← Reverb private channel authorization (loaded by AppServiceProvider::loadBroadcastChannels())
+  console.php               ← schedule
+  web.php                   ← GET / → JSON banner only
+config/sunbites.php         ← school months, grade levels, fallback business-rule defaults
+resources/views/emails/     ← transactional email Blade templates only
 tests/
   Feature/
-    Auth/
-    Kitchen/
-    Portal/
+    Auth/  Foundation/  Kitchen/  Portal/  Public/  Reports/
+    Contract/               ← Spec 16 API contract tests (Kitchen/, Portal/, Public/, RouteCoverage, RoleAuthorizationMatrix)
+    *.php                   ← older domain tests still at the root of Feature/
+  Support/Contract/         ← contract harness (ShapeExtractor, AssertsApiContract, ContractScenario)
+  Fixtures/contracts/       ← contract fixtures: gitignored, local only, skipped in CI
+  Unit/
+.github/workflows/          ← ci.yml (PRs: MySQL 8.4), staging.yml (push: MySQL 8.4, no deploy), production.yml (manual: MySQL 8.4, then deploy)
+.kiro/
+  steering/                 ← product.md, tech.md, structure.md
+  specs/NN-name/            ← requirements.md, design.md, tasks.md (+ HANDOFF.md)
+docs/superpowers/specs/     ← design specs (all projects' specs live here, never in frontends)
 ```
 
 ### POS & Admin App (`~/sunbites-pos`)
@@ -39,39 +77,26 @@ tests/
 ```
 app/
   (auth)/
-    login/              ← AuthLayout
-    reset-password/     ← password reset page (linked from admin-triggered reset email)
-  (kitchen)/            ← KitchenLayout (collapsible sidebar)
-    dashboard/
-    enrollment/
-    students/
-    reminders/          ← Spec 11
-    notifications/      ← Spec 12 (staff inbox)
-    announcements/      ← Spec 12
-    pre-registrations/  ← Spec 13
-    reports/
-    references/
-      users/
-      parents/
-      branches/
-      system-settings/  ← Spec 09
-  (pos)/                ← POS-specific layout group
-    pos/                ← main POS checkout screen
+    login/  branch/  reset-password/
+  (kitchen)/                ← layout.tsx renders KitchenLayout (collapsible sidebar) + EchoProvider
+    dashboard/  enrollment/  students/  students/[id]/  notifications/
+    reminders/  reminders/[parentId]/  announcements/  announcements/[id]/  announcements/create/
+    pre-registrations/  pre-registrations/[id]/
+    reports/    activity/ analytics/ billing/ credits/ daily-summary/ inventory/ sales/ students/ subscription/ wallet/
+    references/ branches/ feedback/ inventory/ meal-planner/ parents/ parents/[id]/
+                subscription-config/ system-settings/ users/ users/[id]/ users/create/
+  (pos)/                    ← page.tsx + pos/page.tsx: full-screen POS checkout
+  (kiosk)/kiosk/            ← read-only student QR balance lookup (calls /public/kiosk/lookup)
 components/
-  layouts/
-    kitchen-layout.tsx
-    auth-layout.tsx
-  ui/                   ← shadcn/ui base components
-hooks/                  ← use-{name}.ts
+  layouts/                  ← kitchen-layout.tsx, auth-layout.tsx
+  providers/                ← echo-provider.tsx
+  ui/  pos/  reports/  analytics/  parents/  users/  navigation/
+hooks/                      ← use-{name}.ts (use-student-ledger, use-wallet-history, use-kiosk-lookup, …)
+types/                      ← one file per domain
 lib/
-  api/                  ← typed service modules per domain
-  store/                ← Zustand stores
-  validation/           ← Zod schemas per domain
-types/                  ← TypeScript interfaces per domain
-__tests__/
-  test-utils.tsx
-  mocks/handlers.ts
-  mocks/server.ts
+  api/                      ← one typed module per domain (students.ts, reports.ts, kiosk.ts, …) + client.ts
+  store/                    ← Zustand: auth.ts, cart.ts (POS cart)
+__tests__/                  ← test-utils.tsx, mocks/handlers.ts, mocks/server.ts
 ```
 
 ### Parent Portal (`~/sunbites-portal`)
@@ -79,57 +104,54 @@ __tests__/
 ```
 app/
   (auth)/
-    login/
-    activate/           ← account activation (sets password on first login)
-    forgot-password/    ← forgot password request form
-  (portal)/             ← PortalLayout (top nav)
-    dashboard/
-    students/
-    notifications/      ← Spec 10
-    meal-plan/          ← Spec 04 (read-only meal planner)
-    feedback/           ← Spec 07 (feedback form + list)
-    profile/
+    login/  activate/  forgot-password/  reset-password/
+  (portal)/                 ← layout.tsx renders PortalLayout (top nav) + EchoProvider
+    dashboard/  students/  students/[id]/  notifications/  meal-plan/  feedback/  profile/
   (public)/
-    pre-register/       ← Spec 13 (public pre-registration form, no auth required)
+    pre-register/           ← calls /public/pre-registrations (never /portal/pre-registrations*)
 components/
-  layouts/
-    portal-layout.tsx
-    auth-layout.tsx
-  providers/
-    echo-provider.tsx   ← Reverb Echo client init (Client Component, wraps portal layout)
-  ui/
+  layouts/                  ← portal-layout.tsx, auth-layout.tsx
+  providers/                ← echo-provider.tsx
+  ui/  pre-registration/
+types/                      ← auth.ts, notification.ts, portal.ts, pre-registration.ts
 lib/
-  api/portal.ts         ← all portal API calls in one file
-  store/
-  validation/
-types/
-__tests__/
+  api/                      ← auth.ts, portal.ts, notifications.ts, pre-registration.ts, client.ts
+  store/                    ← Zustand auth.ts (sessionStorage persist)
+  validation/               ← pre-registration.ts
+__tests__/                  ← test-utils.tsx, mocks/handlers.ts, mocks/server.ts
+(no hooks/ directory)
 ```
 
 ## Naming Conventions
 
 | Artifact | Convention | Example |
 |---|---|---|
-| PHP controllers | `PascalCase` + `Controller` suffix | `EnrollmentController` |
+| PHP controllers | `PascalCase` + `Controller`, namespaced by consumer | `Kitchen\EnrollmentController` |
+| PHP actions | verb-noun + `Action`, method `execute()` | `DowngradeStudentSubscriptionAction` |
+| PHP services | noun + `Service` / `Query` / `Formatter` | `CreditLedgerService`, `StudentLedgerQuery` |
+| Form Requests | verb-noun + `Request` | `SettleCreditRequest` |
 | PHP models | `PascalCase` singular | `StudentMonthlyPayment` |
-| PHP traits | `PascalCase` + descriptive verb/noun | `HasBranch`, `LogsActivity` |
-| Migrations | `snake_case` timestamp prefix | `2026_06_01_create_students_table` |
+| PHP enums | `PascalCase`, TitleCase cases, string-backed | `PaymentMethod::Wallet` |
+| PHP traits | descriptive verb/noun | `HasBranch`, `ResolvesStudentLedger` |
+| Migrations | timestamp + `snake_case` | `2026_06_01_000000_create_students_table` |
 | Route files | `kebab-case-api.php` | `kitchen-api.php` |
-| Next.js pages | `page.tsx` per route segment | `app/(kitchen)/students/page.tsx` |
-| Next.js hooks | `use-{noun}.ts` kebab-case | `use-student-payments.ts` |
+| Next.js pages | `page.tsx` per segment | `app/(kitchen)/students/page.tsx` |
+| Next.js hooks | `use-{noun}.ts` | `use-student-payments.ts` |
 | API service modules | `{domain}.ts` | `lib/api/students.ts` |
-| Zod schemas | `{noun}Schema` camelCase | `enrollStudentSchema` |
-| TypeScript types | `PascalCase` | `StudentMonthlyPayment` |
+| Zod schemas | `{noun}Schema` | `enrollStudentSchema` |
 | Zustand stores | `use{Noun}Store` | `useAuthStore` |
+| Kiro specs | `NN-kebab-name/` | `15-wallet-topup-void/` |
 
 ## Module Boundaries
 
-- **Kitchen controllers** never import from `Portal` namespace and vice versa
-- **`app('active_branch')`** is the only sanctioned way to read the active branch in controllers — never read the header directly
-- **Wallet mutations** must go through `bavix/laravel-wallet` API — no direct `wallets` table writes
-- **Frontend**: components never call `fetch` directly — always through `lib/api/` service layer
-- **`lib/store/`** holds only cross-cutting client state; server state lives in TanStack Query cache
-- **`EchoProvider`** must be a Client Component; it reads the Sanctum token from Zustand store and initialises the Echo instance — it must be rendered inside the auth-protected portal layout, not the root layout
+- **Kitchen** and **Portal** controllers never import each other; shared code goes in `Http/Controllers/Concerns/` or `app/Services/`
+- **`app('active_branch')`** is the only sanctioned way to read the active branch in controllers; never read `X-Branch-Id` directly (exception: activity-log properties in `AuthController::login`)
+- **Wallet mutations** only through the `bavix/laravel-wallet` API
+- **Credit mutations** only through `CreditLedgerService`
+- **Stock changes** (after an item is created) only through `InventoryStockService`
+- **Frontend**: components never call `fetch` directly; always through `lib/api/`
+- **`lib/store/`** holds only cross-cutting client state; server state lives in the TanStack Query cache
+- **`EchoProvider`** is a Client Component rendered inside the authenticated layout, not the root layout
 
 ## Feature Registry
 
@@ -149,28 +171,34 @@ __tests__/
 | 12 | Announcements | Complete | Complete |
 | 13 | Pre-Registration | Complete | Complete |
 | 14 | Credit Settlement | Complete | Complete |
+| 15 | Wallet Top-up Void | Complete | Complete |
+| 16 | Backend Code Quality (Laravel 13) | Requirements drafted | n/a (no FE change) |
 
 ## Shared Contracts
 
-### API Response shapes (enforce in both backend Resources and frontend `types/`)
+### API response shapes
 
-Paginated lists:
+Paginated lists (built by `Controller::paginationMeta()`):
 ```json
-{ "data": [...], "meta": { "current_page": 1, "last_page": 5, "total": 47 } }
+{ "data": [...], "meta": { "current_page": 1, "last_page": 5, "per_page": 25, "total": 47, "from": 1, "to": 25 } }
 ```
+Exceptions: `InventoryController::history`, the logs block of `InventoryReportController`, and `ReminderController::eligibleParents` emit `meta` without `from`/`to`. `StudentController::index` and `UserManagementController::index` return Laravel's native resource-collection pagination (`data`, `links`, `meta`).
 
-Single resource: the resource object directly (no envelope).
+Single resources: there is no single convention. Some endpoints return the object directly (`StudentResource`, profile), some wrap it (`{ "data": {...} }` for pre-registrations/announcements, `{ "student": {...} }` for lookup, `{ "message": "...", "order": {...} }` for checkout/void). Treat each endpoint's current shape as its contract.
 
 Error responses:
 ```json
-{ "message": "...", "errors": { "field": ["..."] } }
+{ "message": "Validation failed.", "errors": { "field": ["..."] } }
 ```
+Some endpoints return `{ "errors": {...} }` with no `message` (subscription end-before-start checks, portal change-password), and portal login adds `"error": "account_not_activated" | "account_disabled"`.
+
+Numeric serialisation: `decimal:2` casts serialise as strings (`"150.00"`); values explicitly cast with `(float)` serialise as numbers. Both occur, and each field's form is part of its contract.
 
 ### Branch context
 
-All kitchen API requests include `X-Branch-Id` header. The `SetActiveBranch` middleware validates access and binds `app('active_branch')` for the request lifecycle.
+All kitchen API requests include `X-Branch-Id`. `SetActiveBranch` (prepended to the `api` group, before route-model binding) validates access and binds `app('active_branch')`, or returns 403 for a branch the user cannot access. An absent header binds nothing, and `branch.required` (`EnsureActiveBranch`) then returns 422 on every kitchen route except those marked `->withoutMiddleware('branch.required')` (see tech.md Branch Scoping).
 
 ### Auth token storage
 
-- Staff token: in-memory Zustand store (`lib/store/auth.ts`) — Bearer token sent as `Authorization: Bearer {token}` header
-- Parent token: `sessionStorage` via Zustand `persist` middleware — token survives page refresh, which is required for the `EchoProvider` to reinitialize Echo on page load without losing the channel subscription. `EchoProvider` reads the token from `useAuthStore`.
+- Staff: Zustand store `lib/store/auth.ts` in `~/sunbites-pos`, persisted to `sessionStorage` (see tech.md Known Discrepancies D1); sent as `Authorization: Bearer {token}`
+- Parent: Zustand `persist` to `sessionStorage` in `~/sunbites-portal`, so that `EchoProvider` can re-subscribe after a refresh

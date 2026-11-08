@@ -44,7 +44,7 @@ class OrderResource extends JsonResource
             ]),
             'cashier' => $this->whenLoaded('cashier', fn () => [
                 'id' => $this->cashier->id,
-                'name' => $this->cashier->name,
+                'name' => $this->cashier->full_name,
             ]),
         ];
     }

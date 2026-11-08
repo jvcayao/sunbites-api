@@ -2,43 +2,27 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Actions\PreRegistrations\ApprovePreRegistrationAction;
 use App\Enums\PreRegistrationStatus;
-use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
-use App\Mail\PreRegistrationApprovedMail;
+use App\Http\Requests\Kitchen\ListPreRegistrationsRequest;
+use App\Http\Requests\Kitchen\RejectPreRegistrationRequest;
+use App\Http\Requests\Kitchen\UpdatePreRegistrationRequest;
 use App\Mail\PreRegistrationRejectedMail;
 use App\Models\PreRegistration;
 use App\Models\Student;
-use App\Models\StudentContact;
 use App\Models\SystemConfiguration;
-use App\Services\EnrollmentService;
-use App\Services\ParentProvisioningService;
-use App\Services\StudentDuplicateService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Validation\Rule;
 
 class PreRegistrationController extends Controller
 {
-    public function __construct(
-        private readonly EnrollmentService $enrollmentService,
-        private readonly ParentProvisioningService $provisioningService,
-        private readonly StudentDuplicateService $duplicateService,
-    ) {}
-
-    public function index(Request $request): JsonResponse
+    public function index(ListPreRegistrationsRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'status' => ['nullable', Rule::enum(PreRegistrationStatus::class)],
-            'enrollment_type' => ['nullable', 'in:subscription,non_subscription'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'date_from' => ['nullable', 'date_format:Y-m-d'],
-            'date_to' => ['nullable', 'date_format:Y-m-d'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $statusFilter = isset($validated['status'])
             ? PreRegistrationStatus::from($validated['status'])
@@ -53,9 +37,9 @@ class PreRegistrationController extends Controller
         }
 
         if (! empty($validated['search'])) {
-            $like = '%'.mb_strtolower($validated['search']).'%';
-            $query->where(fn ($q) => $q->whereRaw('lower(first_name) like ?', [$like])
-                ->orWhereRaw('lower(last_name) like ?', [$like])
+            $term = mb_strtolower($validated['search']);
+            $query->where(fn ($q) => $q->whereContainsLiteral('lower(first_name)', $term)
+                ->whereContainsLiteral('lower(last_name)', $term, 'or')
             );
         }
 
@@ -117,36 +101,9 @@ class PreRegistrationController extends Controller
         ]);
     }
 
-    public function update(Request $request, PreRegistration $preRegistration): JsonResponse
+    public function update(UpdatePreRegistrationRequest $request, PreRegistration $preRegistration): JsonResponse
     {
-        if ($preRegistration->status !== PreRegistrationStatus::Pending) {
-            return response()->json(['message' => 'Only pending pre-registrations can be edited.'], 422);
-        }
-
-        $validated = $request->validate([
-            'first_name' => ['sometimes', 'string', 'max:100'],
-            'last_name' => ['sometimes', 'string', 'max:100'],
-            'student_number' => ['nullable', 'string', 'max:50'],
-            'grade_level' => ['sometimes', 'string', 'in:'.implode(',', config('sunbites.grade_levels'))],
-            'section' => ['nullable', 'string', 'max:100'],
-            'birthday' => ['sometimes', 'date', 'before:today'],
-            'enrollment_type' => ['sometimes', 'in:subscription,non_subscription'],
-            'allergies' => ['nullable', 'string', 'max:1000'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'subscription_start_month' => ['nullable', Rule::enum(SchoolMonth::class)],
-            'subscription_start_year' => ['nullable', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-            'subscription_end_month' => ['nullable', Rule::enum(SchoolMonth::class)],
-            'subscription_end_year' => ['nullable', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-            'signatory_name' => ['sometimes', 'string', 'max:255'],
-            'contacts' => ['sometimes', 'array', 'min:1', 'max:3'],
-            'contacts.*.id' => ['nullable', 'integer'],
-            'contacts.*.full_name' => ['required_with:contacts', 'string', 'max:150'],
-            'contacts.*.relationship' => ['required_with:contacts', 'string', 'max:100'],
-            'contacts.*.phone' => ['required_with:contacts', 'string', 'max:30'],
-            'contacts.*.address' => ['required_with:contacts', 'string', 'max:255'],
-            'contacts.*.email' => ['nullable', 'email', 'max:150'],
-            'contacts.*.is_primary' => ['boolean'],
-        ]);
+        $validated = $request->validated();
 
         if (isset($validated['allergies'])) {
             $validated['allergies'] = strip_tags($validated['allergies']);
@@ -156,96 +113,25 @@ class PreRegistrationController extends Controller
             $validated['notes'] = strip_tags($validated['notes']);
         }
 
-        $preRegistration->update(Arr::except($validated, ['contacts']));
+        DB::transaction(function () use ($preRegistration, $validated): void {
+            $preRegistration->update(Arr::except($validated, ['contacts']));
 
-        if (isset($validated['contacts'])) {
-            $preRegistration->contacts()->delete();
-            $preRegistration->contacts()->createMany($validated['contacts']);
-        }
+            if (isset($validated['contacts'])) {
+                $preRegistration->contacts()->delete();
+                $preRegistration->contacts()->createMany($validated['contacts']);
+            }
+        });
 
         return response()->json(['message' => 'Pre-registration updated.', 'data' => $preRegistration->fresh(['contacts'])]);
     }
 
-    public function approve(PreRegistration $preRegistration): JsonResponse
+    public function approve(Request $request, PreRegistration $preRegistration, ApprovePreRegistrationAction $approve): JsonResponse
     {
         if ($preRegistration->status !== PreRegistrationStatus::Pending) {
             return response()->json(['message' => 'Only pending pre-registrations can be approved.'], 422);
         }
 
-        [$student, $locked] = DB::transaction(function () use ($preRegistration) {
-            $locked = PreRegistration::withoutBranch()->lockForUpdate()->find($preRegistration->id);
-
-            abort_if($locked === null, 404, 'Pre-registration not found.');
-
-            abort_if(
-                $locked->status !== PreRegistrationStatus::Pending,
-                422,
-                'Only pending pre-registrations can be approved.'
-            );
-
-            // PRIMARY: name + birthday — always runs, regardless of student_number
-            abort_if(
-                $this->duplicateService->isEnrolledStudent(
-                    $locked->branch_id,
-                    $locked->first_name,
-                    $locked->last_name,
-                    $locked->birthday->toDateString(),
-                ),
-                422,
-                'A student with this name and birthday is already enrolled. Please resolve the duplicate before approving.'
-            );
-
-            // SUPPLEMENTARY: student_number — only when provided
-            if ($locked->student_number) {
-                $numberDuplicate = Student::withoutGlobalScopes()
-                    ->where('branch_id', $locked->branch_id)
-                    ->where('student_number', $locked->student_number)
-                    ->whereNull('deleted_at')
-                    ->exists();
-
-                abort_if($numberDuplicate, 422, 'A student with this student number already exists. Please resolve the duplicate before approving.');
-            }
-
-            $student = $this->enrollmentService->enroll($locked->toEnrollmentData());
-
-            $locked->load('contacts');
-
-            foreach ($locked->contacts as $contact) {
-                StudentContact::create([
-                    'student_id' => $student->id,
-                    ...$contact->only(['full_name', 'relationship', 'phone', 'address', 'email', 'is_primary']),
-                ]);
-
-                if ($contact->is_primary && $contact->email) {
-                    $this->provisioningService->provision(
-                        $contact->email,
-                        $contact->full_name,
-                        $student->id,
-                        auth()->id(),
-                    );
-                }
-            }
-
-            $locked->update([
-                'status' => PreRegistrationStatus::Approved,
-                'approved_by' => auth()->id(),
-                'processed_at' => now(),
-            ]);
-
-            activity('pre_registrations')
-                ->causedBy(auth()->user())
-                ->performedOn($locked)
-                ->log('pre-registration.approved');
-
-            return [$student, $locked];
-        });
-
-        $primaryEmail = $locked->contacts->firstWhere('is_primary', true)?->email
-            ?? $locked->contacts->first()?->email;
-
-        if ($primaryEmail) {
-            Mail::to($primaryEmail)->queue(new PreRegistrationApprovedMail($locked, $student));
-        }
+        $student = $approve->execute($preRegistration, $request->user());
 
         return response()->json([
             'message' => 'Pre-registration approved. Student enrolled successfully.',
@@ -258,19 +144,13 @@ class PreRegistrationController extends Controller
         ]);
     }
 
-    public function reject(Request $request, PreRegistration $preRegistration): JsonResponse
+    public function reject(RejectPreRegistrationRequest $request, PreRegistration $preRegistration): JsonResponse
     {
-        if ($preRegistration->status !== PreRegistrationStatus::Pending) {
-            return response()->json(['message' => 'Only pending pre-registrations can be rejected.'], 422);
-        }
-
-        $validated = $request->validate([
-            'rejection_reason' => ['required', 'string', 'max:1000'],
-        ]);
+        $validated = $request->validated();
 
         $preRegistration->update([
             'status' => PreRegistrationStatus::Rejected,
-            'rejected_by' => auth()->id(),
+            'rejected_by' => $request->user()->id,
             'rejection_reason' => $validated['rejection_reason'],
             'processed_at' => now(),
         ]);
@@ -287,7 +167,7 @@ class PreRegistrationController extends Controller
         return response()->json(['message' => 'Pre-registration rejected.']);
     }
 
-    public function reactivate(PreRegistration $preRegistration): JsonResponse
+    public function reactivate(Request $request, PreRegistration $preRegistration): JsonResponse
     {
         if ($preRegistration->status !== PreRegistrationStatus::Expired) {
             return response()->json(['message' => 'Only expired pre-registrations can be reactivated.'], 422);
@@ -301,7 +181,7 @@ class PreRegistrationController extends Controller
         ]);
 
         activity('pre_registrations')
-            ->causedBy(auth()->user())
+            ->causedBy($request->user())
             ->performedOn($preRegistration)
             ->log('pre-registration.reactivated');
 

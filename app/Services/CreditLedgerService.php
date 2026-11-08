@@ -20,8 +20,8 @@ use Illuminate\Support\Facades\DB;
  * `credit_balance = Σcharged − Σsettled − Σwaived − Σvoided` true for every student.
  *
  * Every method locks the student row and performs all writes inside one transaction.
- * When called from a caller that already opened a transaction — CheckoutController and
- * TransactionController both do — Laravel nests via savepoint, which is the intended
+ * When called from a caller that already opened a transaction — CheckoutAction and
+ * VoidOrderAction both do — Laravel nests via savepoint, which is the intended
  * behaviour and needs no special handling.
  */
 class CreditLedgerService
@@ -30,7 +30,7 @@ class CreditLedgerService
      * Charge credit for an amount that could not be covered another way.
      *
      * Takes a free-text description rather than an Order because the caller does not
-     * always have one — CheckoutController charges credit before it creates the order,
+     * always have one — CheckoutAction charges credit before it creates the order,
      * and a wallet top-up void may charge credit with no order involved at all. `order_id`
      * is left null, matching every charge row written before this service existed.
      */
@@ -200,8 +200,8 @@ class CreditLedgerService
             $alreadySentToday = $parent->notifications()
                 ->where('type', CreditChargedNotification::class)
                 ->whereDate('created_at', now()->toDateString())
-                ->get()
-                ->contains(fn ($notification) => (int) ($notification->data['student_id'] ?? 0) === $locked->id);
+                ->where('data->student_id', $locked->id)
+                ->exists();
 
             if ($alreadySentToday) {
                 continue;

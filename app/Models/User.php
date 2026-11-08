@@ -2,7 +2,11 @@
 
 namespace App\Models;
 
+use App\Policies\UserPolicy;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -15,49 +19,48 @@ use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\Permission\Traits\HasRoles;
 
+#[UsePolicy(UserPolicy::class)]
+#[Fillable([
+    'first_name',
+    'last_name',
+    'middle_name',
+    'nickname',
+    'birthday',
+    'gender',
+    'civil_status',
+    'profile_photo_path',
+    'phone',
+    'emergency_contact_name',
+    'emergency_contact_phone',
+    'emergency_contact_relationship',
+    'address_line',
+    'city',
+    'province',
+    'zip_code',
+    'position',
+    'employment_type',
+    'date_hired',
+    'daily_rate',
+    'sss_number',
+    'pagibig_number',
+    'philhealth_number',
+    'tin_number',
+    'email',
+    'password',
+    'is_active',
+])]
+#[Hidden([
+    'password',
+    'remember_token',
+    'sss_number',
+    'pagibig_number',
+    'philhealth_number',
+    'tin_number',
+])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasRoles, LogsActivity, Notifiable, SoftDeletes;
-
-    protected $fillable = [
-        'first_name',
-        'last_name',
-        'middle_name',
-        'nickname',
-        'birthday',
-        'gender',
-        'civil_status',
-        'profile_photo_path',
-        'phone',
-        'emergency_contact_name',
-        'emergency_contact_phone',
-        'emergency_contact_relationship',
-        'address_line',
-        'city',
-        'province',
-        'zip_code',
-        'position',
-        'employment_type',
-        'date_hired',
-        'daily_rate',
-        'sss_number',
-        'pagibig_number',
-        'philhealth_number',
-        'tin_number',
-        'email',
-        'password',
-        'is_active',
-    ];
-
-    protected $hidden = [
-        'password',
-        'remember_token',
-        'sss_number',
-        'pagibig_number',
-        'philhealth_number',
-        'tin_number',
-    ];
 
     protected function casts(): array
     {
@@ -98,6 +101,7 @@ class User extends Authenticatable
         );
     }
 
+    /** @return BelongsToMany<Branch, $this> */
     public function branches(): BelongsToMany
     {
         return $this->belongsToMany(Branch::class, 'branch_user')
@@ -109,6 +113,7 @@ class User extends Authenticatable
         return "staff.{$this->id}";
     }
 
+    /** @return HasMany<StaffDailyStatus, $this> */
     public function staffDailyStatuses(): HasMany
     {
         return $this->hasMany(StaffDailyStatus::class);

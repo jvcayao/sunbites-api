@@ -5,36 +5,26 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\CreditSettlementMethod;
 use App\Enums\CreditTransactionType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListCreditReportRequest;
 use App\Models\CreditTransaction;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class CreditReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListCreditReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
-            'type' => ['nullable', 'string', Rule::enum(CreditTransactionType::class)],
-            'payment_method' => ['nullable', 'string', Rule::enum(CreditSettlementMethod::class)],
-            'search' => ['nullable', 'string', 'max:255'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $perPage = $validated['per_page'] ?? 25;
 
-        $query = $this->baseQuery($branchId, $validated)
+        $transactions = $this->baseQuery($branchId, $validated)
             ->with(['student', 'performer'])
             ->when(isset($validated['type']), fn ($q) => $q->where('type', $validated['type']))
             ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
-            ->latest('created_at');
-
-        $transactions = $query->paginate($perPage);
+            ->latest('created_at')
+            ->paginate($perPage);
 
         return response()->json([
             'data' => collect($transactions->items())->map(fn (CreditTransaction $tx) => [
@@ -72,11 +62,9 @@ class CreditReportController extends Controller
             ->where('branch_id', $branchId)
             ->when(isset($validated['date_from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['date_from']))
             ->when(isset($validated['date_to']), fn ($q) => $q->whereDate('created_at', '<=', $validated['date_to']))
-            ->when(isset($validated['search']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq->where(
-                DB::raw("CONCAT(first_name, ' ', last_name)"),
-                'like',
-                "%{$validated['search']}%",
-            )->orWhere('student_number', 'like', "%{$validated['search']}%")));
+            ->when(isset($validated['search']), fn ($q) => $q->whereHas('student', fn ($sq) => $sq
+                ->whereContainsLiteral("CONCAT(first_name, ' ', last_name)", $validated['search'])
+                ->whereContainsLiteral('student_number', $validated['search'], 'or')));
     }
 
     /**

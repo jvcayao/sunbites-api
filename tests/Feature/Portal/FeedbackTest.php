@@ -436,4 +436,105 @@ class FeedbackTest extends TestCase
     {
         $this->getJson('/api/v1/references/feedback')->assertUnauthorized();
     }
+
+    // --- Kitchen: another branch's feedback (Spec 16 B-18) ---
+
+    public function test_replying_to_another_branchs_feedback_returns_404_and_sends_nothing(): void
+    {
+        Mail::fake();
+        $feedback = $this->feedbackInAnotherBranch();
+
+        $response = $this->asSupervisor()->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+            'reply' => 'Thank you, we will look into this with the kitchen team.',
+        ]);
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $feedback->refresh();
+        $this->assertNull($feedback->admin_reply);
+        $this->assertNull($feedback->replied_at);
+        $this->assertFalse($feedback->is_read);
+        Mail::assertNothingQueued();
+    }
+
+    public function test_replying_to_another_branchs_feedback_with_an_invalid_reply_returns_404_not_422(): void
+    {
+        Mail::fake();
+        $feedback = $this->feedbackInAnotherBranch();
+
+        $response = $this->asSupervisor()->postJson("/api/v1/references/feedback/{$feedback->id}/reply", [
+            'reply' => '<br><br>',
+        ]);
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+    }
+
+    public function test_marking_another_branchs_feedback_read_returns_404_and_leaves_it_unread(): void
+    {
+        $feedback = $this->feedbackInAnotherBranch();
+
+        $response = $this->asSupervisor()->patchJson("/api/v1/references/feedback/{$feedback->id}/mark-read");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertFalse($feedback->fresh()->is_read);
+    }
+
+    /**
+     * A supervisor, the lowest role the kitchen feedback routes allow, working in this branch.
+     */
+    private function asSupervisor(): static
+    {
+        $supervisor = User::factory()->create();
+        $supervisor->assignRole('supervisor');
+        $supervisor->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
+
+        Sanctum::actingAs($supervisor, ['staff']);
+
+        return $this->withHeaders(['X-Branch-Id' => $this->branch->id]);
+    }
+
+    /**
+     * Unread feedback from this parent about a child enrolled in another branch.
+     */
+    private function feedbackInAnotherBranch(): Feedback
+    {
+        $otherBranch = Branch::factory()->create(['is_active' => true]);
+
+        return $this->createFeedback([
+            'student_id' => Student::factory()->create(['branch_id' => $otherBranch->id])->id,
+            'branch_id' => $otherBranch->id,
+        ]);
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_kitchen_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = $this->createFeedback(['message' => 'Order 500 was late.']);
+        $this->createFeedback(['message' => 'Order axb was late.']);
+        $underscore = $this->createFeedback(['message' => 'Order a_b was late.']);
+        $idsFor = fn (string $term): array => collect($this->asManager()->getJson('/api/v1/references/feedback?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
+
+    /**
+     * The no-linked-students guard runs before validation, so it wins over the empty body's
+     * validation errors (Spec 16 T-11.2, H4).
+     */
+    public function test_parent_without_linked_students_sending_an_empty_body_gets_the_no_linked_students_422(): void
+    {
+        $unlinkedParent = ParentUser::factory()->create();
+        $token = $unlinkedParent->createToken('portal-token', ['parent'])->plainTextToken;
+
+        $response = $this->withToken($token)->postJson('/api/v1/portal/feedback', []);
+
+        $response->assertUnprocessable()->assertExactJson(['message' => 'You have no linked students.']);
+    }
 }

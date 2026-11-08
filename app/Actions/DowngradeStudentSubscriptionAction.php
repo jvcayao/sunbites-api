@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Enums\PaymentStatus;
 use App\Enums\StudentType;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
@@ -15,10 +16,10 @@ class DowngradeStudentSubscriptionAction
         return DB::transaction(function () use ($student, $causer): Student {
             $allPayments = $student->monthlyPayments()->get();
 
-            $unpaidPayments = $allPayments->filter(fn ($p) => $p->status === 'unpaid');
-            $paidPayments = $allPayments->filter(fn ($p) => $p->status === 'paid');
+            $unpaidPayments = $allPayments->filter(fn ($payment) => $payment->status === PaymentStatus::Unpaid);
+            $paidPayments = $allPayments->filter(fn ($payment) => $payment->status === PaymentStatus::Paid);
 
-            $monthLabel = fn ($p) => $p->school_month->label().' '.$p->year;
+            $monthLabel = fn ($payment) => $payment->school_month->label().' '.$payment->year;
 
             $deletedMonthLabels = $unpaidPayments->map($monthLabel)->values()->all();
             $paidMonthLabels = $paidPayments->map($monthLabel)->values()->all();

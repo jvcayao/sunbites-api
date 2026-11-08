@@ -4,25 +4,20 @@ namespace App\Http\Controllers\Portal;
 
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ShowSpendingSummaryRequest;
 use App\Models\OrderItem;
 use App\Models\Student;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class SpendingSummaryController extends Controller
 {
-    use AuthorizesRequests;
-
-    public function show(Request $request, Student $student): JsonResponse
+    #[Authorize('view', 'student')]
+    public function show(ShowSpendingSummaryRequest $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
-        $validated = $request->validate([
-            'months' => ['nullable', 'integer', 'min:1', 'max:24'],
-        ]);
+        $validated = $request->validated();
 
         $months = $validated['months'] ?? 6;
 
@@ -30,7 +25,7 @@ class SpendingSummaryController extends Controller
             ->whereNull('voided_at')
             ->where('status', OrderStatus::Completed);
 
-        $chartFrom = now()->subMonths($months - 1)->startOfMonth();
+        $chartFrom = now()->subMonthsNoOverflow($months - 1)->startOfMonth();
 
         $monthExpr = DB::connection()->getDriverName() === 'sqlite'
             ? "strftime('%Y-%m', created_at) as month"
@@ -44,7 +39,7 @@ class SpendingSummaryController extends Controller
             ->pluck('total', 'month');
 
         $monthly = collect(range($months - 1, 0))->map(function (int $i) use ($rawMonthly) {
-            $date = now()->subMonths($i);
+            $date = now()->subMonthsNoOverflow($i);
             $key = $date->format('Y-m');
 
             return [
@@ -54,11 +49,9 @@ class SpendingSummaryController extends Controller
             ];
         });
 
-        $schoolYearStart = now()->month >= 6
-            ? Carbon::create(now()->year, 6, 1)->startOfDay()
-            : Carbon::create(now()->year - 1, 6, 1)->startOfDay();
+        $schoolYearStart = Carbon::create(now()->month >= 6 ? now()->year : now()->year - 1, 6, 1)->startOfDay();
 
-        $lastMonth = now()->subMonth();
+        $lastMonth = now()->subMonthNoOverflow();
 
         $ytdTotal = $base()->where('created_at', '>=', $schoolYearStart)->sum('total');
         $thisMonthTotal = $base()->whereMonth('created_at', now()->month)->whereYear('created_at', now()->year)->sum('total');

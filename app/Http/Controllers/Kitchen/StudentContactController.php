@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\StoreStudentContactRequest;
+use App\Http\Requests\Kitchen\UpdateStudentContactRequest;
 use App\Mail\ParentWelcomeMail;
 use App\Models\ParentUser;
 use App\Models\Student;
 use App\Models\StudentContact;
 use App\Services\ParentProvisioningService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 
@@ -41,16 +42,9 @@ class StudentContactController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function store(Request $request, Student $student): JsonResponse
+    public function store(StoreStudentContactRequest $request, Student $student): JsonResponse
     {
-        $validated = $request->validate([
-            'full_name' => ['required', 'string', 'max:150'],
-            'relationship' => ['required', 'string', 'max:100'],
-            'phone' => ['required', 'string', 'max:30'],
-            'address' => ['required', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:150'],
-            'is_primary' => ['boolean'],
-        ]);
+        $validated = $request->validated();
 
         if ($student->contacts()->count() >= 3) {
             return response()->json(['message' => 'A student can have at most 3 contacts.'], 422);
@@ -74,18 +68,9 @@ class StudentContactController extends Controller
         return response()->json($contact, 201);
     }
 
-    public function update(Request $request, Student $student, StudentContact $contact): JsonResponse
+    public function update(UpdateStudentContactRequest $request, Student $student, StudentContact $contact): JsonResponse
     {
-        $this->assertContactBelongsToStudent($contact, $student);
-
-        $validated = $request->validate([
-            'full_name' => ['sometimes', 'string', 'max:150'],
-            'relationship' => ['sometimes', 'string', 'max:100'],
-            'phone' => ['sometimes', 'string', 'max:30'],
-            'address' => ['sometimes', 'string', 'max:255'],
-            'email' => ['nullable', 'email', 'max:150'],
-            'is_primary' => ['sometimes', 'boolean'],
-        ]);
+        $validated = $request->validated();
 
         if (! empty($validated['is_primary'])) {
             $student->contacts()->where('id', '!=', $contact->id)->where('is_primary', true)->update(['is_primary' => false]);
@@ -147,8 +132,6 @@ class StudentContactController extends Controller
 
     private function assertContactBelongsToStudent(StudentContact $contact, Student $student): void
     {
-        if ($contact->student_id !== $student->id) {
-            abort(404, 'Contact does not belong to this student.');
-        }
+        abort_if($contact->student_id !== $student->id, 404, 'Contact does not belong to this student.');
     }
 }

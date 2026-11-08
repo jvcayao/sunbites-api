@@ -28,7 +28,7 @@ class VoidWalletTopUpRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->filled('reason')) {
+        if ($this->filled('reason') && is_scalar($this->input('reason'))) {
             $this->merge(['reason' => strip_tags((string) $this->input('reason'))]);
         }
     }

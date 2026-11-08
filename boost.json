@@ -13,10 +13,12 @@
     ],
     "sail": true,
     "skills": [
-        "fortify-development",
+        "infer-conventions",
+        "deploying-to-cloud",
         "laravel-best-practices",
-        "tailwindcss-development",
+        "testing-best-practices",
         "laravel-excel",
+        "activitylog-development",
         "laravel-permission-development",
         "deploying-laravel-cloud"
     ]

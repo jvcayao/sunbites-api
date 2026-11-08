@@ -3,30 +3,24 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\ListPortalWalletRequest;
+use App\Http\Requests\Portal\SetWalletAlertRequest;
 use App\Models\Student;
 use Bavix\Wallet\Models\Transaction;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 
 class WalletController extends Controller
 {
-    use AuthorizesRequests;
-
-    public function index(Request $request, Student $student): JsonResponse
+    #[Authorize('view', 'student')]
+    public function index(ListPortalWalletRequest $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
-        $validated = $request->validate([
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'type' => ['nullable', 'string', 'in:deposit,withdraw'],
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
-        ]);
+        $validated = $request->validated();
 
         $perPage = $validated['per_page'] ?? 20;
 
-        $transactions = Transaction::where('payable_type', Student::class)
+        $transactions = Transaction::with('wallet')
+            ->where('payable_type', Student::class)
             ->where('payable_id', $student->id)
             ->when(isset($validated['type']), fn ($q) => $q->where('type', $validated['type']))
             ->when(isset($validated['from']), fn ($q) => $q->whereDate('created_at', '>=', $validated['from']))
@@ -55,13 +49,10 @@ class WalletController extends Controller
         ]);
     }
 
-    public function setAlert(Request $request, Student $student): JsonResponse
+    #[Authorize('view', 'student')]
+    public function setAlert(SetWalletAlertRequest $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
-        $validated = $request->validate([
-            'threshold' => ['required', 'numeric', 'min:0', 'max:100000'],
-        ]);
+        $validated = $request->validated();
 
         $request->user()->students()->updateExistingPivot($student->id, [
             'wallet_alert_threshold' => $validated['threshold'],

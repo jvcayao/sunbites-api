@@ -9,9 +9,12 @@ use App\Enums\PaymentMethod;
 use App\Enums\SchoolMonth;
 use App\Enums\StudentType;
 use App\Models\Concerns\HasBranch;
+use App\Policies\ParentStudentPolicy;
 use Bavix\Wallet\Interfaces\Wallet;
 use Bavix\Wallet\Traits\HasWallet;
 use Database\Factories\StudentFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,33 +24,34 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
+#[UsePolicy(ParentStudentPolicy::class)]
+#[Fillable([
+    'branch_id',
+    'student_number',
+    'first_name',
+    'last_name',
+    'grade_level',
+    'section',
+    'birthday',
+    'photo_path',
+    'allergies',
+    'notes',
+    'qr_code',
+    'student_type',
+    'enrollment_status',
+    'enrollment_date',
+    'points',
+    'total_spent',
+    'credit_balance',
+])]
 class Student extends Model implements Wallet
 {
     /** @use HasFactory<StudentFactory> */
     use HasBranch, HasFactory, HasWallet, LogsActivity, SoftDeletes;
-
-    protected $fillable = [
-        'branch_id',
-        'student_number',
-        'first_name',
-        'last_name',
-        'grade_level',
-        'section',
-        'birthday',
-        'photo_path',
-        'allergies',
-        'notes',
-        'qr_code',
-        'student_type',
-        'enrollment_status',
-        'enrollment_date',
-        'points',
-        'total_spent',
-        'credit_balance',
-    ];
 
     protected $recordEvents = ['created', 'updated', 'deleted'];
 
@@ -90,31 +94,37 @@ class Student extends Model implements Wallet
         );
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return HasMany<StudentContact, $this> */
     public function contacts(): HasMany
     {
         return $this->hasMany(StudentContact::class);
     }
 
+    /** @return HasMany<StudentMonthlyPayment, $this> */
     public function monthlyPayments(): HasMany
     {
         return $this->hasMany(StudentMonthlyPayment::class);
     }
 
+    /** @return HasMany<CreditTransaction, $this> */
     public function creditTransactions(): HasMany
     {
         return $this->hasMany(CreditTransaction::class);
     }
 
+    /** @return HasMany<Order, $this> */
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
     }
 
+    /** @return BelongsToMany<ParentUser, $this> */
     public function parents(): BelongsToMany
     {
         return $this->belongsToMany(ParentUser::class, 'parent_student', 'student_id', 'parent_id')
@@ -198,7 +208,7 @@ class Student extends Model implements Wallet
 
         do {
             if (++$attempts > 10) {
-                throw new \RuntimeException('Failed to generate a unique QR code after 10 attempts.');
+                throw new RuntimeException('Failed to generate a unique QR code after 10 attempts.');
             }
 
             $code = 'SB-'.Str::random(12);

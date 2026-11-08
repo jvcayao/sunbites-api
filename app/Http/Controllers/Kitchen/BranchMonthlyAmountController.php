@@ -4,15 +4,17 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListBranchMonthlyAmountsRequest;
+use App\Http\Requests\Kitchen\StoreBranchMonthlyAmountRequest;
+use App\Http\Requests\Kitchen\UpdateBranchMonthlyAmountRequest;
 use App\Models\BranchMonthlyAmount;
 use App\Models\SystemConfiguration;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 
 class BranchMonthlyAmountController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListBranchMonthlyAmountsRequest $request): JsonResponse
     {
         $year = $request->integer('year') ?: now()->year;
         $branchId = app('active_branch')->id;
@@ -25,68 +27,72 @@ class BranchMonthlyAmountController extends Controller
         $configMonths = config('sunbites.school_months');
         $dailyRate = SystemConfiguration::getValue('daily_meal_rate', 135);
 
-        $months = collect(SchoolMonth::cases())->map(fn ($m) => [
-            'id' => $configured->get($m->value)?->id,
-            'school_month' => $m->value,
-            'label' => $m->label(),
-            'year' => $year,
-            'days' => $configured->get($m->value)?->days ?? ($configMonths[$m->value]['days'] ?? 0),
-            'amount' => $configured->get($m->value)?->amount ?? (($configMonths[$m->value]['days'] ?? 0) * $dailyRate),
-            'is_configured' => $configured->has($m->value),
-        ]);
+        $months = collect(SchoolMonth::cases())->map(function (SchoolMonth $m) use ($configured, $configMonths, $dailyRate, $year) {
+            $record = $configured->get($m->value);
+            $defaultDays = $configMonths[$m->value]['days'] ?? 0;
+
+            return [
+                'id' => $record?->id,
+                'school_month' => $m->value,
+                'label' => $m->label(),
+                'year' => $year,
+                'days' => $record?->days ?? $defaultDays,
+                'amount' => $record?->amount ?? ($defaultDays * $dailyRate),
+                'is_configured' => $configured->has($m->value),
+            ];
+        });
 
         return response()->json($months);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(StoreBranchMonthlyAmountRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'school_month' => ['required', Rule::enum(SchoolMonth::class)],
-            'year' => ['required', 'integer', 'digits:4', 'min:2020', 'max:2099'],
-            'days' => ['required', 'integer', 'min:0', 'max:31'],
-            'amount' => ['nullable', 'numeric', 'min:0', Rule::prohibitedIf($request->integer('days') === 0)],
-        ]);
-
-        $branchId = app('active_branch')->id;
-        $amount = isset($validated['amount'])
-            ? (float) $validated['amount']
-            : $validated['days'] * SystemConfiguration::getValue('daily_meal_rate', 135);
+        $validated = $request->validated();
 
         $record = BranchMonthlyAmount::updateOrCreate(
             [
-                'branch_id' => $branchId,
+                'branch_id' => app('active_branch')->id,
                 'school_month' => $validated['school_month'],
                 'year' => $validated['year'],
             ],
             [
                 'days' => $validated['days'],
-                'amount' => $amount,
+                'amount' => $this->resolveAmount($validated),
             ]
         );
 
         return response()->json($record, $record->wasRecentlyCreated ? 201 : 200);
     }
 
-    public function update(Request $request, BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
+    public function update(UpdateBranchMonthlyAmountRequest $request, BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
     {
-        $validated = $request->validate([
-            'days' => ['required', 'integer', 'min:0', 'max:31'],
-            'amount' => ['nullable', 'numeric', 'min:0', Rule::prohibitedIf($request->integer('days') === 0)],
-        ]);
+        $validated = $request->validated();
 
-        $amount = isset($validated['amount'])
-            ? (float) $validated['amount']
-            : $validated['days'] * SystemConfiguration::getValue('daily_meal_rate', 135);
-
-        $branchMonthlyAmount->update(['days' => $validated['days'], 'amount' => $amount]);
+        $branchMonthlyAmount->update(['days' => $validated['days'], 'amount' => $this->resolveAmount($validated)]);
 
         return response()->json($branchMonthlyAmount);
     }
 
     public function destroy(BranchMonthlyAmount $branchMonthlyAmount): JsonResponse
     {
+        if ($branchMonthlyAmount->branch_id !== app('active_branch')->id) {
+            throw (new ModelNotFoundException)->setModel(BranchMonthlyAmount::class);
+        }
+
         $branchMonthlyAmount->delete();
 
         return response()->json(['message' => 'Month config deleted.']);
+    }
+
+    /**
+     * The explicit amount when one was sent, otherwise the days times the daily meal rate.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function resolveAmount(array $validated): int|float
+    {
+        return isset($validated['amount'])
+            ? (float) $validated['amount']
+            : $validated['days'] * SystemConfiguration::getValue('daily_meal_rate', 135);
     }
 }

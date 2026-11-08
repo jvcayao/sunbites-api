@@ -49,12 +49,12 @@ Route::post('/auth/password/email', [AuthController::class, 'sendResetEmail'])->
 Route::post('/auth/password/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:password-reset');
 
 // Staff auth — authenticated
-Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
-    Route::post('/broadcasting/auth', [BroadcastController::class, 'authenticate']);
+Route::middleware(['auth:sanctum', 'ability:staff', 'branch.required'])->group(function () {
+    Route::post('/broadcasting/auth', [BroadcastController::class, 'authenticate'])->withoutMiddleware('branch.required');
 
-    Route::post('/auth/logout', [AuthController::class, 'logout']);
-    Route::get('/auth/user', [AuthController::class, 'user']);
-    Route::post('/auth/branch', [AuthController::class, 'setBranch']);
+    Route::post('/auth/logout', [AuthController::class, 'logout'])->withoutMiddleware('branch.required');
+    Route::get('/auth/user', [AuthController::class, 'user'])->withoutMiddleware('branch.required');
+    Route::post('/auth/branch', [AuthController::class, 'setBranch'])->withoutMiddleware('branch.required');
 
     // POS Menu Items — GET available to all staff; mutations admin/manager only
     Route::get('/pos/menu-items', [PosMenuItemController::class, 'index']);
@@ -99,7 +99,7 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     Route::middleware('role:admin|manager|supervisor')->group(function () {
         Route::get('/pos/inventory', [InventoryController::class, 'index']);
         Route::post('/pos/inventory/{item}/adjust', [InventoryController::class, 'adjust']);
-        Route::get('/references/inventory', [InventoryController::class, 'index']);
+        Route::get('/references/inventory', [InventoryController::class, 'indexForManagement']);
         Route::post('/references/inventory', [InventoryController::class, 'store']);
         // NOTE: /history must be defined before /{item} to avoid route conflict
         Route::get('/references/inventory/history', [InventoryController::class, 'history']);
@@ -120,28 +120,28 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
 
     // Branch management + System configuration — admin only
     Route::middleware('role:admin')->group(function () {
-        Route::get('/branches', [BranchController::class, 'index']);
-        Route::put('/branches/{branch}', [BranchController::class, 'update']);
-        Route::post('/branches/{branch}/toggle', [BranchController::class, 'toggleActive']);
+        Route::get('/branches', [BranchController::class, 'index'])->withoutMiddleware('branch.required');
+        Route::put('/branches/{branch}', [BranchController::class, 'update'])->withoutMiddleware('branch.required');
+        Route::post('/branches/{branch}/toggle', [BranchController::class, 'toggleActive'])->withoutMiddleware('branch.required');
 
-        Route::get('/system-configurations', [SystemConfigurationController::class, 'index']);
-        Route::put('/system-configurations/{key}', [SystemConfigurationController::class, 'update']);
+        Route::get('/system-configurations', [SystemConfigurationController::class, 'index'])->withoutMiddleware('branch.required');
+        Route::put('/system-configurations/{key}', [SystemConfigurationController::class, 'update'])->withoutMiddleware('branch.required');
 
         // User management — destructive/admin-only actions
-        Route::put('/users/{user}', [UserManagementController::class, 'update']);
-        Route::post('/users/{user}/deactivate', [UserManagementController::class, 'deactivate']);
-        Route::post('/users/{user}/reactivate', [UserManagementController::class, 'reactivate'])->withTrashed();
-        Route::post('/users/{user}/reset-password', [UserManagementController::class, 'sendResetEmail']);
-        Route::post('/users/{user}/branches', [UserManagementController::class, 'assignBranch']);
-        Route::delete('/users/{user}/branches/{branch}', [UserManagementController::class, 'detachBranch']);
+        Route::put('/users/{user}', [UserManagementController::class, 'update'])->withoutMiddleware('branch.required');
+        Route::post('/users/{user}/deactivate', [UserManagementController::class, 'deactivate'])->withoutMiddleware('branch.required');
+        Route::post('/users/{user}/reactivate', [UserManagementController::class, 'reactivate'])->withTrashed()->withoutMiddleware('branch.required');
+        Route::post('/users/{user}/reset-password', [UserManagementController::class, 'sendResetEmail'])->withoutMiddleware('branch.required');
+        Route::post('/users/{user}/branches', [UserManagementController::class, 'assignBranch'])->withoutMiddleware('branch.required');
+        Route::delete('/users/{user}/branches/{branch}', [UserManagementController::class, 'detachBranch'])->withoutMiddleware('branch.required');
     });
 
     // User management — list, view, create, and photo upload — admin and manager
     Route::middleware('role:admin|manager')->group(function () {
-        Route::get('/users', [UserManagementController::class, 'index']);
-        Route::get('/users/{user}', [UserManagementController::class, 'show']);
-        Route::post('/users', [UserManagementController::class, 'store']);
-        Route::post('/users/{user}/photo', [UserManagementController::class, 'uploadPhoto']);
+        Route::get('/users', [UserManagementController::class, 'index'])->withoutMiddleware('branch.required');
+        Route::get('/users/{user}', [UserManagementController::class, 'show'])->withoutMiddleware('branch.required');
+        Route::post('/users', [UserManagementController::class, 'store'])->withoutMiddleware('branch.required');
+        Route::post('/users/{user}/photo', [UserManagementController::class, 'uploadPhoto'])->withoutMiddleware('branch.required');
     });
 
     // Enrollment & Students — admin, manager, supervisor
@@ -232,11 +232,11 @@ Route::middleware(['auth:sanctum', 'ability:staff'])->group(function () {
     });
 
     // Staff notifications (inbox) — all staff roles
-    Route::get('/staff/notifications/unread-count', [StaffNotificationController::class, 'unreadCount']);
-    Route::get('/staff/notifications', [StaffNotificationController::class, 'index']);
-    Route::post('/staff/notifications/mark-all-read', [StaffNotificationController::class, 'markAllRead']);
-    Route::patch('/staff/notifications/{id}/read', [StaffNotificationController::class, 'markRead']);
-    Route::delete('/staff/notifications/{id}', [StaffNotificationController::class, 'destroy']);
+    Route::get('/staff/notifications/unread-count', [StaffNotificationController::class, 'unreadCount'])->withoutMiddleware('branch.required');
+    Route::get('/staff/notifications', [StaffNotificationController::class, 'index'])->withoutMiddleware('branch.required');
+    Route::post('/staff/notifications/mark-all-read', [StaffNotificationController::class, 'markAllRead'])->withoutMiddleware('branch.required');
+    Route::patch('/staff/notifications/{id}/read', [StaffNotificationController::class, 'markRead'])->withoutMiddleware('branch.required');
+    Route::delete('/staff/notifications/{id}', [StaffNotificationController::class, 'destroy'])->withoutMiddleware('branch.required');
 
     // Announcements — supervisor+ can send; all supervisor+ can list/show
     Route::middleware('role:admin|manager|supervisor')->group(function () {

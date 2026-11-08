@@ -3,21 +3,16 @@
 namespace App\Providers;
 
 use App\Listeners\AuthEventSubscriber;
-use App\Models\Order;
 use App\Models\PreRegistration;
-use App\Models\Student;
-use App\Models\User;
-use App\Policies\OrderPolicy;
-use App\Policies\ParentStudentPolicy;
-use App\Policies\ReportPolicy;
-use App\Policies\UserPolicy;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -31,12 +26,45 @@ class AppServiceProvider extends ServiceProvider
 
         Event::subscribe(AuthEventSubscriber::class);
 
-        Gate::policy(Order::class, OrderPolicy::class);
-        Gate::policy(User::class, UserPolicy::class);
-        Gate::policy(Student::class, ParentStudentPolicy::class);
-        Gate::policy(ReportPolicy::class, ReportPolicy::class);
-
         $this->bindCrossBranchRouteModels();
+
+        $this->registerSearchMacros();
+
+        $this->loadBroadcastChannels();
+    }
+
+    /**
+     * Search macros on the query builder; Eloquent builders forward to them. `whereContainsLiteral`
+     * matches `$term` anywhere in `$column` with `%`, `_` and `!` taken literally (`ESCAPE '!'`
+     * behaves the same on MySQL and SQLite). `whereAnyContainsLiteral` groups it over several
+     * columns like `whereAny`. Column names are literals from code, never input.
+     */
+    private function registerSearchMacros(): void
+    {
+        Builder::macro('whereContainsLiteral', function (string $column, string $term, string $boolean = 'and') {
+            $escaped = str_replace(['!', '%', '_'], ['!!', '!%', '!_'], $term);
+
+            return $this->whereRaw("{$column} LIKE ? ESCAPE '!'", ["%{$escaped}%"], $boolean);
+        });
+
+        Builder::macro('whereAnyContainsLiteral', function (array $columns, string $term, string $boolean = 'and') {
+            return $this->where(function ($query) use ($columns, $term) {
+                foreach ($columns as $column) {
+                    $query->whereContainsLiteral($column, $term, 'or');
+                }
+            }, boolean: $boolean);
+        });
+    }
+
+    /**
+     * Loads the channel authorization callbacks without registering Laravel's default
+     * top-level `/broadcasting/auth` route (which `channels:` in bootstrap/app.php's
+     * withRouting would add): the API already registers its own authenticated auth
+     * routes in routes/kitchen-api.php and routes/portal-api.php.
+     */
+    private function loadBroadcastChannels(): void
+    {
+        require base_path('routes/channels.php');
     }
 
     /**
@@ -64,23 +92,31 @@ class AppServiceProvider extends ServiceProvider
     {
         Date::use(CarbonImmutable::class);
 
-        DB::prohibitDestructiveCommands(
-            app()->isProduction(),
-        );
+        DB::prohibitDestructiveCommands($this->app->isProduction());
 
-        Password::defaults(fn (): Password => app()->isProduction()
+        Model::preventLazyLoading(! $this->app->isProduction());
+
+        // Throw only in the test suite. `local` (developers running the POS/portal against the
+        // local API) and `staging` log instead, so an untested lazy load never breaks a page.
+        if (! $this->app->environment('testing')) {
+            Model::handleLazyLoadingViolationUsing(function (Model $model, string $relation): void {
+                Log::warning('Lazy loading violation', ['model' => $model::class, 'relation' => $relation]);
+            });
+        }
+
+        Password::defaults(fn (): Password => $this->app->isProduction()
             ? Password::min(8)->mixedCase()->numbers()->symbols()->uncompromised()
             : Password::min(8)->mixedCase()->numbers(),
         );
 
         RateLimiter::for('login', fn (Request $request) => [
             Limit::perMinute(5)->by($request->ip()),
-            Limit::perMinute(10)->by('login:'.$request->input('email', '')),
+            Limit::perMinute(10)->by('login:'.$request->string('email', strict: true)),
         ]);
 
         RateLimiter::for('password-reset', fn (Request $request) => [
             Limit::perMinute(3)->by($request->ip()),
-            Limit::perMinute(5)->by('pwd-reset:'.$request->input('email', $request->input('token', ''))),
+            Limit::perMinute(5)->by('pwd-reset:'.$request->string('email', $request->string('token', strict: true), strict: true)),
         ]);
 
         RateLimiter::for('portal-login', fn (Request $request) => Limit::perMinutes(5, 5)->by($request->ip()));

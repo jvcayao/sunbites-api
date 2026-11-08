@@ -5,7 +5,10 @@ namespace App\Models;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentMethod;
 use App\Models\Concerns\HasBranch;
+use App\Policies\OrderPolicy;
 use Database\Factories\OrderFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,33 +16,33 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
+#[UsePolicy(OrderPolicy::class)]
+#[Fillable([
+    'branch_id',
+    'student_id',
+    'cashier_id',
+    'receipt_number',
+    'payment_method',
+    'subtotal',
+    'discount_amount',
+    'discount_reason',
+    'total',
+    'amount_tendered',
+    'change_amount',
+    'reference_number',
+    'notes',
+    'is_credit',
+    'credit_amount',
+    'points_earned',
+    'status',
+    'voided_at',
+    'voided_by',
+    'void_reason',
+])]
 class Order extends Model
 {
     /** @use HasFactory<OrderFactory> */
     use HasBranch, HasFactory, LogsActivity;
-
-    protected $fillable = [
-        'branch_id',
-        'student_id',
-        'cashier_id',
-        'receipt_number',
-        'payment_method',
-        'subtotal',
-        'discount_amount',
-        'discount_reason',
-        'total',
-        'amount_tendered',
-        'change_amount',
-        'reference_number',
-        'notes',
-        'is_credit',
-        'credit_amount',
-        'points_earned',
-        'status',
-        'voided_at',
-        'voided_by',
-        'void_reason',
-    ];
 
     protected $recordEvents = ['created', 'updated'];
 
@@ -69,21 +72,25 @@ class Order extends Model
             ->setDescriptionForEvent(fn (string $eventName) => "orders.{$eventName}");
     }
 
+    /** @return HasMany<OrderItem, $this> */
     public function items(): HasMany
     {
         return $this->hasMany(OrderItem::class);
     }
 
+    /** @return BelongsTo<Student, $this> */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function cashier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'cashier_id');
     }
 
+    /** @return BelongsTo<User, $this> */
     public function voidedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by');

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Kitchen;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\UpdateBranchRequest;
 use App\Models\Branch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,13 +40,9 @@ class BranchController extends Controller
         ]));
     }
 
-    public function update(Request $request, Branch $branch): JsonResponse
+    public function update(UpdateBranchRequest $request, Branch $branch): JsonResponse
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'gcash_number' => ['nullable', 'string', 'max:20'],
-            'address' => ['nullable', 'string', 'max:255'],
-        ]);
+        $validated = $request->validated();
 
         $branch->update($validated);
 

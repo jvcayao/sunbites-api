@@ -2,28 +2,25 @@
 
 namespace App\Http\Controllers\Kitchen;
 
+use App\Enums\PaymentStatus;
 use App\Enums\SchoolMonth;
 use App\Exports\BillingReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportBillingReportRequest;
+use App\Http\Requests\Kitchen\ListBillingReportRequest;
 use App\Models\Student;
 use App\Models\StudentMonthlyPayment;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BillingReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListBillingReportRequest $request): JsonResponse
     {
-        $validated = $request->validate(array_merge($this->filterRules(), [
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]));
+        $validated = $this->withDefaultPeriod($request->validated());
 
-        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
-        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
         $perPage = $validated['per_page'] ?? 50;
 
         $query = $this->buildQuery($validated)
@@ -38,18 +35,29 @@ class BillingReportController extends Controller
         $totalSubscribers = (clone $summaryQuery)->distinct('student_id')->count('student_id');
         $totalCollected = (float) (clone $summaryQuery)->where('status', 'paid')->sum('amount');
         $totalOutstanding = (float) (clone $summaryQuery)->where('status', 'unpaid')->sum('amount');
-        $totalAmount = $totalCollected + $totalOutstanding;
-        $collectionRate = $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
+        $collectionRate = $this->collectionRate($totalCollected, $totalOutstanding);
 
         $payments = $query->paginate($perPage);
 
-        $payments->getCollection()->each(function ($payment): void {
-            $payment->student?->append('full_name');
-            $payment->recorder?->append('full_name');
-        });
-
         return response()->json([
-            'data' => $payments->items(),
+            'data' => collect($payments->items())->map(fn (StudentMonthlyPayment $p) => [
+                ...$p->attributesToArray(),
+                'student' => $p->student ? [
+                    'id' => $p->student->id,
+                    'first_name' => $p->student->first_name,
+                    'last_name' => $p->student->last_name,
+                    'full_name' => $p->student->full_name,
+                    'student_number' => $p->student->student_number,
+                    'grade_level' => $p->student->grade_level,
+                    'section' => $p->student->section,
+                ] : null,
+                'recorder' => $p->recorder ? [
+                    'id' => $p->recorder->id,
+                    'first_name' => $p->recorder->first_name,
+                    'last_name' => $p->recorder->last_name,
+                    'full_name' => $p->recorder->full_name,
+                ] : null,
+            ]),
             'meta' => $this->paginationMeta($payments),
             'summary' => [
                 'total_subscribers' => $totalSubscribers,
@@ -60,12 +68,10 @@ class BillingReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportBillingReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate($this->filterRules());
+        $validated = $this->withDefaultPeriod($request->validated());
 
-        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
-        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
         $branch = app('active_branch');
         $year = $validated['year'];
 
@@ -74,10 +80,9 @@ class BillingReportController extends Controller
             ->orderByRaw("CASE WHEN status = 'unpaid' THEN 0 ELSE 1 END")
             ->get();
 
-        $totalCollected = (float) $payments->where('status', 'paid')->sum('amount');
-        $totalOutstanding = (float) $payments->where('status', 'unpaid')->sum('amount');
-        $totalAmount = $totalCollected + $totalOutstanding;
-        $collectionRate = $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
+        $totalCollected = (float) $payments->where('status', PaymentStatus::Paid)->sum('amount');
+        $totalOutstanding = (float) $payments->where('status', PaymentStatus::Unpaid)->sum('amount');
+        $collectionRate = $this->collectionRate($totalCollected, $totalOutstanding);
 
         $summary = [
             'total_subscribers' => $payments->unique('student_id')->count(),
@@ -91,30 +96,52 @@ class BillingReportController extends Controller
         return Excel::download(new BillingReportExport($payments, $summary), $filename);
     }
 
-    private function filterRules(): array
+    /**
+     * Defaults the filters to the current school month and school year when they are missing.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function withDefaultPeriod(array $validated): array
     {
-        return [
-            'year' => ['nullable', 'integer', 'min:2020', 'max:2100'],
-            'school_month' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'grade_level' => ['nullable', 'string'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'recorded_by' => ['nullable', 'integer', 'exists:users,id'],
-            'recorded_from' => ['nullable', 'date'],
-            'recorded_to' => ['nullable', 'date'],
-        ];
+        $validated['school_month'] ??= SchoolMonth::fromMonthNumber(now()->month)?->value;
+        $validated['year'] ??= now()->month >= 6 ? now()->year : now()->year - 1;
+
+        return $validated;
     }
 
+    private function collectionRate(float $totalCollected, float $totalOutstanding): float|int
+    {
+        $totalAmount = $totalCollected + $totalOutstanding;
+
+        return $totalAmount > 0 ? round(($totalCollected / $totalAmount) * 100, 2) : 0;
+    }
+
+    /**
+     * The `year` filter is the year the school year starts, while a payment's `year` is the calendar
+     * year of its month: January–March of school year Y are stored as Y + 1.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return Builder<StudentMonthlyPayment>
+     */
     private function buildQuery(array $validated): Builder
     {
         $branchId = app('active_branch')->id;
         $studentIds = Student::where('branch_id', $branchId)->pluck('id');
         $status = $validated['status'] ?? null;
         $filteringByDate = isset($validated['recorded_from']) || isset($validated['recorded_to']);
+        $schoolYear = (int) $validated['year'];
 
         return StudentMonthlyPayment::whereIn('student_id', $studentIds)
-            ->where('year', $validated['year'])
-            ->when(isset($validated['school_month']), fn ($q) => $q->where('school_month', $validated['school_month']))
+            ->when(
+                isset($validated['school_month']),
+                fn ($q) => $q->where('year', SchoolMonth::from($validated['school_month'])->calendarYearFor($schoolYear))
+                    ->where('school_month', $validated['school_month']),
+                fn ($q) => $q->where(fn ($q) => $q
+                    ->where(fn ($a) => $a->whereIn('school_month', SchoolMonth::firstHalfValues())->where('year', $schoolYear))
+                    ->orWhere(fn ($b) => $b->whereIn('school_month', SchoolMonth::secondHalfValues())->where('year', $schoolYear + 1))
+                ),
+            )
             ->when(
                 $status === 'voided',
                 fn ($q) => $q->where('status', 'voided'),
@@ -133,11 +160,11 @@ class BillingReportController extends Controller
                 }
             }))
             ->when(isset($validated['search']), function ($q) use ($validated) {
-                $like = '%'.mb_strtolower($validated['search']).'%';
-                $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($like) {
-                    $inner->whereRaw('lower(first_name) like ?', [$like])
-                        ->orWhereRaw('lower(last_name) like ?', [$like])
-                        ->orWhereRaw('lower(student_number) like ?', [$like]);
+                $term = mb_strtolower($validated['search']);
+                $q->whereHas('student', fn ($sq) => $sq->where(function ($inner) use ($term) {
+                    $inner->whereContainsLiteral('lower(first_name)', $term)
+                        ->whereContainsLiteral('lower(last_name)', $term, 'or')
+                        ->whereContainsLiteral('lower(student_number)', $term, 'or');
                 }));
             });
     }

@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use Database\Factories\WalletTopupVoidFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,25 +18,24 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * bound (e.g. a future cross-branch report), so branch_id stays an explicit snapshot column,
  * matching CreditTransaction's own documented rationale.
  */
+#[WithoutTimestamps]
+#[Fillable([
+    'student_id',
+    'branch_id',
+    'wallet_transaction_id',
+    'refund_wallet_transaction_id',
+    'credit_transaction_id',
+    'original_amount',
+    'voided_amount',
+    'shortfall_amount',
+    'void_reason',
+    'voided_by',
+    'created_at',
+])]
 class WalletTopupVoid extends Model
 {
+    /** @use HasFactory<WalletTopupVoidFactory> */
     use HasFactory;
-
-    public $timestamps = false;
-
-    protected $fillable = [
-        'student_id',
-        'branch_id',
-        'wallet_transaction_id',
-        'refund_wallet_transaction_id',
-        'credit_transaction_id',
-        'original_amount',
-        'voided_amount',
-        'shortfall_amount',
-        'void_reason',
-        'voided_by',
-        'created_at',
-    ];
 
     protected function casts(): array
     {
@@ -45,21 +47,25 @@ class WalletTopupVoid extends Model
         ];
     }
 
+    /** @return BelongsTo<Student, $this> */
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
     }
 
+    /** @return BelongsTo<CreditTransaction, $this> */
     public function creditTransaction(): BelongsTo
     {
         return $this->belongsTo(CreditTransaction::class);
     }
 
+    /** @return BelongsTo<User, $this> */
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by');

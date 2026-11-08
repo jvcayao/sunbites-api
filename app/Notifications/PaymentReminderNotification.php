@@ -7,11 +7,11 @@ use Carbon\Carbon;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
-use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
 
-class PaymentReminderNotification extends Notification implements ShouldBroadcast, ShouldQueue
+class PaymentReminderNotification extends Notification implements ShouldBroadcast, ShouldQueueAfterCommit
 {
     use Queueable;
 

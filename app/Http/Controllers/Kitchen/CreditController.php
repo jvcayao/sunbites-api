@@ -6,14 +6,14 @@ use App\Enums\CreditSettlementMethod;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SettleCreditRequest;
 use App\Http\Requests\WaiveCreditRequest;
-use App\Models\CreditTransaction;
+use App\Http\Resources\CreditLedgerEntryResource;
 use App\Models\Student;
 use App\Services\CreditLedgerService;
 use Illuminate\Http\JsonResponse;
 
 class CreditController extends Controller
 {
-    public function __construct(private CreditLedgerService $creditLedger) {}
+    public function __construct(private readonly CreditLedgerService $creditLedger) {}
 
     public function settle(SettleCreditRequest $request, Student $student): JsonResponse
     {
@@ -50,7 +50,7 @@ class CreditController extends Controller
             'amount_settled' => (float) $entry->amount,
             'credit_balance' => (float) $student->credit_balance,
             'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
-            'transaction' => $this->entryPayload($entry),
+            'transaction' => new CreditLedgerEntryResource($entry),
         ]);
     }
 
@@ -81,23 +81,7 @@ class CreditController extends Controller
             'amount_waived' => (float) $entry->amount,
             'credit_balance' => (float) $student->credit_balance,
             'wallet_balance' => $student->wallet?->balanceFloatNum ?? 0.0,
-            'transaction' => $this->entryPayload($entry),
+            'transaction' => new CreditLedgerEntryResource($entry),
         ]);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function entryPayload(CreditTransaction $entry): array
-    {
-        return [
-            'id' => "credit-{$entry->id}",
-            'date' => $entry->created_at?->toIso8601String(),
-            'type' => $entry->type?->value,
-            'amount' => (float) $entry->amount,
-            'payment_method' => $entry->payment_method?->value,
-            'reference_number' => $entry->reference_number,
-            'note' => $entry->notes,
-        ];
     }
 }

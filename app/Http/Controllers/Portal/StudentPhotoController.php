@@ -3,34 +3,27 @@
 namespace App\Http\Controllers\Portal;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Portal\UploadPortalStudentPhotoRequest;
 use App\Models\Student;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Attributes\Controllers\Authorize;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class StudentPhotoController extends Controller
 {
-    use AuthorizesRequests;
-
+    #[Authorize('view', 'student')]
     public function show(Request $request, Student $student): StreamedResponse
     {
-        $this->authorize('view', $student);
-
         abort_if(! $student->photo_path, 404);
 
         return Storage::disk('private')->response($student->photo_path);
     }
 
-    public function store(Request $request, Student $student): JsonResponse
+    #[Authorize('view', 'student')]
+    public function store(UploadPortalStudentPhotoRequest $request, Student $student): JsonResponse
     {
-        $this->authorize('view', $student);
-
-        $request->validate([
-            'photo' => ['required', 'file', 'mimes:jpeg,png,webp', 'max:5120'],
-        ]);
-
         $oldPath = $student->photo_path;
 
         $path = $request->file('photo')->store('photos/students', 'private');

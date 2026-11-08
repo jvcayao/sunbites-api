@@ -7,11 +7,12 @@ use App\Actions\Parents\EnableParentAction;
 use App\Actions\Parents\RestoreParentAction;
 use App\Actions\Parents\SoftDeleteParentAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ListParentsRequest;
 use App\Mail\ParentWelcomeMail;
 use App\Models\ParentUser;
 use App\Models\StudentContact;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 
@@ -24,13 +25,9 @@ class ParentController extends Controller
         private readonly RestoreParentAction $restoreParent,
     ) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(ListParentsRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'search' => ['nullable', 'string', 'max:100'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-            'status' => ['nullable', 'in:active,pending,disabled,deleted'],
-        ]);
+        $validated = $request->validated();
 
         $query = ParentUser::with('students:id,first_name,last_name,student_number,branch_id')
             ->orderBy('last_name')
@@ -44,16 +41,14 @@ class ParentController extends Controller
             default => null,
         };
 
-        if (app()->bound('active_branch')) {
-            $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
-            );
-        }
+        $query->whereHas('students', fn ($q) => $q->where('students.branch_id', app('active_branch')->id)
+        );
 
         if (! empty($validated['search'])) {
-            $search = '%'.mb_strtolower($validated['search']).'%';
-            $query->where(fn ($q) => $q->whereRaw('lower(first_name) like ?', [$search])
-                ->orWhereRaw('lower(last_name) like ?', [$search])
-                ->orWhereRaw('lower(email) like ?', [$search])
+            $search = mb_strtolower($validated['search']);
+            $query->where(fn ($q) => $q->whereContainsLiteral('lower(first_name)', $search)
+                ->whereContainsLiteral('lower(last_name)', $search, 'or')
+                ->whereContainsLiteral('lower(email)', $search, 'or')
             );
         }
 
@@ -81,6 +76,8 @@ class ParentController extends Controller
 
     public function show(ParentUser $parent): JsonResponse
     {
+        $this->ensureVisibleInActiveBranch($parent);
+
         $parent->load(['students:id,first_name,last_name,student_number,grade_level,branch_id', 'students.branch:id,name']);
 
         // Phone and address come from the student contact record matching this parent's email,
@@ -112,6 +109,8 @@ class ParentController extends Controller
 
     public function resendActivation(ParentUser $parent): JsonResponse
     {
+        $this->ensureVisibleInActiveBranch($parent);
+
         $token = Password::broker('parents')->createToken($parent);
         Mail::to($parent->email)->queue(new ParentWelcomeMail($parent, $token));
 
@@ -120,6 +119,8 @@ class ParentController extends Controller
 
     public function disable(ParentUser $parent): JsonResponse
     {
+        $this->ensureVisibleInActiveBranch($parent);
+
         $this->disableParent->execute($parent);
 
         return response()->json(['message' => 'Parent access disabled.']);
@@ -127,6 +128,8 @@ class ParentController extends Controller
 
     public function enable(ParentUser $parent): JsonResponse
     {
+        $this->ensureVisibleInActiveBranch($parent);
+
         $this->enableParent->execute($parent);
 
         return response()->json(['message' => 'Parent access enabled. Activation email queued.']);
@@ -134,6 +137,8 @@ class ParentController extends Controller
 
     public function destroy(ParentUser $parent): JsonResponse
     {
+        $this->ensureVisibleInActiveBranch($parent);
+
         $this->softDeleteParent->execute($parent);
 
         return response()->json(['message' => 'Parent account deleted.']);
@@ -141,12 +146,29 @@ class ParentController extends Controller
 
     public function restore(ParentUser $parent): JsonResponse
     {
-        if (! $parent->trashed()) {
-            abort(404);
-        }
+        $this->ensureVisibleInActiveBranch($parent);
+
+        abort_unless($parent->trashed(), 404);
 
         $this->restoreParent->execute($parent);
 
         return response()->json(['message' => 'Parent account restored. Activation email queued.']);
+    }
+
+    /**
+     * A parent is visible only through a child (soft-deleted included) in the active branch.
+     *
+     * @throws ModelNotFoundException
+     */
+    private function ensureVisibleInActiveBranch(ParentUser $parent): void
+    {
+        $visible = $parent->students()
+            ->withTrashed()
+            ->where('students.branch_id', app('active_branch')->id)
+            ->exists();
+
+        if (! $visible) {
+            throw (new ModelNotFoundException)->setModel(ParentUser::class);
+        }
     }
 }

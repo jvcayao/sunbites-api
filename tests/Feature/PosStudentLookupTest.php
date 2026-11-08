@@ -151,4 +151,20 @@ class PosStudentLookupTest extends TestCase
 
         $response->assertUnauthorized();
     }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana500', 'last_name' => 'Reyes', 'student_number' => 'N-0001']);
+        Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaaxb', 'last_name' => 'Reyes', 'student_number' => 'N-0002']);
+        $underscore = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaa_b', 'last_name' => 'Reyes', 'student_number' => 'N-0003']);
+        $idsFor = fn (string $term): array => collect($this->asCashier()->postJson('/api/v1/pos/students/lookup', ['type' => 'search', 'value' => $term])->assertOk()->json('students'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
+    }
 }

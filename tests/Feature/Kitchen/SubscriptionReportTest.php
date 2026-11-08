@@ -296,6 +296,25 @@ class SubscriptionReportTest extends TestCase
         $this->assertNotContains($nonSub->id, $ids);
     }
 
+    public function test_search_matches_first_name_last_name_or_student_number_of_the_branchs_subscribers_only(): void
+    {
+        BranchSubscriptionConfig::factory()->create(['branch_id' => $this->branch->id]);
+        $byFirstName = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Zoraida']);
+        $byLastName = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'last_name' => 'Zorilla']);
+        $byStudentNumber = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'student_number' => 'Zor-0001']);
+        Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana', 'last_name' => 'Cruz']);
+        Student::factory()->nonSubscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Zoraida']);
+        Student::factory()->subscription()->enrolled()->create(['branch_id' => Branch::factory()->create(['is_active' => true])->id, 'first_name' => 'Zoraida']);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/subscription?'.http_build_query($this->reportParams(['search' => 'Zor'])));
+
+        $response->assertOk();
+        $this->assertEqualsCanonicalizing(
+            [$byFirstName->id, $byLastName->id, $byStudentNumber->id],
+            collect($response->json('data'))->pluck('id')->all(),
+        );
+    }
+
     public function test_report_requires_authentication(): void
     {
         $response = $this->getJson('/api/v1/reports/subscription?'.http_build_query($this->reportParams()));
@@ -330,5 +349,49 @@ class SubscriptionReportTest extends TestCase
         $response = $this->asManager()->getJson('/api/v1/reports/subscription?month=july');
 
         $response->assertUnprocessable();
+    }
+
+    public function test_january_of_school_year_2026_reads_january_2027_orders_and_payment(): void
+    {
+        $this->travelTo('2027-01-20 09:00:00');
+        BranchSubscriptionConfig::factory()->create(['branch_id' => $this->branch->id]);
+        $student = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id]);
+        $cashier = User::factory()->create();
+        $order = Order::factory()->create([
+            'branch_id' => $this->branch->id,
+            'student_id' => $student->id,
+            'cashier_id' => $cashier->id,
+            'payment_method' => 'subscription',
+            'status' => 'completed',
+            'created_at' => '2027-01-05 12:00:00',
+        ]);
+        OrderItem::factory()->create(['order_id' => $order->id, 'pos_menu_item_id' => $this->createMealItem()->id, 'quantity' => 2]);
+        StudentMonthlyPayment::create(['student_id' => $student->id, 'school_month' => 'january', 'year' => 2027, 'amount' => 2970, 'status' => 'paid']);
+
+        $response = $this->asManager()->getJson('/api/v1/reports/subscription?'.http_build_query(['month' => 'january', 'year' => 2026]));
+
+        $response->assertOk();
+        $row = collect($response->json('data'))->firstWhere('id', $student->id);
+        $this->assertSame(
+            ['payment_status' => 'paid', 'year' => 2027, 'meals_used' => 2],
+            ['payment_status' => $row['payment_status'], 'year' => $row['subscription_monthly_status']['year'], 'meals_used' => $row['subscription_monthly_status']['categories']['meal']['used']],
+        );
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        BranchSubscriptionConfig::factory()->create(['branch_id' => $this->branch->id]);
+        $fiveHundred = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana500', 'last_name' => 'Reyes', 'student_number' => 'N-0001']);
+        Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaaxb', 'last_name' => 'Reyes', 'student_number' => 'N-0002']);
+        $underscore = Student::factory()->subscription()->enrolled()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaa_b', 'last_name' => 'Reyes', 'student_number' => 'N-0003']);
+        $idsFor = fn (string $term): array => collect($this->asManager()->getJson('/api/v1/reports/subscription?'.http_build_query($this->reportParams(['search' => $term])))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
     }
 }

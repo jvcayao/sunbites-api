@@ -133,28 +133,13 @@ Key models use `spatie/laravel-activitylog` via the `LogsActivity` trait. Auth e
 
 # Laravel Boost Guidelines
 
-The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
-
 ## Foundational Context
 
-This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
+This application is a Laravel application running on PHP 8.5. Always use the APIs that match the installed major version of each package — do not assume a version.
 
-- php - 8.5
-- laravel/fortify (FORTIFY) - v1
-- laravel/framework (LARAVEL) - v13
-- laravel/prompts (PROMPTS) - v0
-- laravel/reverb (REVERB) - v1
-- laravel/sanctum (SANCTUM) - v4
-- laravel/boost (BOOST) - v2
-- laravel/mcp (MCP) - v0
-- laravel/pail (PAIL) - v1
-- laravel/pint (PINT) - v1
-- laravel/sail (SAIL) - v1
-- phpunit/phpunit (PHPUNIT) - v12
-- react (REACT) - v19
-- tailwindcss (TAILWINDCSS) - v4
-- eslint (ESLINT) - v9
-- prettier (PRETTIER) - v3
+Before relying on a package's API, confirm its installed version:
+- PHP packages: run `vendor/bin/sail composer show --direct` to list direct dependencies with versions, or `vendor/bin/sail composer show <vendor/package>` for a single package.
+- JS packages: check `package.json` for the installed versions.
 
 ## Skills Activation
 
@@ -177,15 +162,11 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## Frontend Bundling
 
-- If the user doesn't see a frontend change reflected in the UI, it could mean they need to run `vendor/bin/sail npm run build`, `vendor/bin/sail npm run dev`, or `vendor/bin/sail composer run dev`. Ask them.
+- If a frontend change doesn't show in the UI or you get a "Unable to locate file in Vite manifest" error, run `vendor/bin/sail npm run build` or ask the user to run `vendor/bin/sail npm run dev`.
 
 ## Documentation Files
 
 - You must only create documentation files if explicitly requested by the user.
-
-## Replies
-
-- Be concise in your explanations - focus on what's important rather than explaining obvious details.
 
 === boost rules ===
 
@@ -201,7 +182,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 ## Searching Documentation (IMPORTANT)
 
-- Always use `search-docs` before making code changes. Do not skip this step. It returns version-specific docs based on installed packages automatically.
+- Use `search-docs` before changes that depend on Laravel ecosystem APIs, behavior, configuration, or version-specific syntax. Skip it for copy-only edits and other changes where package documentation is irrelevant. Reuse sufficient results already in context instead of searching again.
 - Pass a `packages` array to scope results when you know which packages are relevant.
 - Use multiple broad, topic-based queries: `['rate limiting', 'routing rate limiting', 'routing']`. Expect the most relevant results first.
 - Do not add package names to queries because package info is already shared. Use `test resource table`, not `filament 4 test resource table`.
@@ -212,6 +193,10 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 2. Use `"quoted phrases"` for exact position matching: `"infinite scroll"` requires adjacent words in order.
 3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
 4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
+
+## Project Rules
+
+- This project contains committed, area-grouped rules in `.ai/rules` when that directory exists, including path-scoped framework guidelines under `.ai/rules/boost`. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
 
 ## Artisan
 
@@ -241,6 +226,7 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 # Deployment
 
 - Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
+- Activate the `deploying-to-cloud` skill whenever deploying to Laravel Cloud, configuring Cloud environments or resources, using the Cloud CLI, or troubleshooting Cloud deployments.
 
 === sail rules ===
 
@@ -260,8 +246,11 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 # Test Enforcement
 
-- Every change must be programmatically tested. Write a new test or update an existing test, then run the affected tests to make sure they pass.
-- Run the minimum number of tests needed to ensure code quality and speed. Use `vendor/bin/sail artisan test --compact` with a specific filename or filter.
+- Add or update tests for behavior and logic changes when a test provides meaningful regression coverage.
+- Pure copy, styling, and layout-only changes do not require new or updated tests.
+- When test coverage applies, run the affected tests and ensure they pass.
+- Test the changed behavior and its important failure modes, but do not add tests beyond them.
+- Read the `testing-best-practices` skill before writing tests.
 
 === laravel/core rules ===
 
@@ -289,10 +278,6 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Faker: Use methods such as `$this->faker->word()` or `fake()->randomDigit()`. Follow existing conventions whether to use `$this->faker` or `fake()`.
 - When creating tests, make use of `vendor/bin/sail artisan make:test [options] {name}` to create a feature test, and pass `--unit` to create a unit test. Most tests should be feature tests.
 
-## Vite Error
-
-- If you receive an "Illuminate\Foundation\ViteException: Unable to locate file in Vite manifest" error, you can run `vendor/bin/sail npm run build` or ask the user to run `vendor/bin/sail npm run dev` or `vendor/bin/sail composer run dev`.
-
 === pint/core rules ===
 
 # Laravel Pint Code Formatter
@@ -304,21 +289,17 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 
 # PHPUnit
 
-- This application uses PHPUnit for testing. All tests must be written as PHPUnit classes. Use `vendor/bin/sail artisan make:test --phpunit {name}` to create a new test.
-- If you see a test using "Pest", convert it to PHPUnit.
-- Every time a test has been updated, run that singular test.
-- When the tests relating to your feature are passing, ask the user if they would like to also run the entire test suite to make sure everything is still passing.
-- Tests should cover all happy paths, failure paths, and edge cases.
-- You must not remove any tests or test files from the tests directory without approval. These are not temporary or helper files; these are core to the application.
+- This project uses PHPUnit. Create tests with `vendor/bin/sail artisan make:test --phpunit {name}`.
+- Do not include the test suite directory in `{name}`. Use `SomeFeatureTest`, not `Feature/SomeFeatureTest`.
+- Read the `testing-best-practices` skill for guidance on coverage, naming, structure, dependency isolation, and review.
 
 ## Running Tests
 
-- Run the minimal number of tests, using an appropriate filter, before finalizing.
-- To run all tests: `vendor/bin/sail artisan test --compact`.
-- To run all tests in a file: `vendor/bin/sail artisan test --compact tests/Feature/ExampleTest.php`.
-- To filter on a particular test name: `vendor/bin/sail artisan test --compact --filter=testName` (recommended after making a change to a related file).
+- Run the narrowest set of tests that covers the change. Pass a file path or `--filter=testName` to `vendor/bin/sail artisan test --compact`.
+- Rerun a test after each change to it.
+- Run `vendor/bin/sail bin phpunit` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
 
-=== maatwebsite/excel rules ===
+=== maatwebsite/excel/core rules ===
 
 # Laravel Excel
 
@@ -329,157 +310,12 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - For large datasets, prefer `FromQuery` with queued exports or `WithChunkReading` and `WithBatchInserts` for imports.
 - Test spreadsheet behavior with `Excel::fake()` when asserting dispatch/download/store/import intent, and inspect generated files only when cell contents, formatting, sheets, or writer behavior must be proven.
 
-=== spatie/laravel-activitylog rules ===
+=== spatie/laravel-activitylog/core rules ===
 
-# spatie/laravel-activitylog
+## Activitylog
 
-Activity logging package for Laravel. Logs model events and manual activities to a database table.
-
-## Key Concepts
-
-- **Activity**: An Eloquent model (`Spatie\Activitylog\Models\Activity`) storing log entries with subject, causer, event, attribute_changes, and properties.
-- **Subject**: The model being acted upon (polymorphic `subject_type`/`subject_id`).
-- **Causer**: The model that caused the action, typically the authenticated user (polymorphic `causer_type`/`causer_id`).
-- **LogOptions**: Fluent configuration object returned by `getActivitylogOptions()` on models using the `LogsActivity` trait.
-- **ActivityEvent**: Enum with cases `Created`, `Updated`, `Deleted`, `Restored`.
-- **`attribute_changes`** column: stores `{"attributes": {...}, "old": {...}}` for tracked model changes.
-- **`properties`** column: stores custom user data set via `withProperties()`.
-
-## Traits
-
-### `LogsActivity`
-
-Add to models to automatically log create/update/delete events. Optionally implement `getActivitylogOptions()` to configure which attributes to track (defaults to logging events without attribute changes).
-
-```php
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
-
-class Article extends Model
-{
-    use LogsActivity;
-
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logFillable()
-            ->logOnlyDirty()
-            ->dontLogEmptyChanges();
-    }
-}
-```
-
-### `CausesActivity`
-
-Add to user/causer models. Provides `activitiesAsCauser()` relationship.
-
-### `HasActivity`
-
-Combines `LogsActivity` and `CausesActivity`. Provides `activities()`, `activitiesAsSubject()`, and `activitiesAsCauser()`.
-
-## Manual Logging
-
-```php
-activity()
-    ->performedOn($article)
-    ->causedBy($user)
-    ->event(ActivityEvent::Updated)
-    ->withProperties(['key' => 'value'])
-    ->log('Article was updated');
-```
-
-## LogOptions Methods
-
-| Method | Description |
-|--------|-------------|
-| `logFillable()` | Log all fillable attributes |
-| `logAll()` | Log all attributes |
-| `logOnly(array)` | Log specific attributes |
-| `logExcept(array)` | Exclude attributes |
-| `logOnlyDirty()` | Only log changed attributes |
-| `dontLogEmptyChanges()` | Skip logging when no tracked attributes changed |
-| `dontLogIfAttributesChangedOnly(array)` | Ignore updates that only change these attributes |
-| `useLogName(string)` | Set custom log name |
-| `setDescriptionForEvent(Closure)` | Custom description per event |
-| `useAttributeRawValues(array)` | Store raw (uncast) values |
-
-## Querying Activities
-
-```php
-use Spatie\Activitylog\Models\Activity;
-use Spatie\Activitylog\Enums\ActivityEvent;
-
-Activity::forEvent(ActivityEvent::Created)->get();
-Activity::causedBy($user)->get();
-Activity::forSubject($article)->get();
-Activity::inLog('orders')->get();
-```
-
-## Setting the causer
-
-Override the causer for a block of code:
-
-```php
-use Spatie\Activitylog\Facades\Activity;
-
-Activity::defaultCauser($admin, function () {
-    // all activities here are caused by $admin
-});
-
-// or set globally for the rest of the request
-Activity::defaultCauser($admin);
-```
-
-## Disabling Logging
-
-```php
-activity()->withoutLogging(function () {
-    // no activities logged here
-});
-```
-
-## Accessing Changes and Properties
-
-```php
-$activity = Activity::latest()->first();
-
-// Tracked model changes (set automatically by LogsActivity)
-$activity->attribute_changes; // Collection: {"attributes": {...}, "old": {...}}
-
-// Custom user data (set via withProperties)
-$activity->properties; // Collection
-$activity->getProperty('key'); // single value
-```
-
-## Custom Activity Model
-
-Set `activity_model` in `config/activitylog.php` to a class that extends `Model` and implements `Spatie\Activitylog\Contracts\Activity`. Use a custom model for custom table names or database connections.
-
-## Customizing Actions
-
-The package uses action classes (`LogActivityAction`, `CleanActivityLogAction`) that can be extended and swapped via config:
-
-```php
-// config/activitylog.php
-'actions' => [
-    'log_activity' => \App\Actions\CustomLogActivityAction::class,
-    'clean_log' => \App\Actions\CustomCleanAction::class,
-],
-```
-
-Custom action classes must extend the originals. Override protected methods (`save()`, `beforeActivityLogged()`, `resolveDescription()`, etc.) to customize behavior.
-
-## Configuration
-
-Key config options in `config/activitylog.php`:
-- `enabled`: Master on/off switch (env: `ACTIVITYLOG_ENABLED`)
-- `clean_after_days`: Days to keep records for `activitylog:clean` command
-- `default_log_name`: Default log name (string)
-- `default_auth_driver`: Auth driver for causer resolution
-- `include_soft_deleted_subjects`: Include soft-deleted subjects
-- `activity_model`: Custom Activity model class
-- `default_except_attributes`: Globally excluded attributes
-- `actions.log_activity`: Action class for logging activities
-- `actions.clean_log`: Action class for cleaning old activities
+- `spatie/laravel-activitylog` logs model events and manual activities to a database table, with subjects, causers, tracked attribute changes, and custom properties.
+- Always activate the `activitylog-development` skill when working with activity logging or any code that uses the `LogsActivity`, `CausesActivity`, or `HasActivity` traits, `LogOptions`, the `Activity` model, or the `activity()` helper.
+- If the skill is unavailable, read `vendor/spatie/laravel-activitylog/resources/boost/skills/activitylog-development/SKILL.md` before making changes.
 
 </laravel-boost-guidelines>

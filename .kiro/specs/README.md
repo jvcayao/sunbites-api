@@ -45,7 +45,7 @@ Each spec depends on the previous. Do not begin a spec until the prior one's req
 
 | Service | Local | Staging | Production |
 |---|---|---|---|
-| Laravel API | `api.sunbites.test` (Sail/Docker, port 80) | `api-staging.sunbites.com.ph` | `api.sunbites.com.ph` |
+| Laravel API | `api.sunbites.test` (Sail/Docker, port 80) | removed 2026-11-07 | `api.sunbites.com.ph` |
 | POS & Admin App | `localhost:3000` | — | `pos.sunbites.com.ph` |
 | Parent Portal | `localhost:3001` | — | `portal.sunbites.com.ph` |
 

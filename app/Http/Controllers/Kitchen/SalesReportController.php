@@ -5,53 +5,30 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\OrderStatus;
 use App\Exports\SalesReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportSalesReportRequest;
+use App\Http\Requests\Kitchen\ListSalesReportRequest;
 use App\Models\Order;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SalesReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListSalesReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
-            'payment_method' => ['nullable', 'string'],
-            'is_walk_in' => ['nullable', 'boolean'],
-            'cashier_id' => ['nullable', 'integer', 'exists:users,id'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $dateFrom = $validated['date_from'] ?? now()->toDateString();
         $dateTo = $validated['date_to'] ?? now()->toDateString();
         $perPage = $validated['per_page'] ?? 25;
 
-        $query = Order::withoutBranch()
+        $query = $this->filteredOrders($branchId, $validated, $dateFrom, $dateTo)
             ->with(['items', 'student', 'cashier'])
-            ->where('branch_id', $branchId)
-            ->where('status', OrderStatus::Completed)
-            ->whereBetween('created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
-            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
-            ->when(isset($validated['is_walk_in']), fn ($q) => $validated['is_walk_in']
-                ? $q->whereNull('student_id')
-                : $q->whereNotNull('student_id'),
-            )
-            ->when(isset($validated['cashier_id']), fn ($q) => $q->where('cashier_id', $validated['cashier_id']))
             ->latest();
 
-        $summary = Order::withoutBranch()
-            ->where('branch_id', $branchId)
-            ->where('status', OrderStatus::Completed)
-            ->whereBetween('created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
-            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
-            ->when(isset($validated['is_walk_in']), fn ($q) => $validated['is_walk_in']
-                ? $q->whereNull('student_id')
-                : $q->whereNotNull('student_id'),
-            )
-            ->when(isset($validated['cashier_id']), fn ($q) => $q->where('cashier_id', $validated['cashier_id']))
+        $summary = $this->filteredOrders($branchId, $validated, $dateFrom, $dateTo)
             ->selectRaw('
                 SUM(total) as total_revenue,
                 COUNT(*) as total_orders,
@@ -66,7 +43,25 @@ class SalesReportController extends Controller
         $orders = $query->paginate($perPage);
 
         return response()->json([
-            'data' => $orders->items(),
+            'data' => collect($orders->items())->map(fn (Order $o) => [
+                ...$o->attributesToArray(),
+                'items' => $o->items->toArray(),
+                'student' => $o->student ? [
+                    'id' => $o->student->id,
+                    'first_name' => $o->student->first_name,
+                    'last_name' => $o->student->last_name,
+                    'full_name' => $o->student->full_name,
+                    'student_number' => $o->student->student_number,
+                    'grade_level' => $o->student->grade_level,
+                    'section' => $o->student->section,
+                ] : null,
+                'cashier' => $o->cashier ? [
+                    'id' => $o->cashier->id,
+                    'first_name' => $o->cashier->first_name,
+                    'last_name' => $o->cashier->last_name,
+                    'full_name' => $o->cashier->full_name,
+                ] : null,
+            ]),
             'meta' => $this->paginationMeta($orders),
             'summary' => [
                 'total_revenue' => $totalRevenue,
@@ -78,31 +73,16 @@ class SalesReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportSalesReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate([
-            'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
-            'payment_method' => ['nullable', 'string'],
-            'is_walk_in' => ['nullable', 'boolean'],
-            'cashier_id' => ['nullable', 'integer', 'exists:users,id'],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
         $dateFrom = $validated['date_from'] ?? now()->toDateString();
         $dateTo = $validated['date_to'] ?? now()->toDateString();
 
-        $orders = Order::withoutBranch()
+        $orders = $this->filteredOrders($branch->id, $validated, $dateFrom, $dateTo)
             ->with(['items', 'student', 'cashier'])
-            ->where('branch_id', $branch->id)
-            ->where('status', OrderStatus::Completed)
-            ->whereBetween('created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
-            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
-            ->when(isset($validated['is_walk_in']), fn ($q) => $validated['is_walk_in']
-                ? $q->whereNull('student_id')
-                : $q->whereNotNull('student_id'),
-            )
-            ->when(isset($validated['cashier_id']), fn ($q) => $q->where('cashier_id', $validated['cashier_id']))
             ->latest()
             ->get();
 
@@ -112,5 +92,26 @@ class SalesReportController extends Controller
             new SalesReportExport($orders, $branch->name, $dateFrom, $dateTo),
             $filename,
         );
+    }
+
+    /**
+     * Completed orders of the branch in the date range, narrowed by the optional payment method,
+     * walk-in and cashier filters. Callers add eager loads, ordering and aggregates.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return Builder<Order>
+     */
+    private function filteredOrders(int $branchId, array $validated, string $dateFrom, string $dateTo): Builder
+    {
+        return Order::withoutBranch()
+            ->where('branch_id', $branchId)
+            ->where('status', OrderStatus::Completed)
+            ->whereBetween('created_at', ["{$dateFrom} 00:00:00", "{$dateTo} 23:59:59"])
+            ->when(isset($validated['payment_method']), fn ($q) => $q->where('payment_method', $validated['payment_method']))
+            ->when(isset($validated['is_walk_in']), fn ($q) => $validated['is_walk_in']
+                ? $q->whereNull('student_id')
+                : $q->whereNotNull('student_id'),
+            )
+            ->when(isset($validated['cashier_id']), fn ($q) => $q->where('cashier_id', $validated['cashier_id']));
     }
 }

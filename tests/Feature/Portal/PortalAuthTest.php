@@ -175,4 +175,33 @@ class PortalAuthTest extends TestCase
             ->getJson('/api/v1/portal/dashboard')
             ->assertForbidden();
     }
+
+    // Spec 16 B-08: a wrong password never reveals that an account is disabled.
+
+    public function test_disabled_parent_with_a_wrong_password_gets_invalid_credentials(): void
+    {
+        $disabled = ParentUser::factory()->disabled()->create();
+
+        $response = $this->postJson('/api/v1/portal/auth/login', ['email' => $disabled->email, 'password' => 'WrongPassword1']);
+
+        $response->assertUnprocessable()->assertExactJson(['message' => 'Invalid credentials.']);
+    }
+
+    public function test_disabled_parent_with_the_right_password_gets_account_disabled(): void
+    {
+        $disabled = ParentUser::factory()->disabled()->create();
+
+        $response = $this->postJson('/api/v1/portal/auth/login', ['email' => $disabled->email, 'password' => 'Password1']);
+
+        $response->assertUnauthorized()->assertExactJson(['message' => 'Account access has been disabled.', 'error' => 'account_disabled']);
+    }
+
+    public function test_unactivated_parent_with_a_wrong_password_still_gets_account_not_activated(): void
+    {
+        $unactivated = ParentUser::factory()->unactivated()->create(['password' => null]);
+
+        $response = $this->postJson('/api/v1/portal/auth/login', ['email' => $unactivated->email, 'password' => 'WrongPassword1']);
+
+        $response->assertUnauthorized()->assertExactJson(['message' => 'Account not yet activated.', 'error' => 'account_not_activated']);
+    }
 }

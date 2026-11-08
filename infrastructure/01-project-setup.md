@@ -43,8 +43,8 @@ cloud application:create --json -n
 ```
 
 When prompted:
-- **Name:** `sunbites-api`
-- **Region:** Choose the region closest to your users (e.g. `us-east-1` or `ap-southeast-1` for Philippines)
+- **Name:** `Sunbites API Prod`
+- **Region:** Choose the region closest to your users (`ap-southeast-1` for Philippines)
 
 Save the application ID from the JSON output — you will need it for environment creation.
 
@@ -81,11 +81,10 @@ Before creating environments, check what Flex sizes are available in your region
 cloud instance:sizes --json -n
 ```
 
-**Recommended sizes for Sunbites:**
+**Recommended size for Sunbites:**
 
 | Environment | Compute | Reason |
 |-------------|---------|--------|
-| Staging | `1 vCPU / 512 MB` | Minimal traffic, testing only |
 | Production | `1 vCPU / 1 GB` | Handles real parent + POS traffic |
 
 ---
@@ -93,10 +92,10 @@ cloud instance:sizes --json -n
 ## Phase 1 Checklist
 
 - [ ] Laravel Cloud CLI installed and authenticated
-- [ ] App `sunbites-api` created in Laravel Cloud
+- [ ] App `Sunbites API Prod` created in Laravel Cloud
 - [ ] `.cloud/config.json` committed to the repository
 - [ ] Available instance sizes reviewed
 
 ---
 
-**Next:** [02-environments.md](02-environments.md) — Create staging and production environments
+**Next:** [02-environments.md](02-environments.md) — Create the production environment

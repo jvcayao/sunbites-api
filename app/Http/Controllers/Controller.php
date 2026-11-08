@@ -3,17 +3,11 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 abstract class Controller
 {
-    /**
-     * Strip markup from free-text input. Call this *before* validation so that
-     * length rules are enforced against the value that will actually be stored.
-     */
-    protected function sanitizeText(mixed $value): mixed
-    {
-        return is_string($value) ? trim(strip_tags($value)) : $value;
-    }
+    use AuthorizesRequests;
 
     /**
      * `from`/`to` are the 1-based index of the first and last row on the current

@@ -5,25 +5,22 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\InventoryLogType;
 use App\Exports\InventoryReportExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportInventoryReportRequest;
+use App\Http\Requests\Kitchen\ShowInventoryReportRequest;
+use App\Http\Resources\InventoryLogResource;
 use App\Models\InventoryItem;
 use App\Models\InventoryLog;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rules\Enum;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class InventoryReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ShowInventoryReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date'],
-            'type' => ['nullable', new Enum(InventoryLogType::class)],
-            'item_id' => ['nullable', 'integer', 'exists:inventory_items,id'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
 
@@ -36,21 +33,7 @@ class InventoryReportController extends Controller
         $belowThreshold = $items->filter(fn ($item) => $item->quantity > 0 && $item->quantity <= $item->restock_threshold)->count();
         $overStock = $items->filter(fn ($item) => $item->overstock_threshold !== null && (float) $item->quantity > (float) $item->overstock_threshold)->count();
 
-        $logQuery = InventoryLog::query()
-            ->join('inventory_items', 'inventory_logs.inventory_item_id', '=', 'inventory_items.id')
-            ->where('inventory_items.branch_id', $branchId)
-            ->where('inventory_items.is_archived', false)
-            ->with('adjustedBy:id,first_name,last_name')
-            ->select('inventory_logs.*')
-            ->latest('inventory_logs.created_at');
-
-        if (! empty($validated['from'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '>=', $validated['from']);
-        }
-
-        if (! empty($validated['to'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '<=', $validated['to']);
-        }
+        $logQuery = $this->logsInDateRange($branchId, $validated);
 
         if (! empty($validated['type'])) {
             $logQuery->where('inventory_logs.type', $validated['type']);
@@ -83,18 +66,7 @@ class InventoryReportController extends Controller
                 'updated_at' => $item->updated_at?->toDateTimeString(),
             ]),
             'logs' => [
-                'data' => collect($paginatedLogs->items())->map(fn (InventoryLog $log) => [
-                    'id' => $log->id,
-                    'item_name_snapshot' => $log->item_name_snapshot,
-                    'type' => $log->type->value,
-                    'type_label' => $log->type->label(),
-                    'quantity_change' => $log->quantity_change,
-                    'stock_after' => $log->stock_after,
-                    'reason' => $log->reason,
-                    'adjusted_by' => $log->adjustedBy?->full_name,
-                    'order_id' => $log->order_id,
-                    'created_at' => $log->created_at,
-                ]),
+                'data' => InventoryLogResource::collection($paginatedLogs->items()),
                 'meta' => [
                     'current_page' => $paginatedLogs->currentPage(),
                     'last_page' => $paginatedLogs->lastPage(),
@@ -106,12 +78,9 @@ class InventoryReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportInventoryReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date'],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
         $branchId = $branch->id;
@@ -121,29 +90,36 @@ class InventoryReportController extends Controller
             ->orderBy('name')
             ->get();
 
-        $logQuery = InventoryLog::query()
-            ->join('inventory_items', 'inventory_logs.inventory_item_id', '=', 'inventory_items.id')
-            ->where('inventory_items.branch_id', $branchId)
-            ->where('inventory_items.is_archived', false)
-            ->with('adjustedBy:id,first_name,last_name')
-            ->select('inventory_logs.*')
-            ->latest('inventory_logs.created_at');
-
-        if (! empty($validated['from'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '>=', $validated['from']);
-        }
-
-        if (! empty($validated['to'])) {
-            $logQuery->whereDate('inventory_logs.created_at', '<=', $validated['to']);
-        }
-
-        $logs = $logQuery->get();
+        $logs = $this->logsInDateRange($branchId, $validated)->get();
 
         $from = $validated['from'] ?? now()->toDateString();
         $to = $validated['to'] ?? now()->toDateString();
         $filename = "inventory-report-{$branch->slug}-{$from}-{$to}.xlsx";
 
         return Excel::download(new InventoryReportExport($items, $logs), $filename);
+    }
+
+    /**
+     * Logs of the branch's active items, newest first, narrowed by the optional `from`/`to` dates.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return Builder<InventoryLog>
+     */
+    private function logsInDateRange(int $branchId, array $validated): Builder
+    {
+        $query = InventoryLog::forActiveItemsInBranch($branchId)
+            ->with('adjustedBy:id,first_name,last_name')
+            ->latest('inventory_logs.created_at');
+
+        if (! empty($validated['from'])) {
+            $query->whereDate('inventory_logs.created_at', '>=', $validated['from']);
+        }
+
+        if (! empty($validated['to'])) {
+            $query->whereDate('inventory_logs.created_at', '<=', $validated['to']);
+        }
+
+        return $query;
     }
 
     /**

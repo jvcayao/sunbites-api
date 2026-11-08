@@ -18,31 +18,18 @@ Commit the updated `composer.json` and `composer.lock`.
 
 ---
 
-## 6.2 Create Buckets
-
-Create a separate bucket for each environment.
-
-### Staging Bucket
+## 6.2 Create the Bucket
 
 ```bash
 cloud bucket:create --json -n
 ```
 
 When prompted:
-- **Name:** `sunbites-staging`
-- **Environment:** `staging`
+- **Name:** `sunbites_api_prod_bucket`
+- **Private**
+- **Environment:** `main`
 
-### Production Bucket
-
-```bash
-cloud bucket:create --json -n
-```
-
-When prompted:
-- **Name:** `sunbites-production`
-- **Environment:** `production`
-
-Laravel Cloud automatically injects the following credentials into each environment when a bucket is attached — **do not set these manually**:
+Laravel Cloud automatically injects the following credentials into the environment when the bucket is attached — **do not set these manually**:
 
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
@@ -120,7 +107,7 @@ if ($student->photo_path) {
 Keep uploaded files organized by type under consistent prefixes:
 
 ```
-sunbites-production/
+sunbites_api_prod_bucket/
   students/
     {student_id}/
       photo.jpg          ← profile photo (one per student)
@@ -136,13 +123,13 @@ sunbites-production/
 
 ## 6.6 Local Development
 
-For local development, keep using the `local` disk — no S3 emulation needed. The `FILESYSTEM_DISK` env var controls which disk is active per environment.
+For local development, keep using the `local` disk — no S3 emulation needed. The `FILESYSTEM_DISK` env var controls which disk is active.
 
 ```env
 # .env (local)
 FILESYSTEM_DISK=local
 
-# Laravel Cloud staging / production
+# Laravel Cloud production
 FILESYSTEM_DISK=s3
 ```
 
@@ -151,13 +138,12 @@ FILESYSTEM_DISK=s3
 ## Phase 6 Checklist
 
 - [ ] `league/flysystem-aws-s3-v3` installed and committed
-- [ ] Staging bucket `sunbites-staging` created in Laravel Cloud
-- [ ] Production bucket `sunbites-production` created in Laravel Cloud
-- [ ] `FILESYSTEM_DISK=s3` set in both staging and production environment variables
+- [ ] Bucket `sunbites_api_prod_bucket` created in Laravel Cloud (private)
+- [ ] `FILESYSTEM_DISK=s3` set in the environment variables
 - [ ] Student photo upload uses `Storage::disk('s3')->put()`
 - [ ] Student photo serving uses `Storage::disk('s3')->temporaryUrl()`
 - [ ] Photo deletion on replace/remove implemented
-- [ ] Tested on staging — upload and signed URL retrieval working
+- [ ] Upload and signed URL retrieval tested
 
 ---
 
@@ -165,14 +151,11 @@ FILESYSTEM_DISK=s3
 
 | Resource | Monthly Cost |
 |----------|-------------|
-| Staging compute (1 vCPU / 512 MB) | ~$4–5 |
-| Staging MySQL (1 vCPU / 512 MB) | ~$5.50 |
-| Staging bucket (~1 GB) | ~$0.02 |
 | Production compute (1 vCPU / 1 GB) | ~$7 |
 | Production MySQL (1 vCPU / 1 GB) | ~$11 |
 | Production bucket (~5 GB) | ~$0.10 |
 | Resend (≤3,000 emails/month) | $0 |
-| **Total** | **~$27–29/month** |
+| **Total** | **~$18.10/month** |
 
 ---
 

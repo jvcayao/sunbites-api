@@ -152,10 +152,11 @@ class ParentManagementTest extends TestCase
     {
         $cashier = User::factory()->create();
         $cashier->assignRole('cashier');
+        $cashier->branches()->attach($this->branch->id, ['assigned_at' => now(), 'assigned_by' => null]);
 
         Sanctum::actingAs($cashier, ['staff']);
 
-        $this->getJson('/api/v1/references/parents')->assertForbidden();
+        $this->withHeaders(['X-Branch-Id' => $this->branch->id])->getJson('/api/v1/references/parents')->assertForbidden();
     }
 
     public function test_parent_list_only_returns_parents_in_active_branch(): void
@@ -199,5 +200,27 @@ class ParentManagementTest extends TestCase
         $response->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonMissing(['email' => 'ghost@example.com']);
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $parentNamed = function (string $lastName, string $email): ParentUser {
+            $parent = ParentUser::factory()->create(['first_name' => 'Rosa', 'last_name' => $lastName, 'email' => $email]);
+            $parent->students()->attach(Student::factory()->create(['branch_id' => $this->branch->id])->id, ['linked_at' => now(), 'linked_by' => $this->manager->id, 'wallet_alert_threshold' => 0]);
+
+            return $parent;
+        };
+        $fiveHundred = $parentNamed('Cruz500', 'p1@example.com');
+        $parentNamed('Cruzaxb', 'p2@example.com');
+        $underscore = $parentNamed('Cruza_b', 'p3@example.com');
+        $idsFor = fn (string $term): array => collect($this->asManager()->getJson('/api/v1/references/parents?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
     }
 }

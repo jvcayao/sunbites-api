@@ -300,4 +300,54 @@ class BranchMonthlyAmountTest extends TestCase
         $asCashier->putJson("/api/v1/branch-monthly-amounts/{$record->id}", [])->assertForbidden();
         $asCashier->deleteJson("/api/v1/branch-monthly-amounts/{$record->id}")->assertForbidden();
     }
+
+    public function test_updating_another_branchs_month_config_returns_404_and_leaves_it_unchanged(): void
+    {
+        $record = $this->monthConfigInAnotherBranch();
+
+        $response = $this->asUserWithRole('supervisor')->putJson("/api/v1/branch-monthly-amounts/{$record->id}", [
+            'days' => 22,
+        ]);
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertDatabaseHas('branch_monthly_amounts', ['id' => $record->id, 'days' => 18]);
+    }
+
+    public function test_updating_another_branchs_month_config_with_an_invalid_body_returns_404_not_422(): void
+    {
+        $record = $this->monthConfigInAnotherBranch();
+
+        $response = $this->asUserWithRole('supervisor')->putJson("/api/v1/branch-monthly-amounts/{$record->id}", [
+            'days' => 'many',
+        ]);
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+    }
+
+    public function test_deleting_another_branchs_month_config_returns_404_and_keeps_it(): void
+    {
+        $record = $this->monthConfigInAnotherBranch();
+
+        $response = $this->asUserWithRole('supervisor')->deleteJson("/api/v1/branch-monthly-amounts/{$record->id}");
+
+        $response->assertNotFound();
+        $this->assertSame(['message' => 'Not found.'], $response->json());
+        $this->assertDatabaseHas('branch_monthly_amounts', ['id' => $record->id]);
+    }
+
+    /**
+     * An 18-day August override that belongs to a branch the acting staff member does not work in.
+     */
+    private function monthConfigInAnotherBranch(): BranchMonthlyAmount
+    {
+        return BranchMonthlyAmount::create([
+            'branch_id' => Branch::factory()->create(['is_active' => true])->id,
+            'school_month' => SchoolMonth::August->value,
+            'year' => 2025,
+            'days' => 18,
+            'amount' => 18 * 135,
+        ]);
+    }
 }

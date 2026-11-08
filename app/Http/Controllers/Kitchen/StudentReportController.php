@@ -5,37 +5,25 @@ namespace App\Http\Controllers\Kitchen;
 use App\Enums\SchoolMonth;
 use App\Exports\StudentsExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ExportStudentReportRequest;
+use App\Http\Requests\Kitchen\ListStudentReportRequest;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class StudentReportController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(ListStudentReportRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'status' => ['nullable', 'string'],
-            'grade' => ['nullable', 'string'],
-            'type' => ['nullable', 'string'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'payment_from' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'payment_to' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $yearStart = $this->schoolYearStart();
         $perPage = $validated['per_page'] ?? 25;
 
-        $applyPayment = filled($validated['payment_status'] ?? null)
-            && ($validated['type'] ?? null) === 'subscription';
-
-        $baseQuery = $this->buildStudentQuery($branchId, $validated, $applyPayment);
+        $baseQuery = $this->buildStudentQuery($branchId, $validated, $this->appliesPaymentFilter($validated));
 
         $query = (clone $baseQuery)
             ->with([
@@ -45,17 +33,15 @@ class StudentReportController extends Controller
             ->orderBy('last_name')
             ->orderBy('first_name');
 
-        $summaryBase = clone $baseQuery;
-
-        $total = (clone $summaryBase)
+        $total = (clone $baseQuery)
             ->when(
                 ! filled($validated['status'] ?? null),
                 fn ($q) => $q->where('enrollment_status', 'enrolled')
             )
             ->count();
 
-        $byGrade = (clone $summaryBase)->selectRaw('grade_level, COUNT(*) as count')->groupBy('grade_level')->pluck('count', 'grade_level');
-        $byStatus = (clone $summaryBase)->selectRaw('enrollment_status, COUNT(*) as count')->groupBy('enrollment_status')->pluck('count', 'enrollment_status');
+        $byGrade = (clone $baseQuery)->selectRaw('grade_level, COUNT(*) as count')->groupBy('grade_level')->pluck('count', 'grade_level');
+        $byStatus = (clone $baseQuery)->selectRaw('enrollment_status, COUNT(*) as count')->groupBy('enrollment_status')->pluck('count', 'enrollment_status');
 
         $paginator = $query->paginate($perPage);
 
@@ -86,24 +72,13 @@ class StudentReportController extends Controller
         ]);
     }
 
-    public function export(Request $request): BinaryFileResponse
+    public function export(ExportStudentReportRequest $request): BinaryFileResponse
     {
-        $validated = $request->validate([
-            'status' => ['nullable', 'string'],
-            'grade' => ['nullable', 'string'],
-            'type' => ['nullable', 'string'],
-            'search' => ['nullable', 'string', 'max:100'],
-            'payment_status' => ['nullable', 'string', 'in:paid,unpaid,voided'],
-            'payment_from' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-            'payment_to' => ['nullable', 'string', Rule::enum(SchoolMonth::class)],
-        ]);
+        $validated = $request->validated();
 
         $branch = app('active_branch');
 
-        $applyPayment = filled($validated['payment_status'] ?? null)
-            && ($validated['type'] ?? null) === 'subscription';
-
-        $students = $this->buildStudentQuery($branch->id, $validated, $applyPayment)
+        $students = $this->buildStudentQuery($branch->id, $validated, $this->appliesPaymentFilter($validated))
             ->with([
                 'contacts' => fn ($q) => $q->where('is_primary', true),
                 'wallet',
@@ -132,6 +107,17 @@ class StudentReportController extends Controller
             ));
     }
 
+    /**
+     * The payment filter only applies to subscription students.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function appliesPaymentFilter(array $validated): bool
+    {
+        return filled($validated['payment_status'] ?? null)
+            && ($validated['type'] ?? null) === 'subscription';
+    }
+
     private function schoolYearStart(): int
     {
         $now = now();
@@ -157,7 +143,7 @@ class StudentReportController extends Controller
         $yearStart = $this->schoolYearStart();
         $monthYearPairs = array_map(fn (string $m) => [
             'month' => $m,
-            'year' => SchoolMonth::from($m)->toMonthNumber() <= 3 ? $yearStart + 1 : $yearStart,
+            'year' => SchoolMonth::from($m)->calendarYearFor($yearStart),
         ], $this->monthsInRange($from, $to));
 
         if ($status === 'paid') {
@@ -180,11 +166,11 @@ class StudentReportController extends Controller
     private function applySearch(Builder $query, string $term): void
     {
         $query->where(function ($q) use ($term) {
-            $q->where('first_name', 'like', "%{$term}%")
-                ->orWhere('last_name', 'like', "%{$term}%")
-                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$term}%"])
-                ->orWhere('student_number', 'like', "%{$term}%")
-                ->orWhere('section', 'like', "%{$term}%");
+            $q->whereContainsLiteral('first_name', $term)
+                ->whereContainsLiteral('last_name', $term, 'or')
+                ->whereContainsLiteral("CONCAT(first_name, ' ', last_name)", $term, 'or')
+                ->whereContainsLiteral('student_number', $term, 'or')
+                ->whereContainsLiteral('section', $term, 'or');
         });
     }
 
@@ -195,7 +181,7 @@ class StudentReportController extends Controller
 
         return array_map(function (string $month) use ($yearStart, $payments) {
             $schoolMonth = SchoolMonth::from($month);
-            $year = $schoolMonth->toMonthNumber() <= 3 ? $yearStart + 1 : $yearStart;
+            $year = $schoolMonth->calendarYearFor($yearStart);
             $payment = $payments->get($month.'-'.$year);
 
             return [

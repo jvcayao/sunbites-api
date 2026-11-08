@@ -4,25 +4,21 @@ namespace App\Http\Controllers\Kitchen;
 
 use App\Enums\SchoolMonth;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Kitchen\ShowAnalyticsRequest;
 use App\Models\Student;
+use App\Models\SystemConfiguration;
 use Carbon\Carbon;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
 class AnalyticsController extends Controller
 {
     private ?bool $isSqliteDriver = null;
 
-    public function index(Request $request): JsonResponse
+    public function index(ShowAnalyticsRequest $request): JsonResponse
     {
-        $validated = $request->validate([
-            'from_month' => ['required', 'string', Rule::enum(SchoolMonth::class)],
-            'from_year' => ['required', 'integer', 'min:2020', 'max:2099'],
-            'to_month' => ['required', 'string', Rule::enum(SchoolMonth::class)],
-            'to_year' => ['required', 'integer', 'min:2020', 'max:2099'],
-        ]);
+        $validated = $request->validated();
 
         $branchId = app('active_branch')->id;
         $start = Carbon::create($validated['from_year'], SchoolMonth::from($validated['from_month'])->toMonthNumber(), 1)->startOfMonth();
@@ -96,23 +92,20 @@ class AnalyticsController extends Controller
         return $periods;
     }
 
-    private function buildPeriodMeta(array $v, array $periods): array
+    private function buildPeriodMeta(array $validated, array $periods): array
     {
         return [
-            'from_month' => $v['from_month'],
-            'from_year' => (int) $v['from_year'],
-            'to_month' => $v['to_month'],
-            'to_year' => (int) $v['to_year'],
+            'from_month' => $validated['from_month'],
+            'from_year' => (int) $validated['from_year'],
+            'to_month' => $validated['to_month'],
+            'to_year' => (int) $validated['to_year'],
             'months' => array_column($periods, 'label'),
         ];
     }
 
     private function buildSales(int $branchId, Carbon $start, Carbon $end, array $periods): array
     {
-        $kpis = DB::table('orders')
-            ->where('branch_id', $branchId)
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
+        $kpis = $this->completedOrders($branchId, $start, $end)
             ->selectRaw('
                 COALESCE(SUM(total), 0)                AS total_revenue,
                 COUNT(*)                               AS total_orders,
@@ -128,10 +121,7 @@ class AnalyticsController extends Controller
 
         $ym = $this->yearMonthExpr('created_at');
 
-        $trendRaw = DB::table('orders')
-            ->where('branch_id', $branchId)
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
+        $trendRaw = $this->completedOrders($branchId, $start, $end)
             ->selectRaw("{$ym} AS month_key, SUM(total) AS revenue, COUNT(*) AS cnt")
             ->groupBy('month_key')
             ->get()
@@ -143,10 +133,7 @@ class AnalyticsController extends Controller
             'orders' => (int) ($trendRaw->get($p['key'])?->cnt ?? 0),
         ], $periods);
 
-        $methods = DB::table('orders')
-            ->where('branch_id', $branchId)
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
+        $methods = $this->completedOrders($branchId, $start, $end)
             ->selectRaw('payment_method AS method, COUNT(*) AS cnt, SUM(total) AS amount')
             ->groupBy('payment_method')
             ->get()
@@ -169,10 +156,7 @@ class AnalyticsController extends Controller
 
         $hr = $this->hourExpr('created_at');
 
-        $hourlyRaw = DB::table('orders')
-            ->where('branch_id', $branchId)
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
+        $hourlyRaw = $this->completedOrders($branchId, $start, $end)
             ->whereRaw("{$hr} BETWEEN 6 AND 12")
             ->selectRaw("{$hr} AS hr, COUNT(*) AS cnt")
             ->groupBy('hr')
@@ -199,6 +183,14 @@ class AnalyticsController extends Controller
             'top_items' => $topItems,
             'peak_hours' => $peakHours,
         ];
+    }
+
+    private function completedOrders(int $branchId, Carbon $start, Carbon $end): Builder
+    {
+        return DB::table('orders')
+            ->where('branch_id', $branchId)
+            ->where('status', 'completed')
+            ->whereBetween('created_at', [$start, $end]);
     }
 
     private function buildStudents(int $branchId, Carbon $start, Carbon $end, array $periods, mixed $studentIds): array
@@ -375,11 +367,13 @@ class AnalyticsController extends Controller
             ->whereIn('holder_id', $studentIds)
             ->pluck('id');
 
-        $kpiRaw = DB::table('transactions')
+        $transactions = DB::table('transactions')
             ->whereIn('wallet_id', $walletIds)
             ->where('confirmed', 1)
             ->whereNull('deleted_at')
-            ->whereBetween('created_at', [$start, $end])
+            ->whereBetween('created_at', [$start, $end]);
+
+        $kpiRaw = (clone $transactions)
             ->selectRaw("
                 SUM(CASE WHEN type = 'deposit'  THEN ABS(amount) ELSE 0 END) / 100.0 AS total_credits,
                 SUM(CASE WHEN type = 'withdraw' THEN ABS(amount) ELSE 0 END) / 100.0 AS total_debits
@@ -398,11 +392,7 @@ class AnalyticsController extends Controller
 
         $ym = $this->yearMonthExpr('created_at');
 
-        $trendRaw = DB::table('transactions')
-            ->whereIn('wallet_id', $walletIds)
-            ->where('confirmed', 1)
-            ->whereNull('deleted_at')
-            ->whereBetween('created_at', [$start, $end])
+        $trendRaw = (clone $transactions)
             ->selectRaw("
                 {$ym} AS month_key,
                 SUM(CASE WHEN type = 'deposit'  THEN ABS(amount) ELSE 0 END) / 100.0 AS credits,
@@ -439,7 +429,7 @@ class AnalyticsController extends Controller
         $studentsOnCredit = (int) ($aggregates->cnt ?? 0);
         $totalCreditBalance = round((float) ($aggregates->total ?? 0), 2);
         $avgCredit = $studentsOnCredit > 0 ? round($totalCreditBalance / $studentsOnCredit, 2) : 0.0;
-        $creditLimit = (float) config('sunbites.credit_limit', 300);
+        $creditLimit = (float) SystemConfiguration::getValue('credit_limit', config('sunbites.credit_limit', 300));
         $nearLimitCount = (clone $base)->where('credit_balance', '>=', $creditLimit - 50)->count();
 
         $distribution = [

@@ -166,6 +166,17 @@ class StudentReportTest extends TestCase
         $this->assertStringNotContainsString('tin_number', $content);
     }
 
+    /**
+     * The export has no per_page rule, so a value over the list's max:100 is still accepted (H8).
+     */
+    public function test_export_ignores_a_per_page_above_the_list_limit(): void
+    {
+        $response = $this->asManager()->getJson('/api/v1/reports/students/export?per_page=500');
+
+        $response->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    }
+
     public function test_search_by_first_name_returns_matching_students(): void
     {
         Student::factory()->create([
@@ -614,5 +625,21 @@ class StudentReportTest extends TestCase
         foreach ($history as $entry) {
             $this->assertSame('no_record', $entry['status']);
         }
+    }
+
+    /**
+     * `%` and `_` in a search are literal characters, not wildcards (Spec 16 B-10).
+     */
+    public function test_search_matches_percent_and_underscore_literally(): void
+    {
+        $fiveHundred = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Ana500', 'last_name' => 'Reyes', 'student_number' => 'N-0001', 'section' => 'Rizal']);
+        Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaaxb', 'last_name' => 'Reyes', 'student_number' => 'N-0002', 'section' => 'Rizal']);
+        $underscore = Student::factory()->create(['branch_id' => $this->branch->id, 'first_name' => 'Anaa_b', 'last_name' => 'Reyes', 'student_number' => 'N-0003', 'section' => 'Rizal']);
+        $idsFor = fn (string $term): array => collect($this->asAdmin()->getJson('/api/v1/reports/students?'.http_build_query(['search' => $term]))->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame(
+            ['50%' => [], 'a_b' => [$underscore->id], '500' => [$fiveHundred->id]],
+            ['50%' => $idsFor('50%'), 'a_b' => $idsFor('a_b'), '500' => $idsFor('500')],
+        );
     }
 }

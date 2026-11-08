@@ -4,22 +4,22 @@ namespace App\Models;
 
 use App\Enums\MenuCategory;
 use Database\Factories\BranchSubscriptionConfigFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+#[Fillable([
+    'branch_id',
+    'meal_daily_limit',
+    'snack_daily_limit',
+    'drink_daily_limit',
+    'extra_daily_limit',
+])]
 class BranchSubscriptionConfig extends Model
 {
     /** @use HasFactory<BranchSubscriptionConfigFactory> */
     use HasFactory;
-
-    protected $fillable = [
-        'branch_id',
-        'meal_daily_limit',
-        'snack_daily_limit',
-        'drink_daily_limit',
-        'extra_daily_limit',
-    ];
 
     protected function casts(): array
     {
@@ -31,6 +31,7 @@ class BranchSubscriptionConfig extends Model
         ];
     }
 
+    /** @return BelongsTo<Branch, $this> */
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
