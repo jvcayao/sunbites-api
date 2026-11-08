@@ -25,7 +25,7 @@ Next 16.2.6 had five critical advisories, including unauthenticated remote code 
 **What the audit found (verified 2026-10-31; details in Appendix A).**
 - **The frontends don't fully match the backend.**
   - Spec 16's contract freeze compared every API response with the frontend types. Three mismatches are visible bugs today: the empty inventory snapshot and ignored history filters (F-1), and wallet amounts without separators (F-2).
-  - About 25 more fields are typed wrongly but have no visible effect yet (`contract-gaps.md` §2.2).
+  - 78 response fields differ from what the API sends, measured by the type checker (design Appendix B.1). Most have no visible effect.
   - The test mocks use shapes the API never sends, which is how F-1 and F-2 went unnoticed.
 - **No safety net for much of the code.** Coverage reports 82.9% (POS) and 85.0% (portal), but only for files some test loads. **73 POS files (about 11,810 lines) and 23 portal files (about 3,386 lines) are never loaded by any test**, including the POS checkout parts, the dashboard, 8 of 10 reports, pre-registrations and reminders, and the portal's public pre-registration form.
 - **Oversized files.** The POS student detail page is 3,276 lines with 56 `useState` calls and 15 inline components. 21 files are over 500 lines (18 POS, 3 portal).
@@ -42,7 +42,7 @@ Next 16.2.6 had five critical advisories, including unauthenticated remote code 
 A Track A change and a Track B change are never combined in one commit or one PR.
 
 **Depends on:**
-- **Spec 16** (backend code quality, branch `bump-laravel-13-latest`). Its local contract fixtures are the backend truth this spec checks against, and they include every Spec 16 Track B response change. Spec 16 finished on 2026-10-31 at `8a708ff`; on 2026-11-07 that branch was not yet on GitHub, so `staging` still runs the pre-Spec 16 API (design §4.9). The fixture digest recorded in each commit (design §4.3.6) catches any later backend change. In Track A, Spec 16 guarantees that responses don't change.
+- **Spec 16** (backend code quality, branch `bump-laravel-13-latest`). Its local contract fixtures are the backend truth this spec checks against, and they include every Spec 16 Track B response change. On 2026-11-07 that branch was not yet on GitHub, so production still runs the pre-Spec 16 API (design §4.9). The backend keeps moving, including Laravel upgrades, so this spec isn't pinned to a commit: Requirement 2.12 to 2.15 keep the frontends aligned with the latest backend. In Track A, Spec 16 guarantees that responses don't change.
 - **No backend file changes in this spec.** A mismatch only the backend can fix is reported as a proposed backend item (Req 2.11).
 
 **Verification basis.** Every number above and in Appendix A was measured on 2026-10-31 by:
@@ -55,16 +55,18 @@ A Track A change and a Track B change are never combined in one commit or one PR
 
 The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried into this spec's design and re-verified against the current fixtures.
 
+**Audit of this spec (2026-11-07).** The riskiest parts of the design were built and run on throwaway clones of both apps (design §1.4). That corrected several mechanisms, filled in the audit tables, and found new visible bugs (FA-27 to FA-34), including one crash live on production (FA-33).
+
 ---
 
 ## Decisions *(Q1–Q8 approved 2026-10-31; Q3 and Q7 amended the same day when the former Spec 17 was merged in)*
 
 | # | Decision | Approved |
 |---|---|---|
-| Q1 | React Compiler | **On** (`reactCompiler: true`), with the new devDependency `babel-plugin-react-compiler` approved. The lint rules it relies on already pass. It is enabled in its own commit per app, last in Track A, so it can be reverted alone (Req 10). |
+| Q1 | React Compiler | **On** (config in design D-6), with the new devDependency `babel-plugin-react-compiler` approved. The lint rules it relies on already pass. It is enabled in its own commit per app, last in Track A, so it can be reverted alone (Req 10). |
 | Q2 | Size limit for source files after the split | **400 lines** for any non-test file outside `components/ui/`. `page.tsx` stays a thin shell (Req 5, 6). |
 | Q3 *(amended)* | Delivery shape | Four PRs per app, in this order:<ol><li>**Upgrade** (Req 1), from the existing `bump-latest-upgrade-*` branches.</li><li>**Track B1, contract fixes**: F-1 to F-3 (Req 3), plus any F-item from Req 2 that doesn't depend on Track A.</li><li>**Track A**: one commit per task.</li><li>**Track B2**: FB-01 to FB-04 (Req 14), plus any F-item found during Track A.</li></ol>The user pushes and merges. *(Amended: the 2026-10-31 approval had one Track B PR per app. Splitting it lets the contract fixes ship early, before Track A splits the files they touch.)* |
-| Q4 | `undici` 5 advisories (Jest polyfill only; dev-only, never shipped) | **Fixed in this spec.** Either upgrade it in the test setup or drop it, if the test environment can supply `fetch` itself. The design decides which after a spike (Req 11.4). |
+| Q4 | `undici` 5 advisories (Jest polyfill only; dev-only, never shipped) | **Fixed in this spec** by upgrading to 6.29.1. Verified on Node 26 and Node 20 (Req 11.4, design §13). |
 | Q5 | Process | Same as Spec 16: a spec-owner session reviews an implementer session one task at a time, with a `HANDOFF.md`. |
 | Q6 | How to prove the markup is unchanged | Local, gitignored **render fixtures**: the HTML of each recorded state, captured before the change and compared after. This mirrors Spec 16's local contract fixtures, and it respects `testing.md`'s ban on committed snapshot tests (Req 4.4). |
 | Q7 *(amended)* | Former Spec 17 | **Merged into this spec** (user, 2026-10-31). F-1 to F-3 ship in Track B1, right after the upgrade and before Track A (Q3). |
@@ -87,7 +89,7 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
    - `FeedbackPage › shows a success toast and closes the sheet after replying`. It fails on every run since `fa7e677`; the toast text is found twice.
    - The intermittent `SettleCreditDialog` failures, which already happen on `main`.
 
-   The fix is test-only. IF the root cause turns out to be visible to users, THEN it SHALL become a Track B item instead.
+   The fix is test-only. Both causes were proven on 2026-11-07, and neither is visible to users (design H12, H21). IF the fix doesn't hold, THEN stop and report.
 5. WHEN the baseline is declared green THEN each app's full suite SHALL pass 3 consecutive runs.
 
 ### Requirement 2: The frontends comply with the backend, verified from the backend side
@@ -120,7 +122,7 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
 5. A **local contract check** (design defines it) SHALL fail when an MSW response's shape differs from its fixture. MSW response data SHALL be typed with the frontend's response types (`satisfies`), so type-check fails when test data and frontend type disagree.
    - Like Spec 16's fixtures, the check runs locally and is skipped in CI, because the fixtures are not committed.
    - Locally, a skipped check is a gate failure.
-6. What each role can see and do in the POS SHALL match the backend's `role:` middleware (route files and Spec 16's `RoleAuthorizationMatrixTest`). Two cases are mismatches:
+6. What each role can see and do in the POS SHALL match the backend's `role:` middleware (route files and Spec 16's `RoleAuthorizationMatrixTest`; `route:list --json` shows it as `RoleMiddleware:…`). Two cases are mismatches:
    - a control shown to a role whose request the backend rejects with 403;
    - a control hidden from a role the backend allows.
 7. Error handling SHALL match the backend's error bodies:
@@ -133,8 +135,12 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
    - **Track A**, when correcting the frontend type changes no runtime behaviour (the code already converts the value, or never reads the field);
    - **otherwise a Track B F-item** (F-4, F-5, …), failing test first, approved one by one.
 9. WHEN a task writes or changes code that reads a response or sends a request THEN the implementer SHALL first read the matching fixture, or the backend code named in 2.1, and SHALL cite it (fixture file name or `file:line`) in the commit body. A shape SHALL never be inferred from a frontend type or an existing mock.
-10. A frontend change that relies on a response changed by Spec 16 Track B SHALL NOT reach `staging` before Spec 16's PR is merged there. Examples: B-07 receipt cashier name, B-12/B-13 report row shapes, B-16 archived inventory, B-21 `credit_balance`, B-22 birthday format.
+10. A frontend change that relies on a response changed by Spec 16 Track B SHALL NOT be deployed to production before Spec 16 is. There is no staging API any more, so production is the only place this can go wrong. Examples: B-07 receipt cashier name, B-12/B-13 report row shapes, B-16 archived inventory, B-21 `credit_balance`, B-22 birthday format.
 11. No backend file changes in this spec. WHEN a mismatch can only be fixed in the backend THEN it SHALL be reported under "Found, not fixed" as a proposed backend item.
+12. **Always align to the latest backend (user, 2026-11-07).** No snapshot of the backend SHALL be kept; the running Laravel app is checked directly (user, 2026-11-08). Before every step the implementer SHALL record the backend branch, commit and Laravel version (design §4.10.1). WHEN the backend has uncommitted changes in `app`, `routes`, `bootstrap`, `config`, `database/migrations` or `composer.lock` THEN no frontend commit SHALL be made until they are committed.
+13. WHEN backend code changed since the implementer's previous commit THEN the backend's contract suite SHALL pass on the latest code (design §4.10.2) before work continues. WHEN code reads a response or sends a request THEN the endpoint SHALL be checked by calling Laravel directly, inside a rolled-back transaction, GET routes only (design §4.10.3). Routes and roles SHALL be read from Laravel's `route:list`, never from a saved copy.
+14. WHEN the backend changed a response, request rule, route, role or enum that a screen depends on THEN the design and Appendix B SHALL be updated before work continues, and any visible effect SHALL become a proposed F-item.
+15. WHEN Laravel or another backend dependency is upgraded THEN 2.12 to 2.14 apply, and its release notes SHALL also be read for changes to validation, responses and serialization.
 
 ### Requirement 3: Contract fixes F-1, F-2 and F-3 *(Track B; approved 2026-10-17 in the former Spec 17)*
 
@@ -161,6 +167,10 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
    3. WHEN a branch is selected for the first time (null to a branch), or the page is hard-refreshed, THEN the cart SHALL NOT be touched. That is the same guard `BranchCacheSync` already uses.
 4. Each fix SHALL be one commit in its app's Track B1 PR (Q3). It SHALL start with tests that fail on the current code, and those tests SHALL use the real API shape (string amounts, `items`, uppercase statuses).
 5. Before implementation, each fix SHALL be re-verified against the current fixtures, because the former Spec 17 design was verified on 2026-10-17 and Spec 16 has changed responses since.
+6. **Approved by the user on 2026-11-08 (design §5.5, §5.6, Appendix B.0).** F-4 and F-5 SHALL ship in Track B1 under 3.4. F-16 ships as a hotfix to `main`, ahead of PR 1 and PR 2:
+   1. **F-4:** the Sales report Customer filter SHALL filter the rows and the export, using the backend's `is_walk_in`.
+   2. **F-5:** the Sales and Billing reports SHALL show money with thousands separators.
+   3. **F-16 (live on production):** the portal SHALL show a student whose `enrollment_status` is `unenrolled` instead of crashing. Committed on 2026-11-08 as `81c204e` on the portal's `hotfix/portal-unenrolled-child-crash`, branched from `main` (design §5.6).
 
 ### Requirement 4: Behaviour freeze (prerequisite for all Track A work)
 
@@ -176,7 +186,7 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
    Their MSW data SHALL follow Requirement 2.4.
 2. Characterization tests SHALL be written against the unchanged code, pass there, and land in a commit before the refactor commit.
 3. A Track A commit SHALL NOT change the assertions of any existing test. Only import paths, the render target (a page becomes its screen component, Req 5) and shared test utilities may change.
-4. WHEN a Track A task changes a component THEN the HTML it renders for each recorded state SHALL be identical before and after, once generated ids (Base UI `base-ui-*`, React `useId`) are normalised. This is proved with local render fixtures (Q6, design) and is never a committed snapshot test.
+4. WHEN a Track A task changes a component THEN the HTML it renders for each recorded state SHALL be identical before and after, once generated ids and one-frame animation attributes are normalised (design §6.2) and the clock is pinned. This is proved with local render fixtures (Q6, design) and is never a committed snapshot test.
 5. Coverage SHALL count every source file (`collectCoverageFrom`), so untested files show up. At the end of this spec, the thresholds in `jest.config.ts` SHALL be raised to the measured values and never lowered.
 6. Every file that no test loads today (Appendix B) SHALL have tests before a Track A task changes it.
 
@@ -189,6 +199,8 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
 1. Each `page.tsx` SHALL be a Server Component that reads route params with `await params`, typed with the generated `PageProps<'/route'>` helper (`next typegen`). It SHALL render one screen component. Hooks, state and data loading live in that Client Component. Today 38 of 40 POS pages and 9 of 13 portal pages start with `"use client"`.
 2. The POS student detail page SHALL stop typing `params` as a plain object and SHALL drop its `useParams()` fallback. `parsePositiveInt` SHALL behave exactly as before for every input.
 3. The auth gates in the client layouts (`(kitchen)`, `(pos)`, `(portal)`) SHALL keep their redirects and their "render nothing until the session is restored" behaviour.
+4. The `Route (app)` table from `next build` SHALL be identical before and after, so no route changes between static and dynamic.
+5. On the built server, every route SHALL return the same status as before, with no server error.
 
 ### Requirement 6: Break up oversized files
 
@@ -248,14 +260,14 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
 
 #### Acceptance Criteria
 
-1. Each app SHALL set `reactCompiler: true` in `next.config.ts`, with `babel-plugin-react-compiler` pinned exactly as a devDependency.
-2. Both apps SHALL pass type-check, lint, test and build with the compiler on.
+1. Each app SHALL enable `reactCompiler` in `next.config.ts` with the config in design D-6, with `babel-plugin-react-compiler` pinned exactly as a devDependency.
+2. Both apps SHALL pass type-check, lint, test and build with the compiler on. The full suite SHALL also pass **through the compiler** (`COMPILED_TESTS=1`), with render fixtures unchanged.
 3. Hand-written `useCallback`/`useMemo` (POS 15 + 2, portal 1) SHALL be removed only from components the compiler actually compiles. Design defines how that is checked.
 4. The compiler SHALL be enabled last in Track A, in its own commit per app.
 
 ### Requirement 11: TypeScript, lint, test and CI tooling
 
-**User Story:** As a frontend developer, I want the tooling to catch mistakes early, so that problems show up in CI and not on staging.
+**User Story:** As a frontend developer, I want the tooling to catch mistakes early, so that problems show up in CI and not after a merge.
 
 #### Acceptance Criteria
 
@@ -350,7 +362,8 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
 - **Delivery:**
   - Four PRs per app, in the Q3 order.
   - Commits use `type(scope): description`, with **no AI attribution lines**.
-  - The user pushes, opens and merges every PR, to `staging` first.
+  - The user pushes, opens and merges every PR, to `staging` first. `staging` is a branch only: the API's staging environment was removed on 2026-11-07.
+  - Before a PR merges, the user runs the local full-stack smoke (design §20.1).
   - Track A and Track B are never in the same PR.
 
 ## Out of Scope
@@ -396,8 +409,17 @@ The former Spec 17's design (verified 2026-10-17, commit `6a333e8`) is carried i
 | FA-22 | Inventory report reads `data` (API sends `items`) and lowercase statuses (API sends uppercase); history sends `log_type`/`history_page` (API reads `type`/`page`) | POS `reports/inventory/page.tsx`, `lib/api/reports.ts` | F-1 (Req 3.1) |
 | FA-23 | Portal wallet `amount` typed `number`, API sends a decimal string; `formatPHP` loses the thousands separator | portal `types/portal.ts:85`, `wallet-tab.tsx` | F-2 (Req 3.2) |
 | FA-24 | POS cart and selected student survive a branch switch | POS `components/branch-cache-sync.tsx`, `lib/store/cart.ts` | F-3 (Req 3.3) |
-| FA-25 | About 25 response fields typed differently from what the API sends, no visible effect today (decimal strings typed `number`, missing nullability, incomplete enum unions, partial mutation bodies) | `contract-gaps.md` §2.2, §4 | Req 2.8 (A or new F-items) |
+| FA-25 | Response fields typed differently from what the API sends: 78 measured on 2026-11-07, most with no visible effect (design Appendix B.1) | design Appendix B.1 | Req 2.8 (A or new F-items) |
 | FA-26 | MSW mocks use shapes the API never sends (this hid F-1 and F-2); no check ties mocks to the backend | `__tests__/mocks/handlers.ts` (both) | Req 2.4, 2.5 |
+| FA-27 | Sales report Customer filter sends `customer_type`, the API reads `is_walk_in`, so it does nothing, on screen or in the export | POS `reports/sales/page.tsx:164,197` | F-4 (approved 2026-11-08) |
+| FA-28 | Sales and Billing report money reaches `formatPeso` as a decimal string, so `₱1500.00` has no separator. `contract-gaps.md` wrongly records this as no effect | POS `reports/sales/page.tsx:407-412`, `reports/billing/page.tsx:456` | F-5 (approved 2026-11-08) |
+| FA-29 | The frontend asks for `per_page` on 3 endpoints whose controllers ignore it, so older announcements and notifications can't be reached, and staff recipients stop at 20 | POS `announcements/page.tsx:186`, `notifications/page.tsx:247`, `announcements/create/page.tsx:116` | F-6, F-7, F-8 (proposed; backend) |
+| FA-30 | The UI and the backend disagree on roles: 4 controls shown to supervisors that the API rejects, 6 hidden that it allows | design Appendix B.3 | F-9 to F-14 (proposed) |
+| FA-33 | **A parent with an unenrolled child gets a crash on the portal dashboard and Students list.** The status map has no `unenrolled` entry, the type hides it, and there's no error screen. Live on `main` | portal `components/enrollment-status-badge.tsx:40`, `types/portal.ts:36` | F-16 (approved 2026-11-08; hotfix) |
+| FA-34 | Public pre-registration prints `new Date()` on a prerendered page, so the date is the build date until React recovers, with a hydration error | portal `pre-registration-form.tsx:945` | F-17 (proposed; low) |
+| FA-32 | Forms let through input the backend refuses, notably passwords: production requires symbols and rejects breached ones, while the forms check 8 characters | design Appendix B.4 | F-15 (proposed) |
+| FA-31 | The backend moved 10 commits and one Laravel release in one day, and a fixture digest can't detect that. Checked by calling Laravel directly, with no saved snapshot (user, 2026-11-08) | design §4.10 | Req 2.12–2.15 |
+| FA-35 | The API's staging environment was removed on 2026-11-07, so the frontends' staging sites have no API, and a staging smoke is impossible | design §1.2, §20 | D-13, OPS-1 (decided 2026-11-08: leave the frontends' staging sites alone) |
 
 ## Appendix B: Files no test loads today
 

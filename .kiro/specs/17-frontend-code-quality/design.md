@@ -1,10 +1,10 @@
 # Design Document: Spec 17, Frontend Code Quality and Backend Compliance
 
-Every fact in this document was checked on 2026-10-31. The backend facts, installed versions and audit results were re-checked on 2026-11-07, after Spec 16 finished. Sources:
+Every fact in this document was checked on 2026-10-31 and audited again on 2026-11-07. In that audit the riskiest parts of this design were **built and run on throwaway clones of both apps**, not just read (§1.4). Sources:
 - **Code:** `~/sunbites-pos` (branch `bump-latest-upgrade-pos`) and `~/sunbites-portal` (branch `bump-latest-upgrade-portal`), both with the uncommitted 2026-10-31 upgrade.
 - **Framework docs:** the docs bundled with Next 16.4.3 (`node_modules/next/dist/docs/`).
 - **Package APIs:** the installed `.d.ts`/`.js` files of Zod 4.6.7, Zustand 5.0.16, TanStack Query 5.105 and `@types/react` 19.3.
-- **Backend:** the Spec 16 contract fixtures in `~/sunbites-api/tests/Fixtures/contracts/` (471 files, digest `e3317d25315716f16fc7d419afba565b77d3d9cd018fbcc30449d3c38f06ed44`, at `sunbites-api` commit `8a708ff`, unchanged since `09c1955`).
+- **Backend:** the latest `~/sunbites-api`, checked by calling the running Laravel app directly (§4.10). No snapshot of it is kept. Never copy a commit from this document into a decision: read it from the backend repo.
 
 Where this document says "verified", that check was run, not assumed.
 
@@ -38,12 +38,21 @@ PR 4  Track B2: other fixes           (Req 14, F-4+)    fix/spec17-track-b2
 | D-6 | React Compiler config is `reactCompiler: { environment: { enablePreserveExistingMemoizationGuarantees: true } }`. The Next docs say to set this explicitly because defaults differ between versions; `true` keeps today's memo semantics | this design |
 | D-7 | Error screens use Next 16.4's `error.tsx` props `{ error: unknown; retry: () => void }`. `retry` became stable in 16.3; the older `reset` still exists but the docs prefer `retry` | Next docs `error.md` |
 | D-8 | `page.tsx` shells are typed with the global `PageProps<'/route'>` helper. `type-check` runs `next typegen` first, so the helper exists in CI | Next docs `page.md`, `next typegen` |
+| D-9 | The contract check finds a response's route by matching segments against the routes Laravel lists (`route:list --json`, read on every run), not by comparing slugs. Slugs lose the `/`, so `/students/5/nonexistent` would match `students_{student}` | §1.4, run on both apps |
+| D-10 | Render fixtures pin the clock with Jest's `fakeTimers` config, which applies before any module loads. A `beforeEach` pin is too late: mocks that call `new Date()` at import leak the real time into fixtures | §1.4, run on both apps |
+| D-11 | The React Compiler is proved with the same test suite run through `babel-jest` (`COMPILED_TESTS=1`), compiling source files only. This replaces "Jest can't exercise it" | §1.4, run on both apps |
+| D-12 | The backend isn't pinned to a commit, and no snapshot of it is kept. Before every step the implementer records the backend commit and Laravel version and checks what the step touches by calling Laravel directly. The contract suite re-runs whenever backend code moves | user, 2026-11-07 and 2026-11-08 (§4.10) |
+| D-13 | The pre-production smoke runs on the **local full stack**, because no staging API exists (§20). Deploy-order rules are stated against production, not `staging` | steering, 2026-11-07 |
 
 ### 1.2 Verified framework and package facts
 
 | Fact | Where verified |
 |---|---|
-| `next/jest` does not apply the React Compiler. Tests always run uncompiled code | `node_modules/next/dist/build/jest/jest.js` has no `reactCompiler` reference |
+| `next/jest` does not apply the React Compiler, so a normal `jest` run tests uncompiled code. `COMPILED_TESTS=1` runs the same tests compiled (§12) | `node_modules/next/dist/build/jest/jest.js` has no `reactCompiler` reference; compiled output confirmed: `const $ = (0, _compilerRuntime.c)(4)` |
+| `next build` type-checks test files, because `tsconfig.json` includes them. A test that passes a removed prop fails the **build**, so tests and shells change in one commit | Run on the POS clone: exit 1 until the 3 dynamic-route tests were updated |
+| `route:list --json` shows roles as `Spatie\\Permission\\Middleware\\RoleMiddleware:admin\|manager`, never as `role:` | `route:list --json` |
+| `"1500.00".toLocaleString("en-PH", { minimumFractionDigits: 2 })` returns `"1500.00"`: `String.prototype.toLocaleString` ignores options. This is the F-2 and F-5 bug | Run in Node |
+| Laravel's `boolean` rule accepts `true`, `false`, `0`, `1`, `"0"`, `"1"`, and **not** the string `"true"`. `apiClient` sends query values with `String(v)`, so a boolean filter must send `1` or `0` | `ValidatesAttributes::validateBoolean` |
 | `reactCompiler` is a stable top-level option. It needs devDependency `babel-plugin-react-compiler` (latest `1.0.0`) and can be opted out per component with `"use no memo"` | Next docs `reactCompiler.md` |
 | `error.tsx` gets `error: unknown` and `retry()`. It does not wrap the `layout.tsx` of its own segment. `global-error.tsx` must render its own `<html>`/`<body>` and import its own styles | Next docs `error.md` |
 | `PageProps<'/blog/[slug]'>` is global after `next dev`, `next build` or `next typegen`. Static routes resolve `params` to `{}` | Next docs `page.md` |
@@ -54,6 +63,8 @@ PR 4  Track B2: other fixes           (Req 14, F-4+)    fix/spec17-track-b2
 | `undici@6.29.1`: `engines.node >=18.17`, **no dependencies**. `undici@5` depends on the vulnerable `@fastify/busboy`; `7.x` needs Node ≥20.18.1 and `8.x` needs Node ≥22.19, while CI runs Node 20 | `npm view` |
 | `eslint-plugin-react-hooks` 7.1.1 already runs the compiler rules (`purity`, `refs`, `immutability`, `set-state-in-effect`, …), and both apps pass them | `npm ls`, `npm run lint` |
 | Hosting is Vercel. PR CI (`pr.yml`) runs `npm ci`, `type-check`, `lint` and `test -- --ci --passWithNoTests` on Node 20, but **no build** | `.github/workflows/*.yml` (both) |
+| **The API's staging environment was removed on 2026-11-07.** `staging` is still a branch in all 3 repos (flow: PR branch → `staging` → `main`), but there is no staging API. Measured: `api-staging` no connection; `pos-staging` 404; `portal-staging` responds, with no API behind it; production API 200 | `.kiro/steering/tech.md`, `curl` |
+| The local stack is the only place to run the full product before production. `http://api.sunbites.test` answers, and `config/cors.php` allows `localhost:3000` and `3001`. Both apps' `.env.local` already point there | `curl` with an `Origin` header |
 | Tests set `NEXT_PUBLIC_API_URL = "http://localhost:8000"` (no `/api/v1`). Production values include `/api/v1` (tech steering) | `jest.setup.ts` |
 | MSW runs with `onUnhandledRequest: "error"`. `__tests__/test-utils.tsx` renders a `<Toaster />` inside the providers | `jest.setup.ts`, `test-utils.tsx` |
 
@@ -61,12 +72,41 @@ PR 4  Track B2: other fixes           (Req 14, F-4+)    fix/spec17-track-b2
 
 | Item | POS | Portal |
 |---|---|---|
-| Tests | 325 (2 failing, 1 flaky; Req 1.4) | 102, all passing |
+| Tests | 325: `feedback.test.tsx` fails every run, `settle-credit-dialog.test.tsx` fails on and off (Req 1.4; causes H12, H21) | 102, all passing |
 | Lint warnings | 7 | 1 |
 | Coverage (loaded files only) | 82.85% lines | 84.97% lines |
 | Files no test loads | 80 (73 in `app/`+`components/`, 7 in `hooks/`+`lib/`) | 26 (23 + 3) |
-| `npm audit --omit=dev` (2026-11-07) | 0 high/critical (4 moderate, 2 low) | 0 high/critical (4 moderate, 2 low) |
-| Backend fixtures | 471 files, digest `e3317d25…ed44`, `sunbites-api` `8a708ff` | same |
+| `npm audit --omit=dev` (2026-11-07) | 0 high/critical (4 moderate, 2 low, listed for the user with PR 1) | same |
+| Backend | the latest; each commit body records it (§4.10) | same |
+
+### 1.4 What was actually run (2026-11-07)
+
+On throwaway clones of both apps, against the backend at `6c800be` (Laravel 13.40.0). The clones were deleted afterwards and no app repo changed.
+
+| Claim | How it was tested | Result |
+|---|---|---|
+| The backend still matches its fixtures | `tests/Feature/Contract` on Laravel 13.40, SQLite | **484 tests pass**, digest unchanged |
+| Calling Laravel directly works and leaves nothing behind (2026-11-08) | §4.10.3's commands: a supervisor and a parent on list routes, a manager and an admin on an admin-only route, then the dev database counted | **200, 200, 403, 200 as expected.** No user, role link, branch link, token or activity row remained. Contract suite re-run: 484 pass |
+| Every frontend call has a route | TypeScript AST over both apps against `route:list` | **148 of 148**. 17 routes have no parsed caller, all explained (§4.6) |
+| Response types match | TypeScript checker against every `@ok` fixture | 147 typed calls compared, **78 mismatches**, register in Appendix B.1 |
+| Requests match | AST against Form Requests. Tool validated: it re-found F-1 on its own. Reverse check: required fields never sent, validated by sabotaging its input | **5 real mismatches** (F-1 plus 4 new), Appendix B.2. **No required field missing** across 77 routes |
+| Roles match | Every UI gate against `RoleMiddleware` | **4 shown-then-rejected, 6 hidden-but-allowed**, plus 1 reachable only by URL and 2 nav links that bounce, Appendix B.3 |
+| The page shell pattern is safe | Converted 38 POS and 9 portal pages, then typegen, type-check, build, tests, render compare | **0 type errors, builds pass, route tables identical**, same test results, **rendered HTML byte-identical** apart from the known flake |
+| Shells are safe on a real server | `next start`, requested every route type | **All 200, 0 server errors** |
+| **Nothing changes in a real browser** | `compare.mjs` (Appendix C.6): headless Chrome with a temporary profile, the original build against the converted one (shells, auth hook, React Compiler, undici). A fake API served bodies generated from the backend fixtures. It loaded every route of both apps signed in and signed out, POS at desktop size and the portal at desktop and phone size, clicked every tab, and signed in through each app's real login form | **69 screens: 0 screenshots differ, URLs and console errors identical on all.** HTML identical on 68; the 69th differs only inside Google's reCAPTCHA frame URL (port and a random token), which the tool now ignores. Built CSS byte-identical. The tool was proved able to fail: one class changed on purpose in the converted portal, and it reported both screens |
+| Every crash those screens showed | The same exceptions appeared in both builds, so they're in today's code. Each stack was traced | **Real: F-16** (`EnrollmentStatusBadge`, on every page that shows it) **and F-17** (hydration error on pre-registration). The rest came only from the fake API's `"Sample …"` strings: every map they hit covers all of its backend enum's values |
+| `useAuthHydrated` | Applied to the 3 layouts; `renderToString` then `hydrateRoot` | Empty server HTML, **no hydration mismatch**, children appear |
+| The contract check works | Built it, ran it over both suites | **Works.** First run: 31 POS and 12 portal real findings, all classified in Appendix B.6 |
+| Render fixtures are stable | All 427 tests captured twice, 62 s apart, and with generated ids shifted | **0 differences** after the §6.2 normaliser and clock pin (only the settle flake). As first designed, 9 tests differed |
+| A screen can't crash on a backend enum value | Every unguarded `map[value]` lookup in both apps against `app/Enums` | **10 lookups, 1 real crash:** F-16, live on production |
+| Tests aren't month-dependent | Whole suite pinned to Jan 15, Apr 15, May 15, Jun 1, Dec 31, Mar 31 and Feb 29 | **0 new failures** |
+| `undici` 6.29.1 | Installed, ran the suites on Node 26 and Node 20 | **Works**; full `npm audit` 0 high, 0 critical |
+| Node 20 (CI) | Tests and `next build` on v20.20.2 | **Pass** in both apps |
+| React Compiler | Installed, built with D-6's config, compile report, whole suite compiled | **Builds, route tables identical.** POS 282 functions compiled, 3 not; portal 80 compiled, 2 not. Compiled tests 323 of 325 POS, 102 of 102 portal, same known failures, **0 render differences** |
+| The settle-credit flake | Probe of `document.activeElement`, then the fix | Cause proven (H21). Failed 8 of 12 before, **passed 15 of 15** after |
+| F-4 and F-5 | Failing test, then the §5.5 edits | **Red, then green**, 0 type errors |
+
+**Not run, and why it matters:** file splits (§8), helper and component merges (§9), the query layer (§10), the Zod swaps (§11) and the `createPortal` and echo store changes (§7.3). Those rely on the same proofs above, which is why every one of those commits must pass the render compare. Logged-in screens were only exercised against fixture-shaped data from a fake API, never the real backend, and dialogs weren't opened in the browser run. Printing, the camera, QR scanners, Safari and live Reverb events aren't covered by any automated proof, so they're on the full-stack smoke list (§20).
 
 ## 2. Architecture
 
@@ -95,6 +135,7 @@ lib/
   store/                      ← Zustand; + **use-auth-hydrated.ts** (§7.2)
 __tests__/
   **render-fixture.ts**       ← §6.2
+  **clock.ts**                ← DO_NOT_FAKE for tests that fix the date (H10)
   **contract/**               ← capture listener, exceptions.json (§4.3)
 scripts/
   **contract-check.mjs**      ← §4.3
@@ -138,17 +179,25 @@ graph LR
 | H7 | **Full-page redirect.** `lib/api/client.ts:56` sets `window.location.href = "/branch"`. The full reload drops all in-memory state (query cache, cart) | Keep the full reload. Single-line lint disable with the reason (Req 9.4) |
 | H8 | **Auth gates render nothing until the session is restored.** Server HTML is empty for gated groups | `useAuthHydrated()` returns `false` on the server and during hydration (§7.2) |
 | H9 | **Server page shells** cannot use hooks or browser APIs, and async shells can't be rendered by React Testing Library | Shells only await `params` and render the screen. Tests render the screen component (an allowed import change, Req 4.3) |
-| H10 | **Dates.** `toLocaleDateString("en-PH")`, school-year helpers and "today" depend on the clock and time zone | New tests fix the clock (`jest.useFakeTimers({ now })` or `jest.setSystemTime`) and use noon UTC timestamps. Render fixtures are recorded and compared with `TZ=Asia/Manila` |
+| H10 | **Dates.** `toLocaleDateString("en-PH")`, school-year helpers and "today" depend on the clock and time zone | A test that needs a fixed date calls `jest.useFakeTimers({ now, doNotFake: DO_NOT_FAKE })` from `__tests__/clock.ts`, which fakes **only `Date`**. Plain `jest.useFakeTimers()` hangs `user-event`, `waitFor` and MSW. Use noon UTC timestamps. Render fixtures pin the clock in `jest.config.ts` (D-10) and run with `TZ=Asia/Manila` |
 | H11 | **Zod error text and unions.** The portal email field is `z.union([z.string().email(…).max(150), z.literal("")])` | Swap APIs one for one (§11.1). Tests pin every shown message |
-| H12 | **sonner in tests** (2.0.8) renders the toast text twice in jsdom (the feedback test failure) | Query toasts by role, or use `findAllByText(...)[0]`. This is a test-only concern (Req 1.4) |
+| H12 | **sonner in tests** (2.0.8) renders the toast text twice in jsdom (the feedback test failure) | `(await screen.findAllByText("Reply sent."))[0]`, verified passing 3 of 3 runs. This is a test-only concern (Req 1.4) |
 | H13 | **Invalidation sets.** Each mutation's set of invalidated keys is behaviour | Identical in Track A. Only FB-03/FB-04.x change it, in Track B2 |
-| H14 | **React Compiler is not exercised by Jest** (§1.2) | The compiler commit is proved by build, lint and a compile report, plus a staging smoke test (§12). A component the compiler can't handle gets `"use no memo"`, never a rewrite |
+| H14 | **A normal Jest run doesn't exercise the React Compiler** (§1.2) | The compiler commit is proved by `COMPILED_TESTS=1` with render compare, plus build, lint, the compile report and the full-stack smoke (§12). A component the compiler can't handle gets `"use no memo"`, never a rewrite |
 | H15 | **Authorised photo fetch** sends `Authorization`, `X-Branch-Id` and `Accept: image/*`, and revokes object URLs on cleanup | The shared function keeps all three headers. Callers keep the revoke (§9.3) |
 | H16 | **Cross-app copies** (notification bell and item, api client, auth store) | Never import across repos. Each app keeps its own copy (Out of Scope) |
 | H17 | **Print CSS depends on markup:** `#qr-print-root`, `[data-qr-card]`, `.no-print`, `.flex.h-screen` in `globals.css` | Keep these ids, attributes and classes exactly |
 | H18 | **`onUnhandledRequest: "error"`** | Every request a new test triggers needs a handler. Never relax it to `"warn"` |
 | H19 | **Role gates.** 74 `roles.includes(...)` expressions in the POS | `can()` must return the same boolean for every role and every multi-role user (§4.7) |
 | H20 | **`components/ui/*` is shadcn-generated** | Not edited or merged in Track A. The portal's `dropdown-menu.tsx` coverage stays out of scope |
+| H21 | **Dialogs move focus just after they open.** Base UI focuses the first tabbable element a moment after mount. A test that types straight away loses keystrokes: `user.type(amount, "40")` leaves `4`, because focus jumped to a button. This is the settle-credit flake, and every new dialog test would hit it. No real user can type inside that window | Before typing in a dialog: `await waitFor(() => expect(document.activeElement).not.toBe(document.body));` |
+| H22 | **`NEXT_PUBLIC_API_URL` must not be set for Jest.** `handlers.ts` reads it at import, before `jest.setup.ts` assigns it, so an exported value breaks about 100 tests with unhandled-request errors | Set it only on the `next build` command line, never with `export`. Before debugging a mass failure, run `echo "$NEXT_PUBLIC_API_URL"` |
+| H23 | **Jest treats a path argument as a regex**, so `npx jest "app/(kitchen)/students/[id]/x.test.tsx"` finds no tests and exits 1 | Always `npx jest --runTestsByPath "<path>"` |
+| H24 | **`next build` type-checks tests** (§1.2) | A shell change and the test edits it forces go in the same commit |
+| H25 | **Money from the API is a string at runtime even when the type says `number`** (F-5). A merged `formatPeso` keeps today's output, including today's missing separator | Track A never adds `Number()` to a value that reaches `formatPeso`. Characterization mocks use decimal strings, so fixtures record what users really see. F-5 changes it, in Track B |
+| H26 | **Local type names inside a `jest.mock` factory.** `babel-plugin-jest-hoist`, used only by the compiled run, rejects them | Name them `Mock…`. `enrollment.test.tsx` needs `TriggerMeta` → `MockTriggerMeta` and `CtxValue` → `MockCtxValue` (task 7) |
+| H27 | **Tailwind v4 scans every file git doesn't ignore,** tests and config included, and treats any matching word as a class. The word `transform` in `jest.config.ts` added an unused `.transform` rule to the portal's CSS. Un-ignored `.render-fixtures/` HTML would add many | Add `.render-fixtures/` and `.contract-capture/` to `.gitignore` **before** creating them. An added rule is harmless, because no element depends on it. A removed or changed rule means a class string changed: `css-diff.cjs` (Appendix C.5) fails on that (§7.1) |
+| H28 | **A TypeScript union can hide a value the backend really sends.** `Record<Union, …>` compiles, and `map[value].x` then throws at runtime. With no error screen, that takes down the whole page (F-16) | Take enum values from `app/Enums/*`, never the FE union. When `app/Enums` changes, check that every lookup keyed by that enum has an entry for each value |
 
 ## 4. Backend compliance (Req 2)
 
@@ -160,10 +209,10 @@ graph LR
 | Enum **values** (fixtures record `"string"`, not the values) | The backend enum or model accessor, e.g. `InventoryItem::status` → `OK`/`LOW`/`OUT`/`OVER`, `app/Enums/*` | a FE union |
 | Path and method | `vendor/bin/sail artisan route:list --path=api --except-vendor --json` (run from `~/sunbites-api`) | the FE `lib/api` path |
 | Query and body keys, allowed values | The Form Request named on the controller method (`app/Http/Requests/{Kitchen,Portal,Public}/…`) | the FE form schema |
-| Roles allowed | `role:` middleware in `route:list --json` (the `middleware` column) | the FE gate |
+| Roles allowed | `RoleMiddleware:` in the `middleware` array of `route:list --json`, or call the route as the role (§4.10.3) | the FE gate |
 | Error bodies | `bootstrap/app.php` renderables; `abort()` texts in controllers and actions; Spec 16 Req 1.3 non-standard envelopes | — |
 
-The backend is read-only for this spec. If `~/sunbites-api` is mid-change (another session committing), use the files at the recorded commit, and record `git -C ~/sunbites-api log -1 --format=%h` plus the fixture digest (§4.3.6) in the commit body.
+The backend is read-only for this spec, and it moves often. A fixture is only evidence while the backend's contract suite still passes against it. §4.10 says when to run that suite, and how to check an endpoint by calling Laravel directly.
 
 ### 4.2 Reading a fixture
 
@@ -192,47 +241,52 @@ The backend is read-only for this spec. If `~/sunbites-api` is mid-change (anoth
 
 #### 4.3.1 Capture
 
-`__tests__/contract/capture.ts` is imported from `jest.setup.ts` and does nothing unless `process.env.CONTRACT_CAPTURE === "1"`. When on:
+Appendix C.1 is the verified implementation. Copy it to `__tests__/contract/capture.ts` and import it from `jest.setup.ts`. It does nothing unless `process.env.CONTRACT_CAPTURE === "1"`. When on:
 
 - It registers `server.events.on("response:mocked", ({ request, response }) => …)` (MSW 2 life-cycle events).
-- For each JSON response, it writes `{ method, url, status, body }` to `.contract-capture/<jest-worker-id>.jsonl`.
-- It does this for both `__tests__/mocks/handlers.ts` and per-test `server.use(...)` overrides, because the event fires for every mocked response.
-- Non-JSON responses (blobs, files) record `{ method, url, status, contentType }`.
-- The directory is emptied at the start of each capture run (a Jest `globalSetup` only when the flag is set).
+- For each JSON response, it writes `{ method, url, status, test, body }` to `.contract-capture/<jest-worker-id>.jsonl`.
+- It covers both `__tests__/mocks/handlers.ts` and per-test `server.use(...)` overrides, because the event fires for every mocked response.
+- Non-JSON responses (blobs, files) record `{ method, url, status, test, nonJson, contentType }`.
+- MSW doesn't await the listener, so a test can end before the body is read. `afterAll` awaits the pending writes. Without this, responses go missing.
+- The directory is emptied at the start of each capture run (a Jest `globalSetup`, only when the flag is set).
 
 #### 4.3.2 Compare (`scripts/contract-check.mjs`, plain Node, no dependencies)
 
-1. **Fixture directory.** `process.env.SUNBITES_CONTRACT_FIXTURES`, defaulting to `../sunbites-api/tests/Fixtures/contracts`, resolved from the app root.
-   - Missing and `CI=true`: print `skipped: contract fixtures are local only (Spec 16 §4.1.7)` and exit 0.
-   - Missing locally: print the same message and **exit 1**, because locally a skip is a failure.
-2. **Index.** Load every fixture. For each slug, build a regex: escape the literal parts, turn each `{param}` into `([a-z0-9_]+?)`, and anchor both ends.
-3. **Map each captured request to a fixture.**
-   - `routePath = "api/v1" + new URL(url).pathname`. Tests use a base URL without `/api/v1`, so it is added back.
-   - Build the slug of `routePath` with the same rule as §4.2, keeping concrete values. UUIDs become `a1b2_…`, which the param regex still matches.
-   - Pick the fixture slugs of the same method whose regex matches. When several match, choose the one with the most literal characters (for example, `students_deleted` beats `students_{student}`).
-   - No match is finding **K1**: "the frontend calls a route the backend doesn't have".
-4. **Choose the variant.**
-   - Status 2xx: the slug's `@ok*` fixtures.
-   - Status 4xx: the variants whose recorded `status` equals the captured status. None is finding **K2**: "a status the backend never returns for this route".
-   - Status ≥ 500: skipped. Tests simulate server failures, which backend fixtures don't record.
-5. **Compare shapes**, mock ⊑ fixture. Compute the mock's shape with a JavaScript port of `ShapeExtractor` (same tokens, same check order: decimal2 → iso8601_micro → iso8601 → datetime → date → string), then:
+Appendix C.2 is the verified implementation. Copy it to `scripts/contract-check.mjs`.
 
-   | Mock | Fixture | Result |
-   |---|---|---|
-   | same token | same token | ok |
-   | object key | key absent | **K3** extra key the API never sends |
-   | object key absent | key present | ok (subset; `satisfies` in §4.4 forces declared keys) |
-   | `"null"` | any non-null token | **K4** null where the fixture has a value; needs an exception citing the nullable source |
-   | `"number"` | `"string:decimal2"` | **K5** decimal sent as number (H1) |
-   | `"string"` or a different string token | `"string:<format>"` | **K6** wrong string format |
-   | non-null token | `"null"` | **K7** value where the fixture only saw null; needs an exception |
-   | `"list:empty"` | any list | ok |
-   | `{__list__: s}` | `__list__ f` / `__list_union__ [f…]` | `s ⊑ f` / `s ⊑` some `fᵢ` |
-   | any list element | `"list:empty"` | **K8** the fixture has no element sample; needs an exception citing the Resource |
-   | object | `{__map__: f}` | every value ⊑ `f` |
+1. **Inputs.**
+   - Backend: `SUNBITES_API`, default `../sunbites-api`.
+   - Fixtures: `SUNBITES_CONTRACT_FIXTURES`, default `<backend>/tests/Fixtures/contracts`.
+   - Routes: read from Laravel on every run, with `vendor/bin/sail artisan route:list --path=api --except-vendor --json` in the backend folder. No routes file is kept. If Sail isn't running, it prints `contract check: could not read the routes from Laravel. Start Sail in …` and exits 1.
+   - Fixtures missing with `CI=true`: print `skipped: contract fixtures are local only (Spec 16 §4.1.7)` and exit 0.
+   - Fixtures missing locally: print the same message and **exit 1**, because locally a skip is a failure.
+2. **Find the route (D-9).** Take `"api/v1" + new URL(url).pathname`, split on `/`, and match it segment by segment against `routes.json` for the same method. A `{param}` matches any one segment. The route with the most literal segments wins. No match is finding **K1**.
+3. **Find the fixture.** The route's slug is §4.2's rule applied to its `uri`.
+   - Status 2xx: the slug's `@ok*` fixtures with a 2xx status and a body.
+   - Status 4xx: the variants whose recorded `status` equals the captured status.
+   - No variant for 401, 403, 404, 422 or 429: these are generic and fixtures don't list them for every route, so the body only has to carry `message` or `errors`. Otherwise **K2**.
+   - No variant for any other 4xx: **K2**.
+   - Status ≥ 500 or non-JSON: skipped. Tests simulate server failures, which fixtures don't record.
+4. **Compare shapes**, mock ⊑ fixture. Compute the mock's shape with the JavaScript port of `ShapeExtractor` (same tokens, same check order: decimal2 → iso8601_micro → iso8601 → datetime → date → string), compare against each candidate, pass if any matches, and report the closest one.
 
-6. **Exceptions.** `__tests__/contract/exceptions.json` is committed. Each entry is `{ "fixture", "path", "kind", "reason", "backendRef" }`. `backendRef` is a `file:line` in `~/sunbites-api`, for example a nullable column in a migration or a `?->` in a Resource. Any finding without an exception exits 1.
-7. **Output.** One line per finding: `K5 get__api_v1_portal_students_{student}_wallet@ok body.data[].amount mock=number fixture=string:decimal2 (test: wallet-tab.test.tsx)`.
+   | Mock | Fixture | Result | Fails the check? |
+   |---|---|---|---|
+   | same token | same token | ok | |
+   | object key | key absent | **K3** extra key the API never sends | yes |
+   | object key absent | key present | ok (subset; `satisfies` in §4.4 forces declared keys) | |
+   | `"number"` | `"string:decimal2"` | **K5** decimal sent as number (H1, H25) | yes |
+   | `"string"` or a different string token | `"string:<format>"` | **K6** wrong string format | yes |
+   | any other type difference | | **K-type** | yes |
+   | `"null"` | any non-null token | **K4** | note only |
+   | non-null token | `"null"` | **K7** | note only |
+   | any list element | `"list:empty"` | **K8** | note only |
+   | `"list:empty"` | any list | ok | |
+   | `{__list__: s}` | `__list__ f` / `__list_union__ [f…]` | `s ⊑ f` / `s ⊑` some `fᵢ` | |
+   | object | `{__map__: f}` | every value ⊑ `f` | |
+
+   **K4, K7 and K8 are notes because a fixture holds one sample.** It can't prove a field is never null, or show an element of an empty list. On the first run they were 93 of the 136 findings, and failing on them would have forced 93 hand-written exceptions. Nullability is checked by `satisfies` against the FE type (§4.4) and by Appendix B.1.
+5. **Exceptions.** `__tests__/contract/exceptions.json` is committed. Each entry is `{ "fixture", "path", "kind", "reason", "backendRef" }`. `fixture` is the slug, or `slug@variant`. `backendRef` is a `file:line` in `~/sunbites-api`, or `null` only for a test-only route. Any failing finding without an exception exits 1. An exception that no longer matches a finding also exits 1, so the list can't go stale.
+6. **Output.** One line per failure, then a summary: `contract check: 406 responses, 31 failing, 87 nullability or sample notes, 0 exceptions`.
 
 #### 4.3.3 npm scripts (both apps)
 
@@ -244,12 +298,10 @@ The backend is read-only for this spec. If `~/sunbites-api` is mid-change (anoth
 
 #### 4.3.4 First run
 
-The first run, task 4.2, will report every existing mock that drifted from the backend. Each finding is resolved in one of three ways:
+Measured on 2026-11-07: **POS 31 failing and 87 notes, portal 12 failing and 6 notes.** Appendix B.6 classifies all 43 failures, so task 4.2 doesn't have to judge them from scratch. Each one is resolved in one of three ways:
 - **Fix the mock data** (Track A): only when no existing test assertion has to change.
-- **Fix the FE type** (Track A): only when the runtime is unchanged (§4.5).
-- **Record it as an F-item** (Track B).
-
-Where fixing a mock would break an existing assertion, that test was pinning wrong data. It becomes a proposed F-item, and the spec owner decides.
+- **Add an exception with its `backendRef`:** the notification payloads and the `/probe` test route, listed in B.6.
+- **Record it as an F-item** (Track B): where fixing a mock would break an existing assertion, that test was pinning wrong data, so stop and report it.
 
 #### 4.3.5 What the check does not prove
 
@@ -258,15 +310,9 @@ The check covers response **shape** only. It does not cover:
 - **Request keys:** §4.6 audit.
 - **Roles:** §4.7.
 
-#### 4.3.6 Backend fixture digest
+#### 4.3.6 Backend line
 
-This is the same command as Spec 16, run from `~/sunbites-api`:
-
-```bash
-(cd tests/Fixtures/contracts && find . -type f -name '*.json' -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -c1-64
-```
-
-Every commit that runs `test:contract` records `Backend fixtures: <count> files, digest <digest> (sunbites-api <sha>)`. If the digest changes mid-spec, the backend moved: stop and report.
+Every commit body carries `Backend: <branch> <sha>, Laravel <version>`, taken just before committing (§4.10.1).
 
 ### 4.4 Typed MSW data (Req 2.5)
 
@@ -282,27 +328,26 @@ Existing fixtures declared with a type annotation (`export const posMenuItemsFix
 
 ### 4.5 Compliance register (Req 2.8)
 
-Appendix B is the register. It is seeded from `contract-gaps.md` §1–§2 (recorded 2026-10-09/12) plus this audit. Task 4.3 re-checks every row against the current fixtures and backend code, and fills in the last two columns. The spec owner then updates Appendix B and asks the user to approve any F-items. Resolution rules:
+Appendix B is the register. It was generated on 2026-11-07 by audit scripts (removed on 2026-11-08, §4.10.5), and replaces the hand-made `contract-gaps.md` §2 list, which had wrongly recorded two visible bugs as "no effect" (F-5). Task 4.3 confirms each row against the current backend, by reading the code and calling the endpoint (§4.10.3), and adds what the audit couldn't see. Resolution rules:
 
 | Situation | Resolution | Track |
 |---|---|---|
-| The FE type is wrong, the code already converts the value or never reads the field (e.g. `total_revenue: string` but `parseFloat` is used) | Correct the type. Type-check must pass with no runtime edit except an explicit conversion the type forces where the code relied on implicit coercion with identical output | A |
+| The FE type is wrong, the code already converts the value or never reads the field (e.g. `total_revenue: string` but `parseFloat` is used) | Correct the type, and let `tsc` find the readers: a reader it flags is checked by hand. Type-check must pass with no runtime edit except an explicit conversion the type forces where the code relied on implicit coercion with identical output | A |
 | Correcting the type exposes wrong output (e.g. F-2's `toLocaleString` on a string) | F-item (F-4, F-5, …), failing test first | B2 |
 | A Spec 16 Track B backend fix already makes the response match the existing FE type (B-07, B-13, B-16, B-21, B-22) | No FE change. Mark the row "resolved by Spec 16 B-xx" and add it to the deploy-dependency list (§4.9) | — |
 | Only the backend can fix it | "Found, not fixed" as a proposed backend item (Req 2.11) | — |
 
 ### 4.6 Request compliance audit (Req 2.3)
 
-Task 4.3 lists every function in `lib/api/*.ts`, both apps, with:
-- its method and path;
-- whether that route exists in `route:list`;
-- its query and body keys;
-- the Form Request's rule keys;
-- any mismatch.
+**Done on 2026-11-07; results in Appendix B.2.** Task 4.3 confirms each row against the current Form Request and traces the one opaque call by hand (`preRegistrationApi.update`, whose payload is built field by field).
 
-The known case is F-1: `log_type` and `history_page` against `type` and `page`. The table goes into Appendix B §B.2. The characterization tests (§6.1) assert the query parameters and bodies each screen sends, so a request mismatch fixed later is pinned by a test.
+- **Paths:** all 148 `apiClient` calls with a literal path match a route. The 5 report exports use a computed path, and all 5 exist.
+- **Routes with no caller,** so nobody "fixes" them by accident: `GET api/health`, `POST auth/password/email`, `GET portal/students/{student}/ledger`, `POST portal/profile/photo`, `POST users/{user}/photo`, `POST users/{user}/branches`, `DELETE users/{user}/branches/{branch}`. Student photos and the kiosk go through raw `fetch` (`students/[id]/page.tsx:2560`, `students/page.tsx:431/627/1138`, `lib/api/students.ts:217`, `lib/api/kiosk.ts:5`, portal `lib/api/portal.ts:46/78/96`).
+- **Values:** every fixed-value rule the frontends reach was compared with the values they send, including F-1's `type` (`restock`, `waste`, `manual`, `sale`, all in `InventoryLogType`). No mismatch.
 
-**Already checked (2026-11-07).** Spec 16's B-26 and B-27 tightened these request rules. Fixtures record responses, so the digest can't show this kind of change. Every sender already sends the new type, so neither app needs a change. Task 4.3 copies these rows into §B.2.
+The characterization tests (§6.1) assert the query parameters and bodies each screen sends, so a mismatch fixed later is pinned by a test.
+
+**Tightened rules (Spec 16 B-26, B-27).** Fixtures record responses, so the digest can't show this kind of change. Every sender already sends the new type, so neither app needs a change.
 
 | Backend rule | Sender | What it sends |
 |---|---|---|
@@ -317,7 +362,7 @@ The known case is F-1: `log_type` and `history_page` against `type` and `page`. 
 
 ### 4.7 Role gates and `lib/permissions.ts` (Req 2.6)
 
-The POS has 74 `roles.includes(...)` expressions in about 30 files, plus nav role lists in `lib/navigation.ts`. Task 4.3 builds the matrix, and task 6.5 moves the gates to one map:
+The POS has 74 `roles.includes(...)` expressions in about 30 files. Nav filtering lives in `components/navigation/app-nav-sheet.tsx`, not in `lib/navigation.ts`. The matrix is in Appendix B.3, and task 6.5 moves the gates to one map:
 
 ```ts
 // lib/permissions.ts
@@ -334,7 +379,7 @@ const CAPABILITIES = {
   "students.toggle-payment": ["admin", "manager"],
   // POST api/v1/students/{student}/credit/waive: role:admin
   "students.waive-credit": ["admin"],
-  // …one entry per distinct gate found by task 4.3
+  // …one entry per row of Appendix B.3, spelled exactly as that table spells it
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Capability = keyof typeof CAPABILITIES;
@@ -345,7 +390,7 @@ export function can(user: Pick<AuthUser, "roles"> | null | undefined, capability
 ```
 
 - **Track A (task 6.5):** each gate keeps today's role list exactly (H19), even where it disagrees with the backend. A unit test asserts `can()` for every capability × every role, plus one multi-role user.
-- **A mismatch with the backend** (in either direction, Req 2.6) is recorded in Appendix B §B.3 and fixed as an F-item in Track B2, where the visible change belongs.
+- **A mismatch with the backend** (in either direction, Req 2.6) is recorded in Appendix B §B.3 and changes only as an approved F-item in Track B2, where the visible change belongs.
 - **Not role gates:** the cashier redirect in `(kitchen)/layout.tsx` and `lib/auth-utils.ts` decides routing, not a permission. They move into `can()` only as `"pos.cashier-only"` with identical logic.
 
 ### 4.8 Error bodies (Req 2.7)
@@ -362,18 +407,131 @@ export function can(user: Pick<AuthUser, "roles"> | null | undefined, capability
 
 ### 4.9 Deploy dependency on Spec 16 (Req 2.10)
 
-Spec 16 finished on 2026-10-31 on `bump-laravel-13-latest` (last commit `8a708ff`). On 2026-11-07 that branch was not on GitHub and had no PR, so `staging` still runs the pre-Spec 16 API. B-27 left the fixtures unchanged (same digest at `09c1955` and `8a708ff`), and §4.6 covers the request rules it tightened. The fixture digest rule (§4.3.6) catches any later backend change. These frontend behaviours depend on Spec 16 responses and must not reach `staging` before Spec 16's PR is merged there:
+On 2026-11-07, Spec 16's branch `bump-laravel-13-latest` was not on GitHub and had no PR, so **production** still runs the pre-Spec 16 API, and no staging API exists any more. The rule is therefore about production: a frontend change that relies on a Spec 16 response must not be deployed to production before Spec 16 is. PR 1 and PR 2 don't depend on it: F-1 to F-5 and F-16 match the API both before and after it. PR 3 may: see the "lands" column, where "Spec 16 first" means deployed to production first. The API deploys only through its `production.yml`, by hand, and the frontends through theirs, also by hand, so the user controls the order.
 
-| Spec 16 item | FE effect | FE change in this spec |
-|---|---|---|
-| B-07 receipt cashier name | receipt shows the cashier | none (type already `string`) |
-| B-12/B-13 report rows | sales report student name shows; fewer PII keys | type trims, if any (task 4.3) |
-| B-16 archived inventory | Archived section fills, Unarchive reachable | none |
-| B-21 `credit_balance` | portal dashboard "Credit owed" badge | none |
-| B-22 birthday `Y-m-d` | POS pre-registration edit shows birthday | none |
-| any type correction that matches a post-Spec 16 shape | — | lands in PR 3 or later |
+Every Spec 16 Track B item, checked against both frontends. Items B-01 to B-16 are from Spec 16 §13.2; the rest were checked on 2026-11-07.
 
-PR 1 and PR 2 are independent of Spec 16: F-1 to F-3 match the API both before and after it. That was verified in the former Spec 17 and re-verified in §5.
+| Item | Effect on the frontends | FE change | Lands |
+|---|---|---|---|
+| B-01, B-17, B-18 cross-branch blocks | none on normal flows: every FE path uses same-branch ids | none | any time |
+| B-02 `X-Branch-Id` required | none on normal flows. A deactivated current branch returns 422; `client.ts:53` matches `"No active branch"`, and `EnsureActiveBranch` sends `No active branch selected…`, so the redirect still fires | none | any time |
+| B-03, B-09 locking, atomic writes | no shape change | none | any time |
+| B-04 removes `portal/pre-registrations*` | none: the portal uses `/public/pre-registrations` | none | any time |
+| B-05 year params | January to March rows appear; due dates correct | none | any time |
+| B-07 receipt cashier name | receipt shows the cashier | none (type already `string`) | Spec 16 first |
+| B-08 portal login | a disabled parent with a wrong password sees "Invalid credentials." | none | any time |
+| B-10 literal wildcards | `%` and `_` match literally in search boxes | none | any time |
+| B-11 credit limit | near-limit count follows System Settings | none | any time |
+| B-12, B-13 report rows | sales student column fills; fewer PII keys | type trims (task 4.4) | Spec 16 first |
+| B-14, B-15 | none on normal flows | none | any time |
+| B-16 archived inventory | Archived section fills, Unarchive reachable | none | Spec 16 first |
+| B-19 inventory export | Export stops failing | none | Spec 16 first |
+| B-20 menu delete with sales | 422 instead of 500; `menu-mgmt-tab.tsx:498` already shows `err.message` | none | any time |
+| B-21 `credit_balance` | portal dashboard "Credit owed" badge | none | Spec 16 first |
+| B-22 birthday `Y-m-d` | POS pre-registration edit shows the birthday | none | Spec 16 first |
+| B-23 `Forbidden.` / `Not found.` | toast text changes; no FE code or test depends on the old text (searched both apps) | none | any time |
+| B-24 other-branch menu items | 422 at checkout; `cart-panel.tsx:197` shows `err.message`. F-3 stops it happening from a branch switch | none | any time |
+| B-25 spending summary | no month overflow | none | any time |
+| B-26, B-27 list input | §4.6 | none | any time |
+| any type correction that matches a post-Spec 16 shape | | task 4.4 | PR 3 or later, Spec 16 first |
+
+**Local testing already sees the post-Spec 16 API,** because Sail runs that branch. So a screen can look right locally and still be wrong in production until Spec 16 is deployed. The Spec 16 first rows are the ones to watch.
+
+### 4.10 Always align to the latest backend (Req 2.12–2.15; user, 2026-11-07 and 2026-11-08)
+
+During this spec's drafting the backend moved 10 commits in one day, including a Laravel upgrade (13.39 to 13.40) and an input-handling refactor. **No snapshot of the backend is kept. The running Laravel app is checked directly** (user, 2026-11-08). A fixture is only evidence while the backend's contract suite still passes against it.
+
+#### 4.10.1 Before every step
+
+From `~/sunbites-api`:
+
+```bash
+git branch --show-current; git rev-parse --short HEAD
+vendor/bin/sail artisan --version
+git status --short -- app routes bootstrap config database/migrations composer.lock
+```
+
+- The first three values give the commit body's line: `Backend: <branch> <sha>, Laravel <version>`.
+- **`git status` lists a file:** another session is changing the backend. Stop and report. Don't check against code nobody has committed.
+- **The sha differs from your previous commit's `Backend:` line:** run `git log --oneline <previous sha>..HEAD -- app routes bootstrap config database/migrations composer.lock`. If it lists commits, run the contract suite (§4.10.2), then follow §4.10.5 before continuing.
+
+#### 4.10.2 Contract suite
+
+```bash
+cd ~/sunbites-api && docker compose exec -T -u sail -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: laravel.test php vendor/bin/phpunit tests/Feature/Contract --no-progress
+```
+
+It calls every API route on the latest code and fails if a fixture no longer describes the response. On 2026-11-08: `OK (484 tests, 1013 assertions)` in 45 seconds.
+- `docker compose exec` is used instead of `vendor/bin/sail` because Sail can't pass the two `-e` overrides.
+- SQLite in memory can't disturb the shared MySQL test schema, so it's safe while another session runs the MySQL gate.
+- It never writes fixtures. Only `CONTRACT_RECORD=1` does, and that is never used in this spec.
+- **A failure means the fixtures are no longer evidence:** stop and report.
+
+#### 4.10.3 Calling an endpoint directly
+
+Before writing code that reads a response or sends a request, call the endpoint on the local Laravel app. Compare the real JSON with the frontend type and the MSW data.
+
+The call runs inside a database transaction that is rolled back. The dev database has no staff user with a role, so the call makes a throwaway one. Verified on 2026-11-08: afterwards no user, role link, branch link, token or activity row remained.
+
+**Staff route.** Change the role (`admin`, `manager`, `supervisor`, `cashier`) and the path:
+
+```bash
+cd ~/sunbites-api && vendor/bin/sail artisan tinker --execute '
+DB::beginTransaction();
+try {
+    $branch = App\Models\Branch::first();
+    $user = App\Models\User::factory()->create();
+    $user->assignRole("supervisor");
+    $user->branches()->attach($branch);
+    $token = $user->createToken("spec17-check", ["staff"])->plainTextToken;
+    $response = app(Illuminate\Contracts\Http\Kernel::class)->handle(Illuminate\Http\Request::create("/api/v1/students?per_page=1", "GET", server: ["HTTP_ACCEPT" => "application/json", "HTTP_AUTHORIZATION" => "Bearer ".$token, "HTTP_X_BRANCH_ID" => (string) $branch->id]));
+    echo $response->getStatusCode(), PHP_EOL, $response->getContent(), PHP_EOL;
+} finally {
+    DB::rollBack();
+}'
+```
+
+**Parent route.** The path starts with `/api/v1/portal/`. A real seeded parent signs in, so no user is created, and there is no branch header:
+
+```bash
+cd ~/sunbites-api && vendor/bin/sail artisan tinker --execute '
+DB::beginTransaction();
+try {
+    $parent = App\Models\ParentUser::whereHas("students")->first();
+    $token = $parent->createToken("spec17-check", ["parent"])->plainTextToken;
+    $response = app(Illuminate\Contracts\Http\Kernel::class)->handle(Illuminate\Http\Request::create("/api/v1/portal/students", "GET", server: ["HTTP_ACCEPT" => "application/json", "HTTP_AUTHORIZATION" => "Bearer ".$token]));
+    echo $response->getStatusCode(), PHP_EOL, $response->getContent(), PHP_EOL;
+} finally {
+    DB::rollBack();
+}'
+```
+
+For a route with a student id, use one of that parent's students: `$parent->students()->first()->id`.
+
+**Rules:**
+- **GET only.** Never call a write route (POST, PUT, PATCH, DELETE) this way. It can send mail or store files, and the rollback doesn't undo either. For a write route, the response is its fixture (recorded by the backend's own test calling that route) and the request is its Form Request.
+- **Roles.** Call as the lowest role that should pass and the highest that shouldn't. A refusal is 403 with `User does not have the right roles.` Verified: on `GET /system-configurations` (admin only) a manager gets 403 and an admin gets 200.
+- **Error bodies.** Local `APP_DEBUG=true` adds `exception`, `file`, `line` and `trace`. Production doesn't send those, so compare only `message` and `errors`.
+- **One row proves little.** The dev data is seeded (2 branches, 300 students, 231 parents). A `null` field or an empty list in one response doesn't show the field is always null or the list always empty: pick a row that has the value, and read the API Resource class.
+- **Cite it** in the commit body: `Verified: GET /api/v1/students as supervisor, 200`.
+
+#### 4.10.4 Routes and roles
+
+They come straight from Laravel: `vendor/bin/sail artisan route:list --path=api --except-vendor --json`. Roles appear in each route's `middleware` array as `Spatie\Permission\Middleware\RoleMiddleware:admin|manager`. The contract check and the browser gate run this command themselves on every run (Appendix C.2, C.6), so they always use the latest routes.
+
+#### 4.10.5 When the backend changed
+
+When §4.10.1's `git log` lists commits:
+1. Read each one. A change to a response, request rule, route, role or enum that a screen depends on goes in the report.
+2. The spec owner updates this design and Appendix B. A visible effect becomes a proposed F-item for the user.
+3. When `app/Enums` changed, check that every frontend lookup keyed by that enum has an entry for each value (H28).
+4. Continue only when the spec owner says so.
+
+**A Laravel or dependency upgrade** shows as `composer.lock` in that log, and the version in the `Backend:` line changes. It follows the same path, and the release notes are also read for changes to validation, responses or serialization.
+
+**When Spec 16 merges,** the branch name in the `Backend:` line changes. That's expected, and the commits it brings follow the same path.
+
+**Appendix B** was generated on 2026-11-07 against backend `6c800be` (Laravel 13.40.0), by audit scripts that were removed on 2026-11-08. Its rows are findings at that commit. Task 4.3 confirms each one against the current backend, by reading the code and calling the endpoint (§4.10.3).
 
 ## 5. Contract fixes F-1, F-2, F-3 (Req 3; Track B1, PR 2)
 
@@ -448,11 +606,70 @@ Tests 1, 2, 6 and 7 fail before the fix.
 - null → B leaves it unchanged.
 - `beforeEach` calls `clearCart()`, as `cart-panel.test.tsx:65` does. The existing three tests are unchanged.
 
-### 5.4 Staging smoke (PR 2)
+### 5.4 Full-stack smoke (PR 2; how to run it: §20)
 
 - **POS:** Reports → Inventory. The snapshot lists items with badges, and the status filter narrows the list. The History type filter narrows the log, and Next shows other rows when there are more than 25.
 - **Portal:** a ₱1,000+ top-up shows `+PHP 1,000.00`, and purchases are red with a minus sign.
 - **POS:** a multi-branch manager adds items, switches branch and returns to the POS: the cart is empty.
+- **POS (F-4):** Reports → Sales. Choosing Walk-in, then Students, in Customer changes the rows, and the export follows the same choice.
+- **POS (F-5):** Reports → Sales and Reports → Billing. An amount of ₱1,000 or more shows a thousands separator, for example `₱1,500.00`.
+
+### 5.5 F-4 and F-5 (**approved 2026-11-08**; PR 2)
+
+Found on 2026-11-07. Both ran red then green on a clone, with 0 type errors. Neither depends on Spec 16 or Track A, so under Q3 they belong in PR 2.
+
+**F-4: the Sales report Customer filter does nothing.** The page sends `customer_type`; `ExportSalesReportRequest` reads `is_walk_in`, so `validated()` drops it. The dropdown and the export both ignore the choice.
+
+In `app/(kitchen)/reports/sales/page.tsx`, in both the `params` object and the `exportReport` call, replace `customer_type: customerType !== "all" ? customerType : undefined` with:
+
+```ts
+is_walk_in: customerType === "all" ? undefined : customerType === "walk_in" ? 1 : 0,
+```
+
+It must be `1` or `0`: `apiClient` sends `String(v)`, and Laravel's `boolean` rule rejects `"true"` (§1.2).
+
+**F-5: Sales and Billing report money has no thousands separator.** `order.total`, `order.discount_amount` and `row.amount` are decimal strings at runtime (`get__api_v1_reports_sales@ok.json`, `get__api_v1_reports_billing@ok.json`), so `formatPeso` shows `₱1500.00` instead of `₱1,500.00`. `contract-gaps.md` wrongly says these have no effect.
+
+- `lib/api/reports.ts`: in `SalesOrder`, `items[].price`, `discount_amount` and `total` become `string`. In `BillingPayment`, `amount` becomes `string`.
+- `reports/sales/page.tsx`: `Number(order.discount_amount) > 0`, `formatPeso(Number(order.discount_amount))`, `formatPeso(Number(order.total))`.
+- `reports/billing/page.tsx`: `formatPeso(Number(row.amount))`.
+
+**Test.** New file `app/(kitchen)/reports/sales/page.test.tsx`, modelled on `reports/credits/page.test.tsx`. A billing case goes in a new `reports/billing/page.test.tsx`.
+- Use values no summary card shows: a test using `₱1,500.00` passed **before** the fix, because the summary card shows that text. `discount_amount: "1250.00"` and `total: "2750.50"` with small summary numbers, asserting `-₱1,250.00` and `₱2,750.50`.
+- Choosing Walk-In sends `is_walk_in=1`, Registered sends `0`, All Customers sends neither, and `customer_type` is never sent.
+
+### 5.6 F-16: an unenrolled child crashes the portal (**approved 2026-11-08; fixed as a hotfix**)
+
+**The bug.** `components/enrollment-status-badge.tsx` does `const config = statusConfig[status]` and then reads `config.className`, and `statusConfig` has no `unenrolled` entry. The type `StudentSummary["enrollment_status"]` lists only 4 values, so TypeScript can't see the gap.
+
+**Proof, 2026-11-07:**
+- Backend: a throwaway test with a parent linked to an unenrolled student. `GET portal/dashboard` and `GET portal/students` both return `"unenrolled"`. `ParentUser::students()` has no filter.
+- POS: staff can choose it (`students/page.tsx:1598`, `<SelectItem value="unenrolled">`).
+- Portal: the unchanged dashboard renders with an `enrolled` child, and throws `Cannot read properties of undefined (reading 'className')` with an `unenrolled` one.
+- Production: the same code is on `main` in all three repos, and neither app has an `error.tsx`.
+
+**Change** (portal):
+- `types/portal.ts`: `enrollment_status: "enrolled" | "paused" | "unenrolled" | "graduated" | "banned";`
+- `components/enrollment-status-badge.tsx`: add this entry to `statusConfig`, the same label and neutral colours the POS uses:
+  ```ts
+  unenrolled: {
+    label: "Unenrolled",
+    className: "bg-muted text-muted-foreground",
+  },
+  ```
+
+**Test** (failing first): new `components/enrollment-status-badge.test.tsx`, one test per `EnrollmentStatus` value from the backend enum (`enrolled`, `paused`, `unenrolled`, `banned`, `graduated`), each showing its label. Plus, in `app/(portal)/students/page.test.tsx`, a student who is `unenrolled` shows their name and the badge. The dashboard has no page test on `main`, and the Students page renders the same badge.
+
+**Done, 2026-11-08** (user: "fix it"):
+- **Commit:** `81c204e` `fix(portal): stop the crash when a parent has an unenrolled child`, on `hotfix/portal-unenrolled-child-crash`, branched from `main` at `48a1d79`. It's in a separate worktree, `~/sunbites-worktrees/portal-hotfix-unenrolled`, so the user's uncommitted upgrade in `~/sunbites-portal` wasn't touched. **Not pushed.**
+- **Backend, checked directly (§4.10.3):** with a parent's child set to `unenrolled` inside a rolled-back transaction, `GET portal/dashboard` and `GET portal/students` both return 200 with `"unenrolled"`. There is no student detail endpoint: the detail page takes the student from the list, so its header crashed too.
+- **Tests:** both new tests failed before the fix with the production error, `Cannot read properties of undefined (reading 'className')`, and passed after it. Full suite 108/108 three runs in a row, `tsc` 0 errors, ESLint clean, `next build` succeeds.
+- **Delivery** (`.claude/agents/git-workflow.md`, hotfix row): the user pushes the branch, opens a PR to `main`, and merges `main` back into `staging` afterwards. Then remove the worktree with `git -C ~/sunbites-portal worktree remove ~/sunbites-worktrees/portal-hotfix-unenrolled`.
+- **PR 2:** task 2.6 is done by this hotfix. The portal's PR 2 branch is cut from `staging`, so it has the fix once `main` is merged back.
+
+**Open for the user:** whether parents should see an unenrolled child at all. This fix keeps today's data and only stops the crash. Hiding them would be a backend change.
+
+**Full-stack smoke (§20):** unenroll a student in the POS, log in as their parent, and open the dashboard and Students.
 
 ## 6. Behaviour freeze (Req 4)
 
@@ -472,37 +689,49 @@ Every characterization test file covers:
 | Requests | for each query and mutation: method, path, query params (`new URL(request.url).searchParams`) and body (`await request.json()`) |
 | Actions | each button, dialog and form: toast text, dialog open/close, navigation (`next/navigation` mock), and which requests are sent again afterwards (count MSW hits per path) |
 | Roles | for POS screens with gates, one test per distinct role outcome (§4.7) |
+| Enum values | every value in the **backend** enum, not the frontend type, for any `map[value]` lookup (H28). A value that crashes the unchanged screen: stop and report it as an F-item, because Track A can't pin a crash |
 | Render fixtures | `expectRenderFixture("<state-name>")` at each settled state above (§6.2) |
 
-The clock and time zone follow H10. Characterization tests land in their own commit (`test(<area>): characterize … before refactor`) and must pass on unchanged code.
+The clock and time zone follow H10. Typing in a dialog follows H21. Money in mocks follows H25. Characterization tests land in their own commit (`test(<area>): characterize … before refactor`) and must pass on unchanged code.
 
 ### 6.2 Render fixtures (Q6, Req 4.4)
 
-**Helper.** `__tests__/render-fixture.ts`:
-
-```ts
-/**
- * Records or compares the normalised HTML of the whole document body for one settled UI state.
- * No-op unless RENDER_FIXTURES is "record" or "compare". Fixtures are local only (.gitignore),
- * never committed (Spec 17 Q6; testing.md bans committed snapshots).
- */
-export function expectRenderFixture(name: string): void;
-```
+**Helper.** Appendix C.3 is the verified implementation. Copy it to `__tests__/render-fixture.ts`. It exports `expectRenderFixture(name)`, which does nothing unless `RENDER_FIXTURES` is `record` or `compare`.
 
 - **Path.** `.render-fixtures/<test file path relative to the app root>/<name>.html`. Names must be unique within a test file. Because the path includes the test file, **Track A never moves or renames a test file that has fixtures**, even when its screen moves to `_components/`.
 - **Modes:**
   - `record`: write, overwriting.
   - `compare`: read and `expect(actual).toBe(stored)`, so Jest prints a diff. A missing fixture fails with "record it in the characterization commit".
   - unset: nothing. Normal runs and CI are unaffected.
-- **Normalisation, in order:**
-  1. Collect every `id` attribute value in document order and map it to `id-1…n`. Replace the same values wherever they appear in `for`, `aria-labelledby`, `aria-describedby`, `aria-controls`, `aria-owns`, `aria-activedescendant` and `headers` (space-separated lists), and in `href="#…"`.
-  2. Replace `blob:` URLs with `blob:URL`.
-  3. Nothing else. Classes, attributes, attribute order and whitespace stay exact, because they are what "looks the same" means.
+- **Normalisation, in order.** Each rule below exists because a run on identical code differed without it:
+  1. Remove `data-starting-style` and `data-ending-style`. Base UI sets them for one animation frame, so whether a test catches them is timing.
+  2. Set `data-rootownerid` to `owner`. Its value is a generated id.
+  3. Remove `transition: none` from inline `style`, and remove `style` if that leaves it empty. Floating UI sets it briefly while positioning.
+  4. Collect every `id` attribute value in document order and map it to `id-1…n`. Replace the same values wherever they appear in `for`, `aria-labelledby`, `aria-describedby`, `aria-controls`, `aria-owns`, `aria-activedescendant` and `headers` (space-separated lists), and in `href="#…"`.
+  5. Replace `blob:` URLs with `blob:URL`.
+  6. Nothing else. Classes, other attributes, attribute order and whitespace stay exact, because they are what "looks the same" means.
 - **Scope.** `document.body.innerHTML`, which includes portals (dialogs, sheets, popovers) and the sonner live region.
+- **Clock (D-10).** `jest.config.ts` adds this to the `config` object. It applies before any module loads and fakes only `Date`:
+  ```ts
+  ...(process.env.RENDER_FIXTURES || process.env.TEST_CLOCK
+    ? {
+        fakeTimers: {
+          enableGlobally: true,
+          now: Date.parse(process.env.TEST_CLOCK ?? "2026-08-15T04:00:00Z"),
+          doNotFake: [
+            "hrtime", "nextTick", "performance", "queueMicrotask", "requestAnimationFrame",
+            "cancelAnimationFrame", "requestIdleCallback", "cancelIdleCallback", "setImmediate",
+            "clearImmediate", "setInterval", "clearInterval", "setTimeout", "clearTimeout",
+          ],
+        },
+      }
+    : {}),
+  ```
+  `__tests__/clock.ts` exports the same list as `DO_NOT_FAKE` (H10). Keep them as two literals: importing a TypeScript file from `jest.config.ts` failed to load.
 - **Commands:**
   ```bash
-  TZ=Asia/Manila RENDER_FIXTURES=record  npx jest <files>   # characterization commits only
-  TZ=Asia/Manila RENDER_FIXTURES=compare npx jest           # every Track A refactor commit
+  TZ=Asia/Manila RENDER_FIXTURES=record  npx jest --runTestsByPath "<file>"   # characterization commits only
+  TZ=Asia/Manila RENDER_FIXTURES=compare npx jest                             # every Track A refactor commit
   ```
 - **Digest.** Same idea as Spec 16 §4.1.7, run from the app root:
   ```bash
@@ -511,7 +740,7 @@ export function expectRenderFixture(name: string): void;
   ```
   - Characterization commits record `Render fixtures: <count>, digest <d>`.
   - Refactor commits must show the same digest as the previous commit, because fixtures are never re-recorded in a refactor commit.
-- **Ignore.** `.render-fixtures/` goes into `.gitignore`. The fixtures exist on one machine, shared by the spec-owner and implementer sessions. If they are lost mid-spec, re-record from the last characterization commit's code (`git stash`/worktree), never from refactored code.
+- **Ignore.** `.render-fixtures/` goes into `.gitignore`. The fixtures exist on one machine, shared by the spec-owner and implementer sessions. If they are lost mid-spec, re-record from the last characterization commit's code using `git worktree`, never from refactored code and never with `git stash`.
 
 ### 6.3 Coverage (Req 4.5)
 
@@ -564,7 +793,39 @@ export default async function StudentDetailPage({ params }: PageProps<"/students
   - Existing in-file names stay; the screen is the former default export, renamed `XScreen`.
 - **POS student detail (Req 5.2):** `StudentDetailScreen` runs `parsePositiveInt(rawId)` exactly as today, and the `useParams()` fallback is deleted. Its tests render `<StudentDetailScreen rawId="5" />` instead of the page with a `params` object. That is an allowed render-target change (Req 4.3), and the assertions are unchanged.
 - **`type-check` script:** `"next typegen && tsc --noEmit"` in both apps, so `PageProps` exists in CI (D-8).
-- **Scope:** all 40 POS and 13 portal `page.tsx` files. `app/page.tsx` (5 lines, a redirect) keeps its current form if it is already server-safe; task 6.1 verifies this.
+- **Scope:** the 38 POS and 9 portal pages that start with `"use client"`. These 6 are already server components and **stay as they are**: POS `app/page.tsx`, `app/(pos)/page.tsx`; portal `app/page.tsx`, `app/(public)/pre-register/page.tsx` (it exports `metadata`), `app/(auth)/reset-password/page.tsx`, `app/(auth)/activate/page.tsx`.
+- **Moving the file changes relative imports.** `./_components/x` becomes `./x`, `./y` becomes `../y`, and `../z` becomes `../../z`. POS and portal have 4 such imports each. `type-check` finds any you miss.
+- **Files:** `<route>/_components/<kebab-name>-screen.tsx`, from the route's last static segment plus `detail` for a dynamic route (for example `student-detail-screen.tsx`, `create-user-screen.tsx`). The export is the former default function's name with `Page` replaced by `Screen`.
+
+**The 7 dynamic routes** read their params 3 different ways today. All of them end up the same way:
+
+| Route | Today | Screen prop | Screen change |
+|---|---|---|---|
+| POS `students/[id]` | `params` plain prop plus `useParams()` fallback | `rawId` | delete `routerParams` and the fallback; `parsePositiveInt(rawId)` stays |
+| POS `references/parents/[id]` | `const { id: rawId } = useParams<{ id: string }>()` | `rawId` | delete that line; `parsePositiveInt(rawId)` stays |
+| POS `pre-registrations/[id]` | `const params = useParams(); Number(params.id)` | `rawId` | delete `params`; `Number(rawId)` |
+| POS `references/users/[id]` | `const params = useParams(); Number(params.id)` | `rawId` | delete `params`; `Number(rawId)` |
+| POS `announcements/[id]` | `const { id } = use(params)` | `id` | delete `use(params)`. `id` stays a string, because it's in the `["announcement", id]` query key (H2) |
+| POS `reminders/[parentId]` | `const { parentId } = use(params)`; its local `interface PageProps` shadows the global one, so delete it | `parentId` | delete `use(params)` |
+| Portal `students/[id]` | already a thin wrapper around `StudentDetailShell` | none | no screen file: the shell renders `<StudentDetailShell studentId={Number(id)} />` directly |
+
+**Tests that change with the shell (H24), in the same commit:**
+- Static routes: nothing. `render(<Page />)` still works, because a synchronous shell just returns the screen.
+- `student-detail.test.tsx`, `user-detail.test.tsx` and `parent-detail.test.tsx`: import the screen instead of `./page`, and render `<StudentDetailScreen rawId="1" />`, `<UserDetailScreen rawId="1" />` and `<ParentDetailScreen rawId="1" />`. That is 40 identical `render(...)` lines. On the clone, no assertion needed to change. `tasks.md` task 6.1 lists any other dynamic-route test the app has by then.
+- The leftover `useParams` line in those tests' `next/navigation` mock stays. It's harmless, and removing it isn't needed.
+
+**Two checks only a real build can do:**
+- **Route table.** Save the `Route (app)` table from `next build` before the commit and compare after. It must be identical: a route flipping between `○` and `ƒ` is a behaviour change. It was identical on the clone in both apps.
+- **Server smoke.** Run `next start` on an unused port and request every route, including `students/5` and `students/abc`. Each must return the same status as before, with no server error in the log. Stop only the process you started, by its PID. Never `pkill`, which could kill the user's dev servers or another session's.
+
+**Two checks jsdom can't do, before handing over PR 3.** Build the PR's base in a `git worktree`, and use `NEXT_PUBLIC_API_URL=http://localhost:3921/api/v1` for both builds.
+
+Save Appendix C.5 and C.6 into one folder outside all three repos, for example `~/spec17-gates/`.
+
+1. **CSS.** `node ~/spec17-gates/css-diff.cjs <base>/.next/static .next/static`. Exit 1 means a rule was removed or changed, so a class string changed somewhere (H27). Rules that were only added are reported and allowed.
+2. **Real Chrome.** Sail must be up in `~/sunbites-api`, because `serve.sh` reads the routes from Laravel. From `~/spec17-gates/`: start `serve.sh <work dir> <pos base> <pos changed> <portal base> <portal changed>` and keep its PID, then run `node compare.mjs <work dir>`, then stop that PID. It uses a temporary Chrome profile, and a fake API that generates responses from the backend fixtures. It loads every route of both apps, clicks every tab, and compares URL, normalised HTML and console errors. A difference gets a slower second look, to rule out animations. Exit 1 means a screen really differs. A `LOOK` line means same HTML but different pixels, usually a running animation, so open the two screenshots.
+
+These two catch different things. The browser check catches a class changed on an element, and CSS catches a rule that vanished. Both were tested by changing one class on purpose: the browser check failed as it should.
 
 ### 7.2 Auth layouts: `useAuthHydrated()`
 
@@ -589,7 +850,8 @@ export function useAuthHydrated(): boolean {
 - **The layout:** `const hydrated = useAuthHydrated();`, the `mounted` state and its effect are deleted, and the redirect effect checks `if (!hydrated) return;`.
 - **Server and hydration render:** React uses the server snapshot (`false`), so the server HTML and the first client render are `null`, as today (H8). With `sessionStorage`, persist hydrates synchronously when the store is created, so the next render shows the children.
 - **One difference, accepted as behaviour-neutral:** when a layout mounts on a client navigation (for example, `/branch` → `/dashboard`), the children now render in the first frame instead of after a blank frame. The settled UI is identical, and render fixtures compare the settled state.
-- **Tests (layout characterization):**
+- **Why this is safe on the server:** on the server `createJSONStorage` finds no `sessionStorage`, so `useAuthStore.persist` is undefined. `useSyncExternalStore` only calls `getServerSnapshot` there, so the two closures that touch `persist` never run. Verified with `renderToString` then `hydrateRoot`: empty server HTML, no hydration mismatch, then the children.
+- **Tests (layout characterization).** None exists today, so task 5.6 adds them:
   - no token redirects to `/login`;
   - no branch redirects to `/branch`;
   - a cashier in `(kitchen)` redirects to `/pos`;
@@ -738,35 +1000,83 @@ Each hook takes the invalidation set as data, so each caller keeps its own (H13)
   reactCompiler: { environment: { enablePreserveExistingMemoizationGuarantees: true } },
   ```
   `experimental.turbopackRustReactCompiler` is **not** enabled, because it is experimental.
-- **Proof (H14).** Jest runs uncompiled code, so the commit is proved by:
-  1. `npm run build` passing;
-  2. lint with the compiler rules at 0 warnings;
-  3. a compile report from a throwaway script outside the repo (not committed). It runs the plugin over `app/`, `components/` and `hooks/` with its `logger.logEvent` option through Next's bundled Babel (`next/dist/compiled/babel/core`) and lists components that fail to compile. If this spike cannot run, the report is skipped, all manual memo stays (Req 10.3 allows that), and the commit says so;
-  4. the staging smoke checklist in §20.
-- **Memo removal:** `useCallback`/`useMemo` (POS 15 + 2, portal 1) are removed only from components the report shows compiling successfully.
+- **Proof (H14, D-11).** All of these, on the commit that turns it on:
+  1. **The whole suite compiled.** `jest.config.ts` ends with the switch below. `COMPILED_TESTS=1 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest --no-cache` must pass with fixtures unchanged. On the clone: POS 323 of 325 (same known failures, fixed by then), portal 102 of 102, **0 render differences**. It needs no new dependency: `babel-jest` comes with Jest, and `next/babel` with Next.
+  2. `npm run build` passing, with the route table unchanged (§7.1).
+  3. Lint with the compiler rules at 0 warnings.
+  4. The compile report: save Appendix C.4 as `~/spec17-gates/compile-report.cjs`, and run `node ~/spec17-gates/compile-report.cjs` from the app root. Measured on the clone: POS 282 functions compiled and 3 not; portal 80 compiled and 2 not. A function that fails simply stays uncompiled, so nothing breaks. Today's failures: POS `(auth)/branch` screen (value block in `try`), POS student detail screen (value block in `try`, and a dynamic `import()`); portal `student-header.tsx` and `pre-registration-form.tsx` (`try`/`finally`). Line numbers will have moved after the splits.
+  5. The full-stack smoke checklist in §20.
+
+  ```ts
+  /**
+   * COMPILED_TESTS=1 runs the same tests through the React Compiler, because next/jest (SWC) never applies it.
+   */
+  export default async () => {
+    const resolved = await createJestConfig(config)();
+    if (process.env.COMPILED_TESTS !== "1") {
+      return resolved;
+    }
+    const others = Object.fromEntries(
+      Object.entries(resolved.transform ?? {}).filter(([, value]) => !JSON.stringify(value).includes("swc")),
+    );
+    return {
+      ...resolved,
+      transform: {
+        "^.+\\.(js|jsx|ts|tsx|mjs)$": [
+          "babel-jest",
+          {
+            babelrc: false,
+            configFile: false,
+            presets: ["next/babel"],
+            overrides: [
+              {
+                exclude: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"],
+                plugins: [["babel-plugin-react-compiler", { environment: { enablePreserveExistingMemoizationGuarantees: true } }]],
+              },
+            ],
+          },
+        ],
+        ...others,
+      },
+    };
+  };
+  ```
+
+  Test files are excluded because the compiler otherwise rewrites components inside `jest.mock` factories, and `babel-plugin-jest-hoist` rejects the result. `enrollment.test.tsx` still needs the two type renames in H26. They're allowed because no assertion changes.
+- **Memo removal:** `useCallback`/`useMemo` (POS 15 + 2, portal 1) are removed only from components the report shows compiling successfully, and the compiled run must still pass afterwards.
 - **Fixing a component the compiler breaks:** add `"use no memo"` with a one-line reason. Never rewrite it in this commit.
 
 ## 13. Tooling (Req 11)
 
-1. **ESLint and validation:** the portal's `eslint.config.mjs` gains `"coverage/**"` in `globalIgnores`, as the POS has. `quality:validate` changes as in §11.2.
-2. **`tsconfig.json`** (both apps):
-   - `target`: `"ES2017"` → `"ES2022"`;
-   - add `"noFallthroughCasesInSwitch": true`, `"noImplicitOverride": true` and `"forceConsistentCasingInFileNames": true`;
-   - keep `strict` and `allowJs`;
-   - **not added:** `noUncheckedIndexedAccess`, because it forces runtime edits across hundreds of index reads.
+### 13.1 ESLint and validation
 
-   `noEmit` and SWC mean there is no runtime change; type-check must pass.
-3. **CI:** `pr.yml` (both apps) gains, after the test step:
-   ```yaml
-   - name: Build
-     run: npm run build
-     env:
-       NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
-   ```
-   `staging.yml`/`production.yml` stay unchanged (Vercel builds there).
-4. **`undici` (D-5):** `"undici": "^6.29.1"` in devDependencies. The polyfill keeps the same `require("undici")` exports (`fetch`, `Headers`, `Request`, `Response`, `FormData`).
-   - Verify: the full suite passes, and `npm audit` (all deps) shows no high or critical.
-   - If MSW fails on undici 6, stop and use the fallback: a `jest.environment.mjs` extending `jest-environment-jsdom` that copies Node's native `fetch`, `Headers`, `Request`, `Response`, `FormData`, the streams and `TextEncoder`/`TextDecoder` into the jsdom global. Then remove `undici`. Report which path was taken.
+The portal's `eslint.config.mjs` gains `"coverage/**"` in `globalIgnores`, as the POS has. `quality:validate` changes as in §11.2.
+
+### 13.2 `tsconfig.json` (both apps)
+
+- `target`: `"ES2017"` → `"ES2022"`;
+- add `"noFallthroughCasesInSwitch": true`, `"noImplicitOverride": true` and `"forceConsistentCasingInFileNames": true`;
+- keep `strict` and `allowJs`;
+- **not added:** `noUncheckedIndexedAccess`, because it forces runtime edits across hundreds of index reads.
+
+`noEmit` and SWC mean there is no runtime change; type-check must pass.
+
+### 13.3 CI
+
+`pr.yml` (both apps) gains, after the test step:
+```yaml
+- name: Build
+  run: npm run build
+  env:
+    NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+```
+`staging.yml`/`production.yml` stay unchanged (Vercel builds there).
+
+### 13.4 `undici` (D-5)
+
+`"undici": "^6.29.1"` in devDependencies. The polyfill keeps the same `require("undici")` exports (`fetch`, `Headers`, `Request`, `Response`, `FormData`), so `jest.polyfills.ts` doesn't change.
+- **Verified on 2026-11-07:** both suites pass on Node 26 and Node 20 with no other change, and full `npm audit` reports 0 high and 0 critical. It does report 4 low and 26 moderate, of which 2 low and 4 moderate are in production dependencies (`npm audit --omit=dev`). All 6 come from the `shadcn` CLI package and its `ts-morph`, `minimatch` and `deepmerge`. They aren't in this spec's scope, because Req 1.2 and Req 11.4 cover high and critical only. Report them to the user with PR 1.
+- If a test fails on undici 6 anyway, stop and report.
 
 ## 14. Standards documents and steering (Req 12)
 
@@ -914,8 +1224,8 @@ From the compliance register (§4.5–§4.8). Each one is proposed to the user w
 | PR | Branch (each repo) | Base | Contents | Depends on |
 |---|---|---|---|---|
 | 1 | `bump-latest-upgrade-pos` / `-portal` (existing) | `staging` | the upgrade commit; the green-baseline test fixes (POS) | — |
-| 2 | `fix/spec17-contract-fixes` | `origin/staging` after PR 1 merges | F-1 + F-3 (POS), F-2 (portal); one commit each | PR 1 |
-| 3 | `refactor/spec17-code-quality` | `origin/staging` after PR 2 merges | Track A, tasks 3–8; one commit per task | PR 2; Spec 16 merged before PR 3 reaches `staging` if any commit relies on §4.9 |
+| 2 | `fix/spec17-contract-fixes` | `origin/staging` after PR 1 merges | F-1 + F-3 (POS), F-2 (portal), F-4 + F-5 (POS, approved 2026-11-08); one commit each. F-16 shipped separately as a hotfix (§5.6) | PR 1 |
+| 3 | `refactor/spec17-code-quality` | `origin/staging` after PR 2 merges | Track A, tasks 3–8; one commit per step | PR 2; Spec 16 deployed to production before PR 3 is, if any commit relies on §4.9 |
 | 4 | `fix/spec17-track-b2` | `origin/staging` after PR 3 merges | FB-01, FB-02, FB-03, approved FB-04.n and F-4+; one commit each | PR 3 |
 
 - **Commits:** `type(scope): description` under 72 characters, with **no AI attribution trailers** (memory rule, overriding any harness reminder). The body carries the tooling log (Req 13.7), plus the fixture and render digests where §4.3.6/§6.2 apply.
@@ -931,12 +1241,13 @@ This spec uses the same relay as Spec 16:
 - An **implementer** session executes one task, verifies it, commits, stops and reports.
 - The two talk directly via `SendMessage`.
 
-`HANDOFF.md` in this folder holds the non-negotiables, the session start checklist, the commit order, the report format and the stop conditions, modelled on Spec 16's. The spec owner never runs the frontend test suites while the implementer is working in the same repo, because `.render-fixtures/` and `.contract-capture/` are shared.
+`HANDOFF.md` in this folder holds the non-negotiables, the session start checklist, the commit order, the report format and the stop conditions, modelled on Spec 16's. The spec owner never runs the frontend test suites while the implementer is working in the same repo, because `.render-fixtures/` and `.contract-capture/` are shared. The implementer checks the backend directly before every step (§4.10), and copies Appendix C code only where a task says to.
 
 ## 18. Integration points
 
 | Depends on | Contract |
 |---|---|
+| Latest backend | the running Laravel app, checked directly (§4.10) |
 | Spec 16 contract fixtures | `~/sunbites-api/tests/Fixtures/contracts/*.json`, format §4.2, read-only |
 | Backend routes | `route:list --path=api --except-vendor --json` |
 | Spec 16 Track B responses | §4.9 |
@@ -960,17 +1271,38 @@ This spec exposes no new API. New internal contracts:
 
 ## 20. Migration and rollout
 
-- No schema or API change. Vercel deploys each PR's merge to `staging`, then `production` via `production.yml` (manual `DEPLOY`).
-- **Ordering:** PR 1 (security) first, as soon as it is green. PRs 2–4 in order (§16). Spec 16 before any PR 3 commit that relies on §4.9.
-- **Staging smoke after PR 3** (refactor and compiler), per app:
-  - log in;
-  - switch branch (POS);
-  - for each top-level route, open it and run its main action: checkout with QR, top-up, settle credit, enrol a student, approve a pre-registration, run each report and export, edit inventory, edit a user, send reminders, post an announcement;
-  - portal: dashboard, a student's four tabs, feedback, profile photo, notifications, meal plan, the public pre-registration form;
-  - print a QR card (H17).
+- No schema or API change. A merge to `staging` runs the frontends' `staging.yml`. Production deploys only by hand, through `production.yml` with the input `DEPLOY`.
+- **Ordering:** PR 1 (security) first, as soon as it is green. F-16 as a hotfix to `main`, approved 2026-11-08 (§5.6). PRs 2–4 in order (§16). Spec 16 reaches production before any frontend change that relies on it (§4.9).
 
-  Any visible difference blocks promotion to `production`.
-- **Rollback:** revert the PR (or one commit: each task is one commit; the compiler is its own commit) and redeploy.
+### 20.1 Full-stack smoke
+
+The staging API is gone, so this runs on the user's machine **before a PR is merged**. It's the only check against the real backend with a real login.
+
+**Set up:**
+1. `~/sunbites-api`: Sail up, on the latest backend, with no uncommitted backend changes (§4.10.1).
+2. Each app, on the PR's branch, as a production build, because `next dev` isn't the code that ships:
+   ```bash
+   npm ci && npm run build
+   npm start              # POS on 3000
+   npm start -- -p 3001   # portal on 3001
+   ```
+   The ports matter: `config/cors.php` allows only 3000 and 3001 locally. `.env.local` already points at `http://api.sunbites.test/api/v1`.
+
+**After PR 3** (refactor and compiler), per app:
+- log in;
+- switch branch (POS);
+- for each top-level route, open it and run its main action: checkout with QR, top-up, settle credit, enrol a student, approve a pre-registration, run each report and export, edit inventory, edit a user, send reminders, post an announcement;
+- portal: dashboard, a student's four tabs, feedback, profile photo, notifications, meal plan, the public pre-registration form;
+- print a QR card (H17).
+- **Only a person can check these, so they aren't optional:** a real barcode scanner at checkout, the student photo camera, live notifications arriving without a refresh (Reverb), a Safari or iPhone pass on the portal and on the POS parent detail page (B.6), and the print preview of a batch of QR cards.
+
+Any visible difference blocks the merge.
+
+**What this can't show:** production-only behaviour. In production the password rules are stricter (B.4), and the data is real. After each production deploy, the user logs in to both apps and opens the dashboard.
+
+### 20.2 Rollback
+
+Revert the PR (or one commit: each task is one commit; the compiler is its own commit) and run `production.yml` again.
 
 ## 21. Error handling
 
@@ -980,23 +1312,35 @@ This spec exposes no new API. New internal contracts:
 
 ## 22. Testing strategy and gates
 
+**Before every step:** the backend checks in §4.10.1. A stop condition there means stop.
+
 **Per commit, in the app it touches (all must pass):**
 
 ```bash
-npm run type-check          # next typegen && tsc --noEmit (from task 3.2)
-npm run lint                # 0 errors; 0 warnings from task 6.8 (quality:validate)
-npx jest --ci               # full suite
-npm run build
-npm run test:contract       # from task 4.1; when the commit touches lib/api, types, mocks or tests
+npm run type-check                                # next typegen && tsc --noEmit (from task 3.2)
+npm run lint                                      # 0 errors; 0 warnings from task 6.8 (quality:validate)
+npx jest --ci                                     # full suite (about 5 s POS, 2 s portal)
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1 npm run build   # on the command line only, never exported (H22)
+npm run test:contract                             # from task 4.1, every commit: it's cheap
 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest   # every Track A refactor commit
 ```
+
+Also, per §7.1: the route table on tasks 6.1 and 7, and the server smoke on tasks 6.1 and 7. On task 7: `COMPILED_TESTS=1 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest --no-cache`. Before PR 3's handover: `css-diff.cjs` and `compare.mjs` (§7.1, Appendix C.5 and C.6).
 
 - **Flake gate:** full suite 3 consecutive runs for the baseline (Req 1.5) and before each PR is handed to the user.
 - **Test types:**
   - component and screen tests (React Testing Library + MSW) for everything;
   - unit tests for `lib/format.ts`, `lib/permissions.ts`, `lib/queries` key factories (key equality with today's literals), `useAuthHydrated`, `fetchAuthorizedImageUrl` and the contract-check comparator (one test per K-rule in §4.3.2, run with plain Jest against small inline fixtures);
   - no end-to-end framework (none exists; adding one is out of scope).
-- **Track B:** red-green per item (`superpowers:test-driven-development`).
+- **Track B:** red-green per item (`superpowers:test-driven-development`). A test that passes before the fix proves nothing: that happened with the first F-5 test (§5.5).
+- **CI versus local:** CI runs Node 20 and UTC, and this machine ran Node 26 and Manila time. Both passed on 2026-11-07, but only the user's PR CI run proves Node 20 for a given commit. Run `TZ=UTC npx jest --ci` before handing over each PR.
+- **Final QA under a faked clock** (the user's standard from Spec 16), before handing over PR 3 and PR 4. Each date must add no failure:
+  ```bash
+  for d in 2026-01-31 2026-04-15 2026-05-15 2026-06-30 2026-12-31 2028-02-29; do
+    TZ=Asia/Manila TEST_CLOCK="${d}T04:00:00Z" npx jest --ci --silent
+  done
+  ```
+  On 2026-11-07 the existing tests passed on all of them. The new characterization tests are what this protects. A failure is a test depending on today's date (H10) or a real date bug: report which.
 
 ## 23. Mandatory tooling (Req 13)
 
@@ -1021,60 +1365,691 @@ Measured with `jest --coverage` (a file counts as untested when no test imports 
 
 ## Appendix B: Compliance register
 
-Seeded on 2026-10-31. Task 4.3 re-checks every row and fills in "Verified" and "Resolution". The spec owner then updates this appendix, and any F-item goes to the user for approval.
+Generated on 2026-11-07 by audit scripts against backend `6c800be` (Laravel 13.40.0). The scripts were removed on 2026-11-08, so these rows are findings at that commit. Task 4.3 confirms each one against the current backend (§4.10.3).
 
-### B.1 Response shapes
+### B.0 Decisions waiting for the user
 
-| # | Route | Field | Backend (fixture) | FE type | Seed status | Verified | Resolution |
-|---|---|---|---|---|---|---|---|
-| 1 | `GET reports/inventory` | `items`, `items[].status`, `summary.total_items` | `items` list, status uppercase (`InventoryItem::status`) | `data`, lowercase union | F-1 | 2026-10-31 | F-1 (PR 2) |
-| 2 | `GET portal/students/{student}/wallet` | `data[].amount` | `string:decimal2` | `number` | F-2 | 2026-10-31 | F-2 (PR 2) |
-| 3 | `GET reports/sales` | `data[].student.full_name`; PII keys | fixed by Spec 16 B-12/B-13 | `string` | resolved by Spec 16? | | |
-| 4 | `POST pos/checkout` (+ transactions, void, student orders) | `order.cashier.name` | fixed by Spec 16 B-07 | `string` | resolved by Spec 16? | | |
-| 5 | `GET references/inventory` | archived rows | fixed by Spec 16 B-16 | page expects them | resolved by Spec 16? | | |
-| 6 | `GET portal/dashboard` | `students[].credit_balance` | fixed by Spec 16 B-21 | read at `dashboard/page.tsx:78` | resolved by Spec 16? | | |
-| 7 | `GET/PATCH pre-registrations/{preRegistration}` | `data.birthday` | fixed by Spec 16 B-22 (`Y-m-d`) | `string` | resolved by Spec 16? | | |
-| 8 | many | decimal fields (`OrderResource` money, `StudentResource.total_spent`/`credit_balance`, inventory quantities, `BranchMonthlyAmount.amount`, report rows) | `string:decimal2` | `number` | document-only (H1) | | A or F |
-| 9 | `GET pos/transactions` | `summary.total_revenue` | `number` | `string` | no visible effect | | |
-| 10 | `GET students`, `GET students/{student}` | `contacts[].email` | `null` possible | `string` | no visible effect | | |
-| 11 | `GET students/{student}` | `activity_logs[].properties` | `[]` when empty | `Record<string, unknown>` | no visible effect | | |
-| 12 | `GET auth/user`, `POST auth/login` | `full_name` | absent | `AuthUser.full_name: string` | no visible effect | | |
-| 13 | `PUT branches/{branch}` | `staff_count`, `student_count`, `orders_today`, `deleted_at` | absent | `AdminBranch` | no visible effect | | |
-| 14 | `GET users`, `GET users/{user}` (non-admin) | `daily_rate` | absent | `string \| null` | no visible effect | | |
-| 15 | `GET references/inventory`, `GET pos/inventory` (+ mutations) | `inventory_status` | absent | `InventoryItem.inventory_status` | no visible effect | | |
-| 16 | `POST/PUT students/{student}/contacts…` | `portal_status` | absent | `PortalStatus` | no visible effect | | |
-| 17 | `GET references/feedback` | `student_id`, `branch_id` | absent | declared | no visible effect | | |
-| 18 | `GET reminders/parents/{parent}` | `payment_history[].status` | can be `"voided"` | `"paid" \| "unpaid"` | no visible effect | | |
-| 19 | `PATCH pre-registrations/{preRegistration}` | `duplicate_warning`, `existing_student_name`, `approved_by`/`rejected_by` | absent / user ids | `PreRegistrationDetail` | no visible effect | | |
-| 20 | `PATCH/POST students/{student}/payments…`, `…/void` | response body | partial objects | `MonthlyPayment` | no visible effect | | |
-| 21 | `POST students/{student}/payments/range` | `payments[]` | raw models | `MonthlyPayment[]` | no visible effect | | |
-| 22 | `POST/PUT branch-monthly-amounts…`, `GET branch-monthly-amounts` | body, `[].amount` | raw model; decimal string or number | `BranchMonthlyAmountConfig` | no visible effect | | |
-| 23 | `GET reports/inventory` | `discrepancy[].net_change` | `number` | `string` | no visible effect | | |
-| 24 | `GET/PATCH portal/profile`, `POST portal/auth/login` | `created_at` | absent | `AuthParent.created_at` | no visible effect | | |
-| 25 | `GET portal/dashboard` | 9 student fields absent; `recent_orders[].payment_method` all methods | absent / wider enum | `StudentSummary`; `"wallet" \| "cash"` | no visible effect | | |
-| 26 | `GET portal/students` | `data[].enrollment_status` | can be `"unenrolled"` | 4-value union | no visible effect | | |
-| 27 | `POST portal/feedback` | `admin_reply`, `replied_at` | absent in 201 | `FeedbackItem` | no visible effect | | |
-| 28 | 422 envelopes without `message` | `message` | absent | `ApiError.message: string` (both apps) | new (this audit) | | |
-| 29 | portal login 403 | `error` | `"account_not_activated" \| "account_disabled"` | `string` | new (this audit) | | |
+Each one changes what someone sees, so none is done until the user approves it. "Backend" means it needs a backend change, which this spec can't make (Req 2.11), so it would be a proposed Spec 16-style item.
 
-### B.2 Requests (task 4.3 fills in)
+| ID | What users see today | Evidence | Recommended | Where |
+|---|---|---|---|---|
+| **F-16** | **A parent whose child is unenrolled can't use the portal: the dashboard and Students list crash.** Parents land on the dashboard after login, and there's no error screen yet. **Live on production `main`** | §5.6. Proven at both ends: the backend sends `unenrolled`; the portal throws | **Approved 2026-11-08. Fixed as a hotfix,** `81c204e`, not pushed yet | Hotfix |
+| F-4 | **Sales report Customer filter does nothing,** on screen and in the export | sends `customer_type`, backend reads `is_walk_in` | Fix (§5.5), **approved 2026-11-08** | PR 2 |
+| F-5 | **Sales and Billing money shows `₱1500.00`** instead of `₱1,500.00` | decimal string reaches `formatPeso` | Fix (§5.5), **approved 2026-11-08** | PR 2 |
+| F-6 | **Announcements list shows only the newest 15.** Older ones can't be reached: no paging on screen | asks `per_page: 50`, `AnnouncementController` is fixed at `paginate(15)` | Backend: read `per_page`, as `ListParentsRequest` does | Backend |
+| F-7 | **Staff notifications page shows only the newest 20,** no paging | asks `per_page: 50`, `StaffNotificationController` is fixed at `paginate(20)` | Backend: read `per_page` | Backend |
+| F-8 | **Announcement staff recipients stop at 20,** so later staff can't be picked. `GET users` also includes deactivated staff (`withTrashed`) | asks `per_page: 100`, `UserManagementController` is fixed at `paginate(20)` | Backend: read `per_page`. Decide about deactivated staff | Backend |
+| F-9 | **A supervisor can open Create Announcement but sees "No recipients found"** and can't send: `recipient_ids` requires at least 1 | page calls `GET users` and `GET references/parents`, both admin\|manager; `POST announcements` allows supervisor | Decide: let supervisors list recipients (backend), or hide Create from them (PR 4) | Either |
+| F-10 | **A supervisor sees Parents in the nav and gets an error page** | nav hides only Users and System Settings; `GET references/parents` is admin\|manager | Hide the link | PR 4 |
+| F-11 | **A supervisor sees Archive and Unarchive on inventory, and gets an error toast** | no UI gate; both routes are admin\|manager | Hide the buttons | PR 4 |
+| F-12 | **A supervisor can start a subscription downgrade and gets an error toast** | `canChangeType` allows supervisor; `POST downgrade-subscription` is admin\|manager | Decide: hide that direction (PR 4), or allow supervisors (backend) | Either |
+| F-13 | **UI hides actions the backend allows** (no error; table B.3, "hidden"). A supervisor could still call these directly, for example deleting a student | B.3 | Decide per row: leave the UI and narrow the backend, or widen the UI. **Security-relevant if the UI is the intended rule** | Backend |
+| F-14 | **Branches and Subscription Config appear in the nav for non-admins, then bounce them away** | page redirects when `!isAdmin` | Hide the links | PR 4 |
+| F-15 | **Forms let through what the backend then refuses** (B.4). Most visible: a password like `Password1` passes the form and works locally, and production alone refuses it | B.4 | Align at least the password rules. The length limits are low priority | PR 4 |
+| OPS-1 | **The frontends' staging sites have no API now.** `staging.yml` in both apps still deploys on every push to `staging`. `pos-staging` already returns 404, and `portal-staging` responds but can't log in. Steering D7 says this belongs to Spec 17 | §1.2 | **Decided 2026-11-08: leave as is.** The staging sites still exist on Vercel (user). Spec 17 doesn't touch `staging.yml`, the Vercel projects, steering D7 or `config/cors.php` for this | — |
+| F-17 | **Public pre-registration shows the date the app was built, then corrects itself,** logging a hydration error. `/pre-register` is prerendered, and `pre-registration-form.tsx:945` prints `new Date()` | React error #418 in Chrome with a later client date. React recovers, so the page still works | Low priority: render the date after mount | PR 4 |
 
-| # | FE function | Method + path | Route exists | FE keys | Form Request keys | Mismatch |
-|---|---|---|---|---|---|---|
-| 1 | `reportApi.inventory` (history) | `GET reports/inventory` | yes | `log_type`, `history_page` | `type`, `page` | F-1 |
+### B.1 Response shapes (147 typed calls compared; 78 mismatches)
 
-### B.3 Role gates (task 4.3 fills in)
+**Visible today:**
 
-| Capability | FE roles (file:line) | Backend route(s) + `role:` | Match |
+| Route | Field | Backend | FE type | Resolution |
+|---|---|---|---|---|
+| `GET reports/inventory` | `items`, `items[].status` | `items` list; `OK`/`LOW`/`OUT`/`OVER` | `data`, lowercase union | F-1 |
+| `GET portal/students/{student}/wallet` | `data[].amount` | `string:decimal2` | `number` | F-2 |
+| `GET reports/sales` | `data[].total`, `discount_amount`, `items[].price` | `string:decimal2` | `number` | F-5 (approved) |
+| `GET reports/billing` | `data[].amount` | `string:decimal2` | `number` | F-5 (approved) |
+
+**No visible effect: correct the type in task 4.4 (Track A).** Change the type and let `tsc` find the readers. If it flags a reader that would then behave differently, stop and report it.
+
+| Route | Field | Backend | FE type |
 |---|---|---|---|
+| `GET branch-monthly-amounts` | `[].amount` | `string:decimal2` or number | `number`; read with `Number()` |
+| `POST`, `PUT branch-monthly-amounts…` | `amount`; `label`, `is_configured` | decimal string; absent | `number`; declared |
+| `GET enrollment` | `school_month_defaults` | map | list; **no reader** |
+| `GET students/{student}` | `monthly_payments[].voided_at`, `void_reason` | absent | declared; the screen reads them from `GET …/payments`, which sends them |
+| `GET students/{student}` | `contacts[].email` | can be null | `string` |
+| `GET students/{student}`, `GET reports/activity` | `properties` | `[]` when empty | `Record<string, unknown>` |
+| `GET students/{student}/orders` | `links` | absent | declared; **no reader** |
+| `PATCH …/payments/{payment}`, `…/void`, `POST …/payments`, `…/range` | response body | partial objects | `MonthlyPayment`; callers refetch |
+| `GET pos/transactions` | `summary.total_revenue` | number | `string`; read with `parseFloat` |
+| `GET reports/inventory` | `discrepancy[].net_change` | number | `string` |
+| `GET auth/user`, `POST auth/login` | `full_name` | absent | declared; no reader on `AuthUser` |
+| `PUT branches/{branch}` | `staff_count`, `student_count`, `orders_today`, `deleted_at` | absent | declared; list is refetched |
+| `POST`, `PUT students/{student}/contacts…` | `portal_status` | absent | declared; list is refetched |
+| `GET references/feedback` | `data[].student_id`, `branch_id` | absent | declared |
+| `GET references/inventory`, `GET pos/inventory`, adjust, create, update | `inventory_status` | absent | declared |
+| `GET references/parents/{parent}` | `students_count` | absent | declared; only the list row reads it, and the list sends it |
+| `PATCH pre-registrations/{preRegistration}` | `duplicate_warning`, `existing_student_name` | absent | declared; the warning comes from the GET |
+| `POST users` | `daily_rate` | absent for a non-admin actor | `string \| null` |
+| `POST references/inventory`, `POST pos/menu-items`, `POST users` | `is_archived`; `is_available`, `sort_order`; `is_active` | null on create | non-null; lists are refetched |
+| `POST`, `GET`, `PATCH portal/auth/login`, `portal/profile` | `created_at` | absent | declared |
+| `GET portal/dashboard` | `students[]`: `first_name`, `last_name`, `section`, `birthday`, `notes`, `qr_code`, `photo_url`, `allergies`, `subscription_monthly_status` | absent | declared |
+| `POST portal/feedback` | `admin_reply`, `replied_at` | absent in the 201 | declared; list is refetched |
 
-### B.4 Form schemas vs Form Requests (task 4.3 fills in)
+**Resolved by Spec 16 once it's merged (§4.9):** B-07 `order.cashier.name`, B-12/B-13 sales rows, B-16 archived inventory, B-21 `credit_balance`, B-22 `birthday`. The fixtures already show the fixed shape, so the audit no longer flags them.
 
-| Schema | Form Request | Difference | Resolution |
+**Enum values** the types don't fully list (fixtures record `string`, so read from the backend):
+- `portal/dashboard` and `portal/students` `enrollment_status` can be `unenrolled`. **This crashes the screen: F-16.** `contract-gaps.md` wrongly says no effect.
+- `reminders/parents` `payment_history[].status` can be `voided`, and `portal/dashboard` `recent_orders[].payment_method` can be any `PaymentMethod`. Their readers have a fallback, so task 4.4 widens the unions if `tsc` stays clean.
+
+A scan of every unguarded `map[value]` lookup found 10 on 2026-11-07, and every other map's keys cover its backend enum.
+
+**Error bodies:** `ApiError.message` is typed `string`, but 4 kinds of 422 omit it (§4.8). The portal login `error` is `account_not_activated` or `account_disabled`, and both strings match `Portal/AuthController.php:30,43`. No code or test depends on the old 403 text (B-23).
+
+### B.2 Requests (148 of 148 calls have a route)
+
+| Route | FE sends | Backend reads | Verdict |
 |---|---|---|---|
+| `GET reports/inventory` | `log_type`, `history_page` | `type`, `page` | **F-1** |
+| `GET reports/inventory` | `include_logs`, `include_discrepancy` | nothing | Harmless; F-1 leaves them alone |
+| `GET reports/sales`, `…/export` | `customer_type` | `is_walk_in` | **F-4** (approved) |
+| `GET announcements` | `per_page` | fixed 15 | **F-6** (proposed) |
+| `GET staff/notifications` | `per_page` | fixed 20 | **F-7** (proposed). The bell asks for 20, so it's unaffected |
+| `GET users` | `per_page` | fixed 20 | **F-8** (proposed) |
+| `GET references/feedback` | `branch_id` | nothing | Declared in the type, never sent. Harmless |
+| `POST auth/password/reset`, `POST users`, portal `profile/change-password`, `auth/password/reset` | `password_confirmation` | `confirmed` rule | False positive |
+| `PUT system-configurations/{key}` | `value` | rules built in a `match` | False positive |
+| `GET students/{student}/ledger` | `page` | paginator helper | False positive |
+
+**Traced by hand in task 4.3:** `PATCH pre-registrations/{preRegistration}`. Its payload is built field by field at `pre-registrations/[id]/page.tsx:298`; compare those field names with `UpdatePreRegistrationRequest`.
+
+### B.3 Role gates
+
+Backend roles are from `route:list --json` on 2026-11-07; confirm a row by calling the route as the role (§4.10.3). Roles are written a, m, s for admin, manager, supervisor. Task 6.5 creates one capability per row, spelled as here, with **today's UI roles** (H19).
+
+| Capability | UI roles | Where (locate by snippet) | Backend route | Backend roles | Match |
+|---|---|---|---|---|---|
+| `students.toggle-payment` | a, m | `students/page.tsx` `canTogglePayment`; `students/[id]` `canTogglePayment` | `PATCH students/{s}/payments/{p}`, `POST …/payments`, `PATCH …/amount`, `…/void` | a\|m | yes |
+| | | also gates Add Subscription Period | `POST students/{s}/payments/range` | a\|m\|s | **hidden** from s |
+| `students.manage-status` | a, m | `students/[id]` `canManageStatus` | `PATCH students/{s}/status` | a\|m\|s | **hidden** from s |
+| `students.waive-credit` | a | `students/[id]` `canWaiveCredit` | `POST students/{s}/credit/waive` | a | yes |
+| `students.void-top-up-any-day` | a | `wallet-tab.tsx` `isAdmin`, used by `disabledBySameDayWindow` | `POST …/wallet/top-ups/{t}/void` | same-day rule in the backend action | yes |
+| `students.change-type` | a, m, s | `students/[id]` `canChangeType` | `PATCH students/{s}/type` | a\|m\|s | yes |
+| | | also reaches downgrade | `POST students/{s}/downgrade-subscription` | a\|m | **shown** to s (F-12) |
+| `students.delete` | a | `students/[id]` `canDeleteStudent` | `DELETE students/{s}` | a\|m\|s | **hidden** from m, s |
+| `students.manage-contacts` | a, m, s | `students/[id]` `canManageContacts` | `…/contacts*` | a\|m\|s | yes |
+| `students.resend-activation` | a, m | `students/[id]` `canResendActivation` | `…/contacts/{c}/resend-activation` | a\|m\|s | **hidden** from s |
+| `students.void-top-up` | a, m, s | `wallet-tab.tsx` `canVoidTopUp` | `POST …/wallet/top-ups/{t}/void` | a\|m\|s | yes |
+| `pre-registrations.edit` | a, m, s | `pre-registrations/[id]` `canEdit` | `PATCH`, `…/reactivate` | a\|m\|s | yes |
+| `pre-registrations.act` | a, m | `pre-registrations/[id]` `canActOnPending` | `…/approve`, `…/reject` | a\|m | yes |
+| `reminders.send` | a, m | `reminders/page.tsx` `canSend` | `POST reminders/send` | a\|m | yes |
+| `nav.reminders`, `nav.announcements`, `nav.pre-registrations` | a, m, s | `app-nav-sheet.tsx` | `GET reminders/eligible-parents`, `GET announcements`, `GET pre-registrations` | a\|m\|s | yes |
+| | | Create Announcement page | `GET users`, `GET references/parents` | a\|m | **shown** to s (F-9) |
+| `nav.reports-all` | a, m | `app-nav-sheet.tsx` `reportsNavFiltered`; s gets `SUPERVISOR_ALLOWED_REPORTS` | analytics, wallet, credits, daily-summary, activity | a\|m | yes |
+| `nav.reports-supervisor` | a, m, s | `SUPERVISOR_ALLOWED_REPORTS` | sales, students, inventory, billing, subscription | a\|m\|s | yes |
+| `reports.export` | a, m | each report page, `isAdmin \|\| isManager` | `GET reports/*/export` | a\|m | yes |
+| `nav.users` | a | `app-nav-sheet.tsx` `referencesNavFiltered` | `GET users`, `POST users` | a\|m | **hidden** from m |
+| `users.edit` | a | `users/[id]` `isAdmin` | `PUT users/{u}`, deactivate, reactivate, reset-password | a | yes |
+| (users pages, branch list) | no gate | `users/create`, `users/[id]` `branchApi.list` | `GET branches` | a | **shown** to m, by URL only (nav hides it) |
+| `nav.system-settings` | a | `app-nav-sheet.tsx` | `GET`, `PUT system-configurations` | a | yes |
+| `references.branches` | a | `branches/page.tsx` redirect | `GET branches`, `PUT`, toggle | a | yes; nav link bounces (F-14) |
+| `references.subscription-config` | a | `subscription-config/page.tsx` redirect | `GET pos/subscription-config` a\|m; `branch-monthly-amounts` a\|m\|s | | **hidden** from m, s; nav link bounces (F-14) |
+| `references.meal-planner-edit` | a, m | `meal-planner/page.tsx` `canEdit` | `PATCH references/meal-planner`, reset, week-visibility | a\|m | yes |
+| (parents page) | no gate | nav shows it to s | `GET references/parents` | a\|m | **shown** to s (F-10) |
+| (inventory archive) | no gate | `references/inventory/page.tsx` | `PATCH …/archive`, `…/unarchive` | a\|m | **shown** to s (F-11) |
+| `pos.menu-tab` | a, m | `(pos)/pos/page.tsx` `TABS` | `POST pos/menu-items` and the rest | a\|m | yes |
+| `pos.inventory-tab` | a, m, s | `(pos)/pos/page.tsx` `TABS` | `GET pos/inventory`, adjust | a\|m\|s | yes |
+| `pos.void-order` | a, m, s | `transaction-history-tab.tsx` `canVoid` | `POST pos/transactions/{o}/void` | a\|m\|s | yes |
+| `pos.discount` | a, m | `cart-panel.tsx` `canApplyDiscount` | `POST pos/checkout` (any staff; rule in the action) | any | yes |
+| `pos.delete-last-item` | a, m, s | `use-pos-keyboard-shortcuts.ts` | none: UI only | | n/a |
+| `enrollment.pick-branch` | a | `enrollment/page.tsx` `isAdmin` | `POST enrollment` | a\|m\|s | UI choice |
+| `branch.list-all` | a | `(auth)/branch/page.tsx` `isAdmin` | `GET branches` | a | yes |
+| `pos.cashier-only` | cashier | `(kitchen)/layout.tsx`, `lib/auth-utils.ts` | routing, not a permission (§4.7) | | n/a |
+
+### B.4 Form schemas vs Form Requests
+
+Read side by side on 2026-11-07. **No frontend rule blocks input the backend needs, and no form leaves out a field the backend requires** (an audit of 77 routes on 2026-11-07, validated by removing fields from a copy of its input and seeing them reported). Every difference below means the frontend lets something through that the backend then refuses, and the screen shows the backend's message, so nothing is lost or saved wrongly. Changing a frontend rule changes behaviour, so Track A leaves them all alone. F-15 proposes aligning them.
+
+| Form | Frontend | Backend | What a user can hit |
+|---|---|---|---|
+| Portal change password; POS and portal reset password | `min(8)` only | `Password::defaults()`: **in production also mixed case, numbers, symbols, not breached**; elsewhere mixed case and numbers | **Most visible.** `Password1` passes the form and works locally, then production refuses it, so it can't be seen before production |
+| POS user create | `min(8)`, an uppercase, a digit | `min(8)->mixedCase()->numbers()` | All-capitals plus a digit passes the form, then 422 |
+| POS enrollment contacts | `full_name` max 255, `address` max 500, `email` max 255, `relationship` no max | 150, 255, 150, 100 | Long values pass the form, then 422 on `contacts.*` |
+| POS enrollment contacts | `phone` must match `PH_PHONE_RE` | `max:30` | **Frontend stricter:** a landline is refused here, but the portal pre-registration form accepts it. Possibly intended |
+| Portal pre-registration | `birthday` required | `before:today` | A future date passes the form, then 422. POS enrollment does check this |
+| POS menu item | `price` must be valid; `name` no max | `max:9999.99`; 255 | A price of ₱10,000 passes the form, then 422 |
+| POS inventory create, edit, adjust | no max on `name`, `unit`, `reason` | 255, 50, 255 | Long values pass the form, then 422 |
+| POS branch edit | `name` no max | 255 | Same |
+| POS user create, edit | no max on any text field | 30 to 255 | Same |
+| Portal profile | no max on `first_name`, `last_name`, `phone`, `address` | 100, 100, 30, 255 | Same |
+| Portal feedback | `message` min 10, no max | `max:2000` | A message over 2,000 characters passes the form, then 422 |
+
+Matching rules: Zod enums on status, type, category and payment fields; grade levels (the POS reads them from `GET enrollment`); `contacts` min 1, max 3 (the POS caps it in the UI); subscription months and years (`superRefine` in the portal); `rating` 1 to 5.
 
 ### B.5 Refresh gaps (FB-04 candidates; tasks 6.3–6.4 fill in)
 
 | Mutation | Stale screen | Keys | How to see it | Approved |
 |---|---|---|---|---|
 | detail-page wallet top-up | students list | `["students"]` not invalidated | top up on detail, go back within 60 s | FB-03 (approved) |
+
+### B.6 First contract check: every failure and how task 4.2 resolves it
+
+Measured on 2026-11-07 with the contract check (Appendix C.2). "Mock" means change the test data, only if no assertion changes; otherwise stop and report it.
+
+| App | Kind | Fixture | Fields | Resolution |
+|---|---|---|---|---|
+| POS | K1 | `GET /probe` | test-only route in `branch-cache-sync.test.tsx` | Exception, `backendRef: null` |
+| POS | K3 | `staff_notifications@ok` | `data[].data`: `announcement_id`, `message`, `sender_name`, `sent_at`, `title` | Exception, `backendRef: app/Notifications/AnnouncementNotification.php:29`. `data` varies by notification type, and the fixture recorded only the pre-registration type |
+| POS | K3 | `auth_user@ok`, `auth_login@ok` | `full_name`, `user.full_name` | Mock, and remove from the type (B.1) |
+| POS | K3 | `references_feedback@ok` | `branch_id`, `student_id` | Mock, and the type (B.1) |
+| POS | K3 | `references_inventory@ok`, `post…@ok` | `inventory_status` | Mock, and the type (B.1) |
+| POS | K3 | `references_parents_{parent}@ok` | `students_count`, `email_verified_at` | Mock, and the type (B.1) |
+| POS | K3 | `students_{student}@ok` | `monthly_payments[].voided_at`, `void_reason` | Mock, and the type (B.1) |
+| POS | K3 | `pos_checkout@ok-wallet` | `id`, `receipt_number` | Mock must become `{ message, order }`. **It's wrong today:** the API sends `{message, order}` and the test never reads it. The real shape opens the receipt modal, so check the test still passes; if not, stop and report it |
+| POS | K3 | `pos_students_lookup@ok-search` | `student` | Mock: lookup by QR is `@ok` (`student`), search is `@ok-search` (`students`). Check that each mock matches its `type` |
+| POS | K3 | `branch_monthly_amounts@ok`, `branches@ok` | `label`, `is_configured`; `staff_count`, `student_count`, `orders_today`, `deleted_at` | Mock, and the type (B.1) |
+| POS | K5 | `branch_monthly_amounts@ok` | `amount` | Mock: decimal string |
+| POS | K6 | `announcements@ok`, `references_inventory_{item}_logs@ok`, `staff_notifications@ok` | `created_at`, `data.submitted_at` | Mock: `2026-08-15T04:00:00.000000Z` format |
+| POS | K6 | `references_parents_{parent}@ok` | `students[].linked_at` | Mock: the fixture is `Y-m-d H:i:s`, read with `new Date(...)`. Parsed as local time, so a date assertion could shift. See note below |
+| Portal | K3 | `portal_notifications@ok` | `data[].data`: `due_date`, `note`, `school_month`, `school_year`, `students`, `total_amount` | Exception, `backendRef: app/Notifications/PaymentReminderNotification.php:39` |
+| Portal | K3 | `portal_auth_login@ok` | `parent.created_at` | Mock, and the type (B.1) |
+| Portal | K5 | `portal_students_{student}_wallet@ok` | `data[].amount` | Already gone: F-2 fixed the mock in PR 2 |
+| Portal | K6 | `portal_notifications@ok`, `…_activity@ok`, `…_wallet@ok` | `created_at`, `data.sent_at` | Mock: same format as POS |
+
+**Note on `linked_at`.** `new Date("2026-08-15 12:00:00")` isn't a format JavaScript guarantees. Chrome parses it as local time, and Safari has historically returned Invalid Date. Safari couldn't be tested for this spec, so it's on the Safari pass of the full-stack smoke (§20.1): open a parent's detail page and check the Linked date. If it fails there, report it as an F-item.
+
+The 93 notes (K4, K7, K8) need no action.
+
+## Appendix C: Verified scripts
+
+These were run during the 2026-11-07 audit, and C.2 and C.6 again on 2026-11-08 after they were changed to read routes from Laravel. Copy them exactly. Don't rewrite them from the descriptions in this design. None of them needs a package: they use Node's built-in modules, and the app's own `node_modules` where noted.
+
+### C.1 `capture.ts`
+
+Copy to `__tests__/contract/capture.ts` and import it from `jest.setup.ts` (§4.3.1, task 4.1).
+
+```ts
+// Spec 17 reference for __tests__/contract/capture.ts (design §4.3.1). Verified against both test suites.
+// Import it from jest.setup.ts. It does nothing unless CONTRACT_CAPTURE=1.
+import fs from "node:fs";
+import path from "node:path";
+
+import { server } from "../mocks/server";
+
+const pendingWrites: Promise<unknown>[] = [];
+
+if (process.env.CONTRACT_CAPTURE === "1") {
+  const directory = path.join(process.cwd(), ".contract-capture");
+  fs.mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, `${process.env.JEST_WORKER_ID ?? "0"}.jsonl`);
+
+  server.events.on("response:mocked", ({ request, response }) => {
+    const test = expect.getState().testPath?.replace(`${process.cwd()}/`, "");
+    const row = { method: request.method, url: request.url, status: response.status, test };
+    const contentType = response.headers.get("content-type") ?? "";
+
+    if (!contentType.includes("json")) {
+      fs.appendFileSync(file, `${JSON.stringify({ ...row, nonJson: true, contentType })}\n`);
+      return;
+    }
+
+    pendingWrites.push(
+      response
+        .clone()
+        .text()
+        .then((text) => {
+          fs.appendFileSync(file, `${JSON.stringify({ ...row, body: text ? JSON.parse(text) : undefined })}\n`);
+        }),
+    );
+  });
+
+  // The listener isn't awaited by MSW, so a test can end before its body has been read.
+  afterAll(async () => {
+    await Promise.all(pendingWrites);
+  });
+}
+```
+
+### C.2 `contract-check.mjs`
+
+Copy to `scripts/contract-check.mjs` (§4.3.2, task 4.1). It reads the routes from Laravel on every run, so Sail must be up in `~/sunbites-api`. Retested on 2026-11-08 with routes from Laravel: a correct mock passed, an unknown path gave K1, an extra key gave K3, and with Sail unreachable it exited 1 with the message.
+
+```js
+// Spec 17 reference for scripts/contract-check.mjs (design §4.3.2). Plain Node, no dependencies.
+// Run from the app root, after `CONTRACT_CAPTURE=1 jest`.
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+
+const API = process.env.SUNBITES_API ?? "../sunbites-api";
+const FIXTURES = process.env.SUNBITES_CONTRACT_FIXTURES ?? path.join(API, "tests/Fixtures/contracts");
+const CAPTURE = process.env.CONTRACT_CAPTURE_DIR ?? ".contract-capture";
+const EXCEPTIONS = "__tests__/contract/exceptions.json";
+const NOTE_KINDS = new Set(["K4", "K7", "K8"]);
+const GENERIC_STATUSES = new Set([401, 403, 404, 422, 429]);
+
+if (!fs.existsSync(FIXTURES)) {
+  console.log("skipped: contract fixtures are local only (Spec 16 §4.1.7)");
+  process.exit(process.env.CI === "true" ? 0 : 1);
+}
+
+const FORMATS = [
+  ["string:decimal2", /^-?\d+\.\d{2}$/],
+  ["string:iso8601_micro", /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/],
+  ["string:iso8601", /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$/],
+  ["string:datetime", /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/],
+  ["string:date", /^\d{4}-\d\d-\d\d$/],
+];
+const encode = JSON.stringify;
+const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const isListShape = (shape) => shape === "list:empty" || (isObject(shape) && ("__list__" in shape || "__list_union__" in shape));
+const listElements = (shape) => ("__list__" in shape ? [shape.__list__] : shape.__list_union__);
+
+function shapeOf(value) {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "number") return "number";
+  if (typeof value === "string") return FORMATS.find(([, pattern]) => pattern.test(value))?.[0] ?? "string";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "list:empty";
+    const unique = new Map(value.map((item) => [encode(shapeOf(item)), shapeOf(item)]));
+    return unique.size === 1 ? { __list__: [...unique.values()][0] } : { __list_union__: [...unique.values()] };
+  }
+  return Object.fromEntries(Object.keys(value).sort().map((key) => [key, shapeOf(value[key])]));
+}
+
+function compare(mock, fixture, at, out) {
+  if (mock === "list:empty" && isListShape(fixture)) return;
+  if (isObject(fixture) && "__map__" in fixture) {
+    if (isObject(mock) && !isListShape(mock)) for (const key of Object.keys(mock)) compare(mock[key], fixture.__map__, `${at}.${key}`, out);
+    else if (mock !== "list:empty") out.push(["K-type", at, "not an object", "__map__"]);
+    return;
+  }
+  if (isListShape(mock)) {
+    if (fixture === "list:empty") return void out.push(["K8", at, "list", "list:empty"]);
+    if (!isListShape(fixture)) return void out.push(["K-type", at, "list", typeof fixture === "string" ? fixture : "object"]);
+    for (const element of listElements(mock)) {
+      let best = null;
+      for (const candidate of listElements(fixture)) {
+        const found = [];
+        compare(element, candidate, `${at}[]`, found);
+        if (!best || found.length < best.length) best = found;
+        if (found.length === 0) break;
+      }
+      out.push(...best);
+    }
+    return;
+  }
+  if (isObject(mock)) {
+    if (fixture === "null") return void out.push(["K7", at, "object", "null"]);
+    if (!isObject(fixture) || isListShape(fixture)) return void out.push(["K-type", at, "object", typeof fixture === "string" ? fixture : "list"]);
+    for (const key of Object.keys(mock)) {
+      if (!(key in fixture)) out.push(["K3", `${at}.${key}`, encode(mock[key]).slice(0, 30), "absent"]);
+      else compare(mock[key], fixture[key], `${at}.${key}`, out);
+    }
+    return;
+  }
+  if (mock === fixture) return;
+  if (mock === "null") return void out.push(["K4", at, "null", typeof fixture === "string" ? fixture : "object"]);
+  if (fixture === "null") return void out.push(["K7", at, mock, "null"]);
+  if (mock === "number" && fixture === "string:decimal2") return void out.push(["K5", at, mock, fixture]);
+  if (typeof fixture === "string" && fixture.startsWith("string") && mock.startsWith("string")) return void out.push(["K6", at, mock, fixture]);
+  out.push(["K-type", at, mock, typeof fixture === "string" ? fixture : "object"]);
+}
+
+// Routes come from Laravel itself on every run, so they are always the latest backend's.
+function laravelRoutes() {
+  try {
+    return execFileSync("vendor/bin/sail", ["artisan", "route:list", "--path=api", "--except-vendor", "--json"], { cwd: API, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch {
+    console.log(`contract check: could not read the routes from Laravel. Start Sail in ${API} (vendor/bin/sail up -d).`);
+    process.exit(1);
+  }
+}
+
+const routes = JSON.parse(laravelRoutes()).flatMap((route) =>
+  route.method.split("|").filter((method) => method !== "HEAD").map((method) => {
+    const segments = route.uri.split("/");
+    return { method, segments, literal: segments.filter((part) => !part.startsWith("{")).length, slug: `${method.toLowerCase()}__${route.uri.replace(/[^a-z0-9{}]+/gi, "_").replace(/^_+|_+$/g, "")}` };
+  }),
+).sort((a, b) => b.literal - a.literal);
+
+function routeFor(method, pathname) {
+  const parts = `api/v1${pathname}`.replace(/\/$/, "").split("/");
+  return routes.find((route) => route.method === method && route.segments.length === parts.length && route.segments.every((segment, i) => segment.startsWith("{") || segment === parts[i]));
+}
+
+const fixturesBySlug = new Map();
+for (const file of fs.readdirSync(FIXTURES)) {
+  if (!file.endsWith(".json")) continue;
+  const [slug, variant] = file.replace(/\.json$/, "").split("@");
+  if (!fixturesBySlug.has(slug)) fixturesBySlug.set(slug, []);
+  fixturesBySlug.get(slug).push({ variant, file, ...JSON.parse(fs.readFileSync(path.join(FIXTURES, file), "utf8")) });
+}
+
+const exceptions = fs.existsSync(EXCEPTIONS) ? JSON.parse(fs.readFileSync(EXCEPTIONS, "utf8")) : [];
+const findings = new Map();
+const add = (kind, fixture, at, detail, test) => {
+  const id = `${kind} ${fixture} ${at}`;
+  if (!findings.has(id)) findings.set(id, { kind, fixture, at, detail, test });
+};
+let captured = 0;
+
+for (const file of fs.existsSync(CAPTURE) ? fs.readdirSync(CAPTURE) : []) {
+  for (const line of fs.readFileSync(path.join(CAPTURE, file), "utf8").split("\n")) {
+    if (!line) continue;
+    const row = JSON.parse(line);
+    captured += 1;
+    const pathname = new URL(row.url).pathname;
+    const route = routeFor(row.method, pathname);
+    if (!route) { add("K1", `${row.method} ${pathname}`, "", "the backend has no such route", row.test); continue; }
+    if (row.status >= 500 || row.nonJson || row.body === undefined) continue;
+    const fixtures = fixturesBySlug.get(route.slug) ?? [];
+    const candidates = row.status < 300
+      ? fixtures.filter((f) => f.variant.startsWith("ok") && f.status < 300 && f.body !== undefined)
+      : fixtures.filter((f) => f.status === row.status && f.body !== undefined);
+    if (candidates.length === 0) {
+      if (GENERIC_STATUSES.has(row.status)) {
+        if (!isObject(row.body) || (typeof row.body.message !== "string" && !isObject(row.body.errors))) add("K2", route.slug, "", `${row.status} body needs message or errors`, row.test);
+      } else add("K2", route.slug, "", `status ${row.status} is not recorded for this route`, row.test);
+      continue;
+    }
+    const mock = shapeOf(row.body);
+    let best = null;
+    let bestFixture = null;
+    for (const fixture of candidates) {
+      const found = [];
+      compare(mock, fixture.body, "body", found);
+      if (!best || found.length < best.length) { best = found; bestFixture = fixture; }
+      if (found.length === 0) break;
+    }
+    for (const [kind, at, actual, expected] of best) add(kind, bestFixture.file.replace(".json", ""), at, `mock=${actual} fixture=${expected}`, row.test);
+  }
+}
+
+const matches = (exception, finding) => exception.kind === finding.kind && exception.path === finding.at && (exception.fixture === finding.fixture || exception.fixture === finding.fixture.split("@")[0]);
+const used = new Set();
+const failures = [];
+let notes = 0;
+for (const finding of findings.values()) {
+  const exception = exceptions.find((candidate) => matches(candidate, finding));
+  if (exception) { used.add(exception); continue; }
+  if (NOTE_KINDS.has(finding.kind)) { notes += 1; continue; }
+  failures.push(finding);
+}
+const stale = exceptions.filter((exception) => !used.has(exception));
+for (const f of failures) console.log(`${f.kind} ${f.fixture} ${f.at} ${f.detail} (test: ${f.test})`);
+for (const e of stale) console.log(`STALE EXCEPTION ${e.kind} ${e.fixture} ${e.path}: no longer needed, delete it`);
+console.log(`contract check: ${captured} responses, ${failures.length} failing, ${notes} nullability or sample notes, ${exceptions.length} exceptions`);
+process.exit(failures.length || stale.length ? 1 : 0);
+```
+
+### C.3 `render-fixture.ts`
+
+Copy to `__tests__/render-fixture.ts` (§6.2, task 3.3).
+
+```ts
+// Spec 17 reference for __tests__/render-fixture.ts (design §6.2). The normaliser is verified:
+// identical code gives identical output across runs, across time, and with generated ids shifted.
+import fs from "node:fs";
+import path from "node:path";
+
+const ID_REFERENCE_ATTRIBUTES = ["for", "aria-labelledby", "aria-describedby", "aria-controls", "aria-owns", "aria-activedescendant", "headers"];
+/** Present for one frame while Base UI animates, so whether a test catches them is timing. */
+const TRANSIENT_ATTRIBUTES = ["data-starting-style", "data-ending-style"];
+
+export function normaliseRenderedHtml(html: string): string {
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const ids = new Map<string, string>();
+
+  template.content.querySelectorAll("[id]").forEach((element) => {
+    const id = element.getAttribute("id") as string;
+    if (!ids.has(id)) {
+      ids.set(id, `id-${ids.size + 1}`);
+    }
+  });
+
+  template.content.querySelectorAll("*").forEach((element) => {
+    TRANSIENT_ATTRIBUTES.forEach((attribute) => element.removeAttribute(attribute));
+
+    if (element.hasAttribute("data-rootownerid")) {
+      element.setAttribute("data-rootownerid", "owner");
+    }
+
+    const style = element.getAttribute("style");
+    if (style !== null) {
+      const parts = style.split(";").map((part) => part.trim()).filter((part) => part && part !== "transition: none");
+      if (parts.length === 0) {
+        element.removeAttribute("style");
+      } else if (/transition: none/.test(style)) {
+        element.setAttribute("style", `${parts.join("; ")};`);
+      }
+    }
+
+    const id = element.getAttribute("id");
+    if (id) {
+      element.setAttribute("id", ids.get(id) as string);
+    }
+
+    ID_REFERENCE_ATTRIBUTES.forEach((attribute) => {
+      const value = element.getAttribute(attribute);
+      if (value) {
+        element.setAttribute(attribute, value.split(/\s+/).map((part) => ids.get(part) ?? part).join(" "));
+      }
+    });
+
+    const href = element.getAttribute("href");
+    if (href?.startsWith("#") && ids.has(href.slice(1))) {
+      element.setAttribute("href", `#${ids.get(href.slice(1))}`);
+    }
+  });
+
+  return template.innerHTML.replace(/blob:[^"' )]+/g, "blob:URL");
+}
+
+/**
+ * Records or compares the normalised HTML of the whole document body for one settled UI state.
+ * No-op unless RENDER_FIXTURES is "record" or "compare". Fixtures stay local (.gitignore), never committed.
+ */
+export function expectRenderFixture(name: string): void {
+  const mode = process.env.RENDER_FIXTURES;
+  if (mode !== "record" && mode !== "compare") {
+    return;
+  }
+
+  const testFile = path.relative(process.cwd(), expect.getState().testPath as string);
+  const file = path.join(process.cwd(), ".render-fixtures", testFile, `${name}.html`);
+  const actual = normaliseRenderedHtml(document.body.innerHTML);
+
+  if (mode === "record") {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, actual);
+    return;
+  }
+
+  if (!fs.existsSync(file)) {
+    throw new Error(`Render fixture ${name} is missing: record it in the characterization commit.`);
+  }
+
+  expect(actual).toBe(fs.readFileSync(file, "utf8"));
+}
+```
+
+### C.4 `compile-report.cjs`
+
+Not copied into the app. Save as `~/spec17-gates/compile-report.cjs` and run `node ~/spec17-gates/compile-report.cjs` from the app root (§12, task 7).
+
+```js
+// Spec 17 throwaway report for task 7: which functions the React Compiler compiles. Run from the app root.
+// It is not copied into the app.
+const path=require('path'),fs=require('fs');const root=process.cwd();
+const babel=require(path.join(root,'node_modules/next/dist/compiled/babel/core'));
+const plugin=require(path.join(root,'node_modules/babel-plugin-react-compiler'));
+const ok={},bad=[],skip=[];let files=0;
+function walk(d,o=[]){for(const e of fs.readdirSync(d,{withFileTypes:true})){if(e.name==='ui'&&d.endsWith('components'))continue;const p=path.join(d,e.name);if(e.isDirectory())walk(p,o);else if(/\.tsx?$/.test(e.name)&&!/\.test\.|\.d\.ts$/.test(e.name))o.push(p)}return o}
+const logger={logEvent(f,ev){const rel=path.relative(root,f||'');if(ev.kind==='CompileSuccess'){ok[rel]=(ok[rel]||0)+1}else if(ev.kind==='CompileError'){const d=ev.detail||{};bad.push({f:rel,line:d.options?.loc?.start?.line||d.loc?.start?.line,r:(d.options?.reason||d.reason||String(d.message||'')).slice(0,110)})}else if(ev.kind==='CompileSkip'){skip.push({f:rel,r:ev.reason})}}};
+for(const d of ['app','components','hooks','lib'])if(fs.existsSync(d))for(const f of walk(d)){files++;const src=fs.readFileSync(f,'utf8');
+ try{babel.transformSync(src,{filename:path.join(root,f),babelrc:false,configFile:false,sourceType:'module',parserOpts:{plugins:['typescript','jsx']},plugins:[[plugin,{logger,panicThreshold:'none',environment:{enablePreserveExistingMemoizationGuarantees:true}}]],code:false,ast:false})}catch(e){bad.push({f,r:'BABEL '+e.message.slice(0,100)})}}
+console.log(JSON.stringify({filesScanned:files,filesWithCompiledFns:Object.keys(ok).length,compiledFns:Object.values(ok).reduce((a,b)=>a+b,0),failed:bad.length,skipped:skip.length}));
+const g={};bad.forEach(b=>{const k=b.r.slice(0,70);(g[k]=g[k]||[]).push(b.f+(b.line?':'+b.line:''))});for(const k in g)console.log(' FAIL ['+k+'] x'+g[k].length+'\n    '+g[k].slice(0,6).join('\n    '));
+```
+
+### C.5 `css-diff.cjs`
+
+Save in `~/spec17-gates/` (§7.1).
+
+```js
+// Spec 17: compares the CSS of two `next build` outputs.
+// Usage: node css-diff.cjs <old .next/static> <new .next/static>
+// Exit 1 if a rule was removed or changed: some class string changed, which a jsdom test can't see.
+// A rule that was only added is reported and allowed: Tailwind v4 scans every file that isn't gitignored, so a
+// word in a test or config file ("transform") can add an unused rule. No element can depend on it, or it would
+// have rendered unstyled before.
+const fs = require("fs");
+const path = require("path");
+
+function readCss(directory) {
+  const chunks = [];
+  (function walk(current) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (full.endsWith(".css")) chunks.push(fs.readFileSync(full, "utf8"));
+    }
+  })(directory);
+  return chunks.join("\n");
+}
+
+const declarations = (css) => new Set(css.split("}").map((part) => part.trim()).filter(Boolean));
+const [, , oldDirectory, newDirectory] = process.argv;
+const before = declarations(readCss(oldDirectory));
+const after = declarations(readCss(newDirectory));
+const removed = [...before].filter((rule) => !after.has(rule) && !rule.startsWith("@import") && !rule.includes("@layer"));
+const added = [...after].filter((rule) => !before.has(rule) && !rule.startsWith("@import") && !rule.includes("@layer"));
+
+console.log(`css: ${before.size} rules before, ${after.size} after, ${removed.length} removed or changed, ${added.length} added`);
+removed.forEach((rule) => console.log(`  - ${rule.slice(0, 140)}`));
+added.forEach((rule) => console.log(`  + ${rule.slice(0, 140)}`));
+process.exit(removed.length ? 1 : 0);
+```
+
+### C.6 Browser gate: `fake-api.mjs`, `serve.sh`, `compare.mjs`
+
+Save all three in `~/spec17-gates/` (§7.1). `serve.sh` reads the routes from Laravel when it starts, so Sail must be up in `~/sunbites-api`. Retested on 2026-11-08: the fake API answered `GET /api/v1/students` with a body generated from its fixture, using routes read from Laravel.
+
+`fake-api.mjs`:
+
+```js
+// Spec 17, PR 3 gate: answers every route with a body generated from the backend's @ok fixture, so real screens render real shapes.
+// Usage: node fake-api.mjs <fixtures dir> <routes.json> <port>. Started by serve.sh.
+import fs from "node:fs"; import http from "node:http"; import path from "node:path";
+const [,, FIX, ROUTES, PORT] = process.argv;
+const routes = JSON.parse(fs.readFileSync(ROUTES,"utf8")).flatMap(r=>r.method.split("|").filter(m=>m!=="HEAD").map(m=>({m,seg:r.uri.split("/"),lit:r.uri.split("/").filter(s=>!s.startsWith("{")).length,slug:`${m.toLowerCase()}__${r.uri.replace(/[^a-z0-9{}]+/gi,"_").replace(/^_+|_+$/g,"")}`}))).sort((a,b)=>b.lit-a.lit);
+const fx = {}; for (const f of fs.readdirSync(FIX)) { const [s,v]=f.replace(/\.json$/,"").split("@"); (fx[s]??=[]).push({v,...JSON.parse(fs.readFileSync(path.join(FIX,f),"utf8"))}); }
+let id = 0;
+function gen(t,k=""){ if(t==="null")return null; if(t==="bool")return true; if(t==="number")return k==="id"||k.endsWith("_id")?(++id%5)+1:(k==="current_page"||k==="last_page"?1:1500);
+ if(t==="string:decimal2")return "1500.00"; if(t==="string:iso8601_micro")return "2026-08-15T04:00:00.000000Z"; if(t==="string:iso8601")return "2026-08-15T12:00:00+08:00"; if(t==="string:datetime")return "2026-08-15 12:00:00"; if(t==="string:date")return "2026-08-15"; if(t==="string")return k==="id"?`n${++id}`:`Sample ${k}`; if(t==="list:empty")return [];
+ if(t&&typeof t==="object"){ if("__list__"in t)return [gen(t.__list__,k),gen(t.__list__,k)]; if("__list_union__"in t)return t.__list_union__.map(x=>gen(x,k)); if("__map__"in t)return {a:gen(t.__map__,k),b:gen(t.__map__,k)}; return Object.fromEntries(Object.entries(t).map(([kk,v])=>[kk,gen(v,kk)])); } return null; }
+http.createServer((req,res)=>{ const h={"Access-Control-Allow-Origin":req.headers.origin??"*","Access-Control-Allow-Headers":"*","Access-Control-Allow-Methods":"*","Access-Control-Allow-Credentials":"true"};
+ if(req.method==="OPTIONS"){res.writeHead(204,h);return res.end()}
+ const parts=new URL(req.url,"http://x").pathname.replace(/^\//,"").replace(/\/$/,"").split("/"); const r=routes.find(x=>x.m===req.method&&x.seg.length===parts.length&&x.seg.every((s,i)=>s.startsWith("{")||s===parts[i]));
+ const ok=r&&(fx[r.slug]??[]).filter(f=>f.v.startsWith("ok")&&f.status<300&&f.body!==undefined)[0]; id=0;
+ if(!ok){res.writeHead(r?204:404,h);return res.end(r?undefined:JSON.stringify({message:"Not found."}))}
+ res.writeHead(ok.status,{...h,"Content-Type":"application/json"}); res.end(JSON.stringify(gen(ok.body)));
+}).listen(Number(PORT),"127.0.0.1");
+```
+
+`serve.sh`:
+
+```bash
+#!/bin/bash
+# Spec 17, PR 3 gate: serves the original and changed builds of both apps, plus the fake API.
+# Build each app first with: NEXT_PUBLIC_API_URL=http://localhost:3921/api/v1 npm run build
+# Usage: serve.sh <work dir> <pos original> <pos changed> <portal original> <portal changed>
+# Stop it by killing this script's PID: it stops only the servers it started. Never use pkill.
+set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"; API="${SUNBITES_API:-$HOME/sunbites-api}"; WORK="$1"; mkdir -p "$WORK"; PIDS="$WORK/browser.pids"; : >"$PIDS"
+unset NEXT_PUBLIC_API_URL
+for port in 3917 3918 3919 3920 3921; do
+  if lsof -nP -iTCP:$port -sTCP:LISTEN >/dev/null 2>&1; then echo "port $port is busy, not starting"; exit 1; fi
+done
+( cd "$API" && vendor/bin/sail artisan route:list --path=api --except-vendor --json ) >"$WORK/routes.json" 2>/dev/null || { echo "could not read the routes from Laravel: start Sail in $API"; exit 1; }
+trap 'kill $(cat "$PIDS") 2>/dev/null' TERM INT EXIT
+node "$HERE/fake-api.mjs" "$API/tests/Fixtures/contracts" "$WORK/routes.json" 3921 >"$WORK/fake-api.log" 2>&1 &
+echo $! >>"$PIDS"
+start() { ( cd "$1" && exec node node_modules/next/dist/bin/next start -p "$2" >"$WORK/start-$2.log" 2>&1 ) & echo $! >>"$PIDS"; }
+start "$2" 3919; start "$3" 3917; start "$4" 3920; start "$5" 3918
+wait
+```
+
+`compare.mjs`:
+
+```js
+// Spec 17, PR 3 gate: real Chrome with a temporary profile, original build against changed build. Needs Google Chrome.
+// It loads every route, clicks each tab, and compares the URL, the normalised HTML and the console errors. A difference
+// gets a slower second look, to rule out animations. Exit 1 if any screen still differs.
+// Usage: start serve.sh, then: node compare.mjs <work dir>. QUICK=1 checks only a few routes.
+import { spawn } from "node:child_process"; import crypto from "node:crypto"; import fs from "node:fs"; import path from "node:path";
+const S = process.argv[2]; const QUICK = process.env.QUICK === "1"; const OUT = path.join(S, "browser-shots"); fs.rmSync(OUT,{recursive:true,force:true}); fs.mkdirSync(OUT,{recursive:true});
+const PROFILE = path.join(S,"chrome-profile"); fs.rmSync(PROFILE,{recursive:true,force:true});
+const DEBUG = 9333;
+const chrome = spawn("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",["--headless=new","--disable-gpu","--no-first-run","--no-default-browser-check","--disable-extensions","--disable-background-networking","--password-store=basic","--use-mock-keychain","--disable-background-timer-throttling","--disable-renderer-backgrounding","--disable-backgrounding-occluded-windows",`--user-data-dir=${PROFILE}`,`--remote-debugging-port=${DEBUG}`,"--window-size=1366,900","about:blank"],{stdio:"ignore"});
+process.on("exit",()=>{try{chrome.kill()}catch{}});
+const sleep=(ms)=>new Promise(r=>setTimeout(r,ms));
+for(let i=0;i<40;i++){try{await fetch(`http://127.0.0.1:${DEBUG}/json/version`);break}catch{await sleep(250)}}
+const DATE_PIN=`(()=>{const T=Date.parse("2026-08-15T04:00:00Z");const R=Date;class D extends R{constructor(...a){if(a.length===0)super(T);else super(...a)}static now(){return T}}window.Date=D})();`;
+const NORMALISE=`(()=>{const t=document.createElement("template");t.innerHTML=document.body.innerHTML;t.content.querySelectorAll("script,next-route-announcer").forEach(e=>e.remove());t.content.querySelectorAll("iframe").forEach(e=>{if(e.hasAttribute("name"))e.setAttribute("name","frame");if(e.hasAttribute("src"))e.setAttribute("src","frame")});const ids=new Map();t.content.querySelectorAll("[id]").forEach(e=>{const i=e.getAttribute("id");if(!ids.has(i))ids.set(i,"id-"+(ids.size+1))});const A=["for","aria-labelledby","aria-describedby","aria-controls","aria-owns","aria-activedescendant","headers"];t.content.querySelectorAll("*").forEach(e=>{e.removeAttribute("data-starting-style");e.removeAttribute("data-ending-style");if(e.hasAttribute("data-rootownerid"))e.setAttribute("data-rootownerid","owner");const s=e.getAttribute("style");if(s!==null){const p=s.split(";").map(x=>x.trim()).filter(x=>x&&x!=="transition: none");if(!p.length)e.removeAttribute("style");else if(/transition: none/.test(s))e.setAttribute("style",p.join("; ")+";")}const i=e.getAttribute("id");if(i)e.setAttribute("id",ids.get(i));for(const a of A){const v=e.getAttribute(a);if(v)e.setAttribute(a,v.split(/\\s+/).map(x=>ids.get(x)??x).join(" "))}});return t.innerHTML.replace(/blob:[^"' )]+/g,"blob:URL")})()`;
+async function session(seed,viewport){
+  const target=await (await fetch(`http://127.0.0.1:${DEBUG}/json/new?about:blank`,{method:"PUT"})).json();
+  const ws=new WebSocket(target.webSocketDebuggerUrl); await new Promise(r=>ws.addEventListener("open",r,{once:true}));
+  let id=0; const wait=new Map(); const state={errors:[],inflight:0,last:Date.now(),loaded:false};
+  ws.addEventListener("message",(m)=>{const d=JSON.parse(m.data); if(d.id&&wait.has(d.id)){wait.get(d.id)(d);wait.delete(d.id);return}
+    const p=d.params; if(d.method==="Runtime.exceptionThrown")state.errors.push("EXC "+(p.exceptionDetails.exception?.description??p.exceptionDetails.text).split("\n")[0].slice(0,170));
+    if(d.method==="Runtime.consoleAPICalled"&&p.type==="error")state.errors.push("CON "+p.args.map(a=>a.value??a.description??"").join(" ").split("\n")[0].slice(0,170));
+    if(d.method==="Network.requestWillBeSent"){state.inflight++;state.last=Date.now()} if(d.method==="Network.loadingFinished"||d.method==="Network.loadingFailed"){state.inflight=Math.max(0,state.inflight-1);state.last=Date.now()}
+    if(d.method==="Page.loadEventFired")state.loaded=true;});
+  const send=(method,params={})=>new Promise(r=>{const i=++id;wait.set(i,r);ws.send(JSON.stringify({id:i,method,params}))});
+  await send("Page.enable");await send("Runtime.enable");await send("Network.enable");await send("Emulation.setFocusEmulationEnabled",{enabled:true});
+  await send("Emulation.setDeviceMetricsOverride",{width:viewport[0],height:viewport[1],deviceScaleFactor:1,mobile:viewport[0]<500});
+  await send("Page.addScriptToEvaluateOnNewDocument",{source:DATE_PIN}); if(seed)await send("Page.addScriptToEvaluateOnNewDocument",{source:seed});
+  const ev=async(e)=>(await send("Runtime.evaluate",{expression:e,awaitPromise:true,returnByValue:true})).result?.result?.value;
+  const settle=async()=>{const t0=Date.now();while(Date.now()-t0<9000){if(state.loaded&&state.inflight===0&&Date.now()-state.last>700)break;await sleep(100)}await ev("document.fonts.ready.then(()=>1)");await sleep(350)};
+  // A background tab gets no animation frames, which stalls charts and Base UI, so each page is brought forward first.
+  const go=async(u)=>{await send("Page.bringToFront");state.loaded=false;state.errors.length=0;await send("Page.navigate",{url:u});await settle()};
+  const shot=async(f)=>{const r=await send("Page.captureScreenshot",{format:"png"});const b=Buffer.from(r.result.data,"base64");fs.writeFileSync(f,b);return crypto.createHash("sha1").update(b).digest("hex")};
+  const close=async()=>{ws.close();await fetch(`http://127.0.0.1:${DEBUG}/json/close/${target.id}`)};
+  return {send,ev,go,shot,state,settle,close};
+}
+const clean=(e)=>e.filter(x=>!/Failed to load resource|WebSocket|ERR_|net::|fonts\.g|recaptcha/i.test(x));
+const SEED_POS=`try{sessionStorage.setItem("sunbites-pos-auth",JSON.stringify({state:{token:"t",user:{id:1,first_name:"Ana",last_name:"Cruz",full_name:"Ana Cruz",email:"a@b.c",roles:["admin"],branches:[{id:1,name:"Main"}]},activeBranch:{id:1,name:"Main"}},version:0}))}catch{}`;
+const SEED_PORTAL=`try{sessionStorage.setItem("portal-auth",JSON.stringify({state:{token:"t",parent:{id:1,first_name:"Ana",last_name:"Cruz",full_name:"Ana Cruz",email:"a@b.c"}},version:0}))}catch{}`;
+const POS=["/dashboard","/announcements","/announcements/1","/announcements/create","/enrollment","/notifications","/pos","/pre-registrations","/pre-registrations/1","/references/branches","/references/feedback","/references/inventory","/references/meal-planner","/references/parents","/references/parents/1","/references/subscription-config","/references/system-settings","/references/users","/references/users/1","/references/users/create","/reminders","/reminders/1","/reports/activity","/reports/analytics","/reports/billing","/reports/credits","/reports/daily-summary","/reports/inventory","/reports/sales","/reports/students","/reports/subscription","/reports/wallet","/students","/students/1","/students/abc","/branch","/kiosk"];
+const PORTAL=["/dashboard","/feedback","/meal-plan","/notifications","/profile","/students","/students/1"];
+const PLANS=[
+ {app:"pos",base:3919,conv:3917,seed:SEED_POS,routes:POS,vp:[1366,900],pass:"admin"},
+ {app:"pos",base:3919,conv:3917,seed:null,routes:["/","/login","/reset-password","/dashboard","/students/1","/pos"],vp:[1366,900],pass:"signed-out"},
+ {app:"portal",base:3920,conv:3918,seed:SEED_PORTAL,routes:PORTAL,vp:[1366,900],pass:"parent"},
+ {app:"portal",base:3920,conv:3918,seed:SEED_PORTAL,routes:PORTAL,vp:[390,844],pass:"parent-phone"},
+ {app:"portal",base:3920,conv:3918,seed:null,routes:["/","/login","/forgot-password","/reset-password","/activate","/pre-register","/dashboard","/students/1"],vp:[390,844],pass:"signed-out-phone"},
+];
+
+const pick=(list,keep)=>QUICK?list.filter(r=>keep.includes(r)):list;
+PLANS[0].routes=pick(PLANS[0].routes,["/references/users/1","/kiosk","/reports/analytics","/students/1"]);
+for(const p of PLANS.slice(1))p.routes=QUICK?p.routes.filter((r,i)=>i<2||r==="/pre-register"):p.routes;
+const results=[];
+const capture=async(s,file)=>({url:await s.ev("location.pathname"),html:await s.ev(NORMALISE),png:await s.shot(path.join(OUT,file)),errs:clean(s.state.errors).slice().sort()});
+for(const plan of PLANS){
+ const ss={base:await session(plan.seed,plan.vp),conv:await session(plan.seed,plan.vp)};
+ for(const route of plan.routes){
+  const name=`${plan.app}-${plan.pass}${route.replace(/[^a-z0-9]+/gi,"_")}`;const steps={};
+  for(const b of ["base","conv"]){await ss[b].go(`http://localhost:${plan[b]}${route}`);const list=[await capture(ss[b],`${b}__${name}.png`)];const tabs=(await ss[b].ev(`document.querySelectorAll('[role=tab]').length`))||0;
+    for(let i=0;i<Math.min(tabs,8);i++){ss[b].state.errors.length=0;await ss[b].ev(`document.querySelectorAll('[role=tab]')[${i}]?.click()`);await sleep(150);await ss[b].settle();list.push(await capture(ss[b],`${b}__${name}__tab${i}.png`))}steps[b]=list}
+  const n=Math.max(steps.base.length,steps.conv.length);
+  for(let i=0;i<n;i++){let a=steps.base[i],c=steps.conv[i];let retried=false;
+   if(a&&c&&(a.html!==c.html||a.png!==c.png)){ // animation and timing noise: look again, slowly, from a fresh load
+     retried=true;const again={};for(const b of ["base","conv"]){await ss[b].go(`http://localhost:${plan[b]}${route}`);await sleep(1500);if(i>0){await ss[b].ev(`document.querySelectorAll('[role=tab]')[${i-1}]?.click()`);await sleep(2500)}else await sleep(2500);again[b]=await capture(ss[b],`${b}__${name}${i?`__tab${i-1}`:""}.png`)}a=again.base;c=again.conv}
+   const row={app:plan.app,pass:plan.pass,route:route+(i?` tab${i-1}`:""),retried,urlSame:a?.url===c?.url,htmlSame:a?.html===c?.html,pngSame:a?.png===c?.png,errsSame:JSON.stringify(a?.errs)===JSON.stringify(c?.errs),errs:c?.errs??[]};
+   if(!row.htmlSame&&a&&c){let k=0;while(k<a.html.length&&a.html[k]===c.html[k])k++;row.original=a.html.slice(Math.max(0,k-60),k+120);row.changed=c.html.slice(Math.max(0,k-60),k+120)}
+   results.push(row);}
+ }
+ await ss.base.close();await ss.conv.close();
+}
+fs.writeFileSync(path.join(S,"browser-results.json"),JSON.stringify(results,null,1));
+const bad=results.filter(r=>!r.urlSame||!r.htmlSame||!r.errsSame);
+console.log(`browser compare: ${results.length} screens, ${bad.length} differ, ${results.filter(r=>r.retried).length} needed a slower second look, ${results.filter(r=>!r.pngSame).length} screenshots differ`);
+for(const r of bad){console.log(`DIFF ${r.app} ${r.pass} ${r.route}: url ${r.urlSame}, html ${r.htmlSame}, console ${r.errsSame}`);if(r.original){console.log(`  original: ${r.original}`);console.log(`  changed:  ${r.changed}`)}}
+for(const r of results.filter(r=>r.htmlSame&&!r.pngSame))console.log(`LOOK ${r.app} ${r.pass} ${r.route}: same HTML, different pixels (usually a running animation). Screenshots are in ${OUT}`);
+chrome.kill();process.exit(bad.length?1:0);
+```

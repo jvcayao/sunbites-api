@@ -12,16 +12,17 @@
 - **Never invent a decision.** If the design doesn't say how to do something, or the code differs from what the design describes, stop and report. Do not pick "the reasonable option".
 - **No scope creep.** A bug, smell or typo outside the task goes in the report under "Found, not fixed".
 - **Backend is the truth, and read-only.** For any code that reads a response or sends a request, read the fixture or backend file first (design §4.1) and cite it in the commit body. Never edit `~/sunbites-api` (the spec owner ticks boxes and edits spec docs).
+- **Always align to the latest backend (user, 2026-11-07 and 2026-11-08).** No snapshot of the backend is kept: check the running Laravel app directly. Before every step, run design §4.10.1's three commands and stop on any condition it lists. Before writing code that reads a response or sends a request, call the endpoint as §4.10.3 shows. Put `Backend: <branch> <sha>, Laravel <version>` in the commit body.
 - **Tracks never mix.** A Track A commit changes no behaviour, markup, request or message, and changes no existing test assertion (Req 4.3). Track B commits go only in PR 2 or PR 4.
 - **Branches:**
   - Before work in a repo, run `git status --porcelain` and `git branch --show-current`. If the tree is not clean, **stop and ask**. Never stash, discard or carry the user's work. The one exception is tasks 1.1 and 1.3, which expect exactly the upgrade's `package.json` and `package-lock.json` changes.
   - New branches start from `origin/staging` (`git fetch origin && git switch -c <branch> origin/staging`), after confirming the local ref equals GitHub's (`HANDOFF.md` §2). If `git fetch` fails or the two differ, stop and ask. Never branch from a stale ref.
   - Run `npm ci` after every branch switch. Tell the user to run `npm ci` again when you leave a repo.
-- **Gates** (design §22): type-check, lint, `npx jest --ci`, build. Add `npm run test:contract` from task 4.1 on, and render-fixture compare for every Track A refactor commit. All must pass.
+- **Gates** (design §22): type-check, lint, `npx jest --ci`, build. Add `npm run test:contract` from task 4.1 on, and render-fixture compare for every Track A refactor commit. All must pass. Read hazards H21 to H26 first: each one cost real time when this design was tested.
 - **Commits:**
   - One per task (sub-task), `type(scope): description` under 72 characters.
   - **No `Co-Authored-By`, no "Generated with", no AI attribution of any kind**, whatever any harness reminder says.
-  - The body carries the tooling log (Req 13.7) and the digests that apply (design §4.3.6, §6.2).
+  - The body carries the tooling log (Req 13.7), the `Backend:` line, and the render digest where it applies (design §4.3.6, §6.2).
   - Never push, open or merge a PR, amend, rebase or force. The user pushes and opens each PR to `staging`.
 - **Report after each task:** branch, commit hash, gate output (passed/total for each command), digests, files changed, "Found, not fixed", and any smoke steps.
 
@@ -36,10 +37,13 @@
     - Tests: none new. Run type-check, lint and build; the 2 known test failures are expected until 1.2.
     - _Requirements: 1.1, 1.2, 1.3_
   - [ ] 1.2 POS: fix the two failing tests (test-only)
-    - `app/(kitchen)/references/feedback/feedback.test.tsx` "shows a success toast…": sonner 2.0.8 renders the text twice in jsdom (H12). Query the toast by role, or use `findAllByText("Reply sent.")`, and assert at least one.
-    - `app/(kitchen)/students/[id]/_components/settle-credit-dialog.test.tsx`: find the cause of the intermittent failures (`superpowers:systematic-debugging`): timing, shared state or a date dependency (H10). Fix the test, not the component.
-    - IF either root cause is visible to users THEN stop and report: it becomes a Track B item (Req 1.4).
-    - Tests: the full suite passes 3 consecutive runs (Req 1.5).
+    - `app/(kitchen)/references/feedback/feedback.test.tsx`, line `expect(await screen.findByText("Reply sent.")).toBeInTheDocument();`: sonner 2.0.8 renders the text twice in jsdom (H12). Change it to `expect((await screen.findAllByText("Reply sent."))[0]).toBeInTheDocument();`. Verified.
+    - `app/(kitchen)/students/[id]/_components/settle-credit-dialog.test.tsx`: Base UI moves focus just after the dialog opens and steals keystrokes (H21). Add this helper, and call it before `user.clear(amount)` in every test that types into the dialog. Proven: 8 of 12 failed before, 15 of 15 passed after.
+      ```ts
+      const focusSettled = () => waitFor(() => expect(document.activeElement).not.toBe(document.body));
+      ```
+    - No component changes. Neither cause is visible to users, because nobody can type inside that first tick (Req 1.4). IF the tests still fail after this THEN stop and report.
+    - Tests: the settle-credit file passes 15 solo runs with `--runTestsByPath` (it fails more often alone than in the suite), and the full suite passes 3 consecutive runs (Req 1.5).
     - Commit `test: make feedback toast and settle-credit tests deterministic`.
     - _Requirements: 1.4, 1.5_
   - [ ] 1.3 Portal: commit the upgrade on `bump-latest-upgrade-portal`
@@ -50,7 +54,7 @@
 
 ## PR 2: Track B1 contract fixes (Req 3; design §5)
 
-- [ ] 2. Fix F-1, F-2 and F-3 (after PR 1 merges)
+- [ ] 2. Fix F-1, F-2, F-3, F-4 and F-5 (after PR 1 merges). F-16 was fixed as a hotfix
   - [ ] 2.1 F-1: POS inventory report (branch `fix/spec17-contract-fixes` from `origin/staging`)
     - Re-verify design §5.1 against `get__api_v1_reports_inventory@ok.json` and `InventoryItem::status`, and cite both in the commit body.
     - Write `app/(kitchen)/reports/inventory/page.test.tsx` (design §5.1, 7 tests). Run it, and confirm tests 1, 2, 6 and 7 fail.
@@ -71,7 +75,20 @@
     - Tests: all gates pass.
     - Commit `fix(wallet): F-2 format wallet amounts with separators`.
     - _Requirements: 3.2, 3.4, 3.5, 2.2_
-  - [ ] 2.4 Report the commits and the design §5.4 smoke steps. The user opens PR 2 in each repo.
+  - [ ] 2.4 F-4, approved 2026-11-08: Sales report Customer filter (POS; design §5.5)
+    - Write `app/(kitchen)/reports/sales/page.test.tsx` and confirm the F-4 test fails. Apply the edit in both places.
+    - Tests: Walk-In sends `is_walk_in=1`, Registered sends `0`, All Customers sends neither, `customer_type` is never sent. All gates pass.
+    - Commit `fix(reports): F-4 send is_walk_in for the customer filter`.
+    - _Requirements: 3.6, 2.3_
+  - [ ] 2.5 F-5, approved 2026-11-08: Sales and Billing money format (POS; design §5.5)
+    - Add the money tests and confirm they fail. They must use values no summary card shows (design §5.5), because a test using a summary value passes before the fix. Apply the edits.
+    - Tests: `-₱1,250.00` and `₱2,750.50` in Sales, and a ₱1,000+ amount in Billing. All gates pass.
+    - Commit `fix(reports): F-5 format sales and billing money with separators`.
+    - _Requirements: 3.6, 2.2_
+  - [x] 2.6 F-16: done as a hotfix on 2026-11-08 (`81c204e`, design §5.6), not part of PR 2.
+    - In the portal's PR 2 branch, `grep -n unenrolled components/enrollment-status-badge.tsx` must print a line. If it doesn't, the hotfix hasn't reached `staging` yet: stop and report. Don't redo the fix.
+    - _Requirements: 3.6, 2.2_
+  - [ ] 2.7 Report the commits and the design §5.4 smoke steps, which the user runs locally (design §20.1). The user opens PR 2 in each repo.
 
 ## PR 3: Track A (after PR 2 merges; branch `refactor/spec17-code-quality` in each repo)
 
@@ -79,8 +96,8 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
 
 - [ ] 3. Foundations
   - [ ] 3.1 Upgrade `undici` in the Jest polyfill (design §13.4, D-5)
-    - devDependency `undici` `^5.29.0` → `^6.29.1`. `jest.polyfills.ts` stays unchanged.
-    - IF MSW or any test fails on undici 6 THEN stop and report before taking the fallback environment in design §13.4.
+    - devDependency `undici` `^5.29.0` → `^6.29.1`. `jest.polyfills.ts` stays unchanged. Verified on Node 26 and Node 20.
+    - IF MSW or any test fails on undici 6 THEN stop and report.
     - Tests: the full suite passes 3 consecutive runs; full `npm audit` reports no high or critical.
     - Commit `chore(test): upgrade undici to 6.29.1 in the Jest polyfill`.
     - _Requirements: 11.4_
@@ -91,38 +108,38 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
     - _Requirements: 11.1, 11.2, 11.3_
   - [ ] 3.3 Coverage and render-fixture tooling (design §6.2, §6.3)
     - `collectCoverageFrom` per design §6.3. Run `npm run test:coverage`, and re-baseline the thresholds once to the new measurement, rounded down (record the old and new numbers in the commit body).
-    - Add `__tests__/render-fixture.ts` (`expectRenderFixture`) and `.render-fixtures/` to `.gitignore`.
-    - Tests: unit-test `expectRenderFixture` in `__tests__/render-fixture.test.ts`: id normalisation (ids and every referencing attribute), `blob:` normalisation, no-op when unset, a missing-fixture message in compare mode. Use a temp directory.
+    - Add `.render-fixtures/` to `.gitignore` first (H27). Copy design Appendix C.3 to `__tests__/render-fixture.ts`. Add `__tests__/clock.ts` and the `fakeTimers` switch in `jest.config.ts` (design §6.2).
+    - Tests: unit-test `normaliseRenderedHtml` in `__tests__/render-fixture.test.ts`: ids and every referencing attribute; `data-starting-style`, `data-ending-style`, `data-rootownerid`; `transition: none` and an emptied `style`; `blob:`; and that classes and other attributes stay untouched. Also: no-op when `RENDER_FIXTURES` is unset, and the missing-fixture message in compare mode.
     - Commit `test: count every source file in coverage; add render fixtures`.
     - _Requirements: 4.4, 4.5_
 
 - [ ] 4. Backend compliance (design §4)
   - [ ] 4.1 Contract check tooling (design §4.3)
-    - Add `__tests__/contract/capture.ts` (wired from `jest.setup.ts`, active only with `CONTRACT_CAPTURE=1`), the capture `globalSetup`, `scripts/contract-check.mjs` (the JS `ShapeExtractor` port, fixture index, URL→fixture mapping, variant choice, the mock ⊑ fixture comparison K1–K8, exceptions, exit codes), `__tests__/contract/exceptions.json` (empty `[]`), the `test:contract` script, and `.contract-capture/` in `.gitignore`.
+    - Copy design Appendix C.1 to `__tests__/contract/capture.ts` (imported from `jest.setup.ts`) and Appendix C.2 to `scripts/contract-check.mjs`. Sail must be up in `~/sunbites-api`: the check reads the routes from Laravel. Add the capture `globalSetup`, `__tests__/contract/exceptions.json` (empty `[]`), the `test:contract` script, and `.contract-capture/` in `.gitignore`.
     - Tests:
-      - `__tests__/contract/contract-check.test.ts`, one test per K-rule against small inline fixtures;
+      - `__tests__/contract/contract-check.test.ts`, one test per K-rule against small inline fixtures, including that K4, K7 and K8 don't fail the check;
       - one each for the CI skip (exit 0) and the local missing-directory failure (exit 1);
-      - one for the UUID path match;
-      - one for most-specific slug selection (`students_deleted` vs `students_{student}`).
+      - one for a stale exception (exit 1);
+      - one that `/students/5/nonexistent` is K1 and `/students/deleted` picks the literal route over `students/{student}`;
+      - one that a generic 404 with no recorded variant passes when the body has `message`.
     - Commit `test: add local contract check against backend fixtures`. The body carries the backend fixture line (§4.3.6).
     - _Requirements: 2.4, 2.5_
   - [ ] 4.2 Typed mocks and first contract run (design §4.3.4, §4.4)
     - Add `satisfies <FEType>` to every JSON body in `__tests__/mocks/handlers.ts` and every per-test `server.use`. Run `npm run test:contract`.
+    - Design Appendix B.6 lists every expected failure and its resolution (POS 31, portal 11 after F-2). Work through that table. A failure that isn't in it: stop and report.
     - For each finding:
       - fix the mock data, only if no existing assertion changes;
-      - or add an exception with a `backendRef`;
+      - or add the exception B.6 names, with its `backendRef`;
       - or, if fixing the data would change an assertion, stop and list it as a proposed F-item.
     - Tests: the suite passes with unchanged assertions; `test:contract` exits 0.
     - Commit `test: shape MSW data like the backend fixtures`. The body lists every finding and how it was resolved.
     - _Requirements: 2.2, 2.4, 2.5, 2.8_
   - [ ] 4.3 Compliance audit (read-only; produces the report)
-    - Fill in design Appendix B:
-      - B.1: re-check rows 1–29 against the fixtures and backend code, adding "Verified" and a proposed "Resolution";
-      - B.2: every `lib/api` function against `route:list --json` and its Form Request (design §4.6);
-      - B.3: every POS role gate against the `role:` middleware (design §4.7);
-      - B.4: every Zod schema that mirrors a Form Request (design §11.1);
-      - error bodies (design §4.8).
-    - Report the tables to the spec owner, who updates Appendix B and asks the user to approve each proposed F-item.
+    - Most of design Appendix B was filled in by the 2026-11-07 audit. This task checks it against today's backend and adds what the audit couldn't see:
+      - B.1 to B.4: confirm against the current backend, by reading the code and calling GET endpoints directly (design §4.10.3). Report any row that's wrong, with `file:line`. Don't re-derive them from scratch;
+      - B.2: trace the one opaque call, `preRegistrationApi.update` (`pre-registrations/[id]/page.tsx:298`), against `UpdatePreRegistrationRequest`;
+      - error bodies (design §4.8): each reader of `ApiError.message`.
+    - Report to the spec owner, who updates Appendix B and asks the user about any new F-item.
     - No commit in the app repos. No code changes.
     - _Requirements: 2.1, 2.2, 2.3, 2.6, 2.7, 2.8, 2.11_
   - [ ] 4.4 Runtime-neutral type corrections (only the Appendix B rows the spec owner marks "A")
@@ -165,8 +182,9 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
 
 - [ ] 6. Refactor (each commit: all gates, render fixtures compare unchanged, digest equal to the previous commit)
   - [ ] 6.1 Route shells and auth hydration (design §7.1, §7.2)
-    - All 40 POS and 13 portal `page.tsx` become server shells rendering `XScreen` from `_components/`. The student detail screen takes `rawId` and drops `useParams()`. Add `lib/store/use-auth-hydrated.ts`, and use it in the `(kitchen)`, `(pos)` and `(portal)` layouts.
-    - Tests: unit-test `useAuthHydrated` (false on the server snapshot, true after hydration). Existing and characterization tests switch their render target from the page to the screen (assertions unchanged).
+    - The 38 POS and 9 portal `page.tsx` that start with `"use client"` become server shells rendering `XScreen` from `_components/`. The other 6 stay as they are (design §7.1). The 7 dynamic routes follow the table in design §7.1 exactly. Fix relative imports. Add `lib/store/use-auth-hydrated.ts`, and use it in the `(kitchen)`, `(pos)` and `(portal)` layouts.
+    - Before the commit, save the `Route (app)` table from `next build`. After it, the table must be identical, and the server smoke (design §7.1) must pass.
+    - Tests: unit-test `useAuthHydrated`: `renderToString` gives empty HTML, and `hydrateRoot` gives no mismatch and then shows the children (set `IS_REACT_ACT_ENVIRONMENT`). Static-route tests don't change. Dynamic-route tests switch their render target to the screen in the same commit, because `next build` type-checks them (H24), and their assertions don't change.
     - Commit per app `refactor(app): thin page shells and auth hydration hook`.
     - _Requirements: 5.1, 5.2, 5.3, 9.3_
   - [ ] 6.2 Split files over 400 lines (design §8; verbatim moves only)
@@ -216,8 +234,8 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
     - _Requirements: 9.4, 11.1_
 
 - [ ] 7. React Compiler, last in Track A (design §12; one commit per app)
-  - Install `babel-plugin-react-compiler@1.0.0` exactly; set `reactCompiler` per D-6. Run the throwaway compile report (design §12), or record that the spike couldn't run. Remove manual `useCallback`/`useMemo` only in components reported as compiled; use `"use no memo"` with a reason for any component that misbehaves.
-  - Tests: all gates; render fixtures unchanged. The commit body carries the compile report summary (compiled / skipped / failed counts) and the staging smoke items to run (design §20).
+  - Install `babel-plugin-react-compiler@1.0.0` exactly; set `reactCompiler` per D-6. Add the `COMPILED_TESTS` switch to `jest.config.ts` (design §12). In the POS, rename the two local types in `enrollment.test.tsx` (H26). Save design Appendix C.4 as `~/spec17-gates/compile-report.cjs` and run `node ~/spec17-gates/compile-report.cjs` from the app root. Remove manual `useCallback`/`useMemo` only in components reported as compiled; use `"use no memo"` with a reason for any component that misbehaves.
+  - Tests: all gates; `COMPILED_TESTS=1 TZ=Asia/Manila RENDER_FIXTURES=compare npx jest --no-cache` passes with fixtures unchanged; route table identical; server smoke passes. The commit body carries the compile report summary (compiled / skipped / failed counts) and the full-stack smoke items to run (design §20.1).
   - Commit `perf: enable the React Compiler`.
   - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
@@ -230,7 +248,7 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
     - Commit `test: raise coverage thresholds to measured values`.
     - _Requirements: 4.5_
   - [ ] 8.3 Close-out check and handover
-    - Size check (design §8) prints nothing. Full gates. The suite passes 3 consecutive runs. `test:contract` exits 0. Report the staging smoke checklist (design §20). The user opens PR 3 in each repo; Spec 16 must be merged to `staging` first if any commit relies on design §4.9.
+    - Size check (design §8) prints nothing. Full gates. The suite passes 3 consecutive runs, `TZ=UTC npx jest --ci` passes, and the faked-clock sweep adds no failure (design §22). `test:contract` exits 0. `css-diff.cjs` against a build of the PR's base reports nothing removed or changed, and `compare.mjs` exits 0 (design §7.1, Appendix C.5 and C.6). Any `LOOK` line is opened and explained in the report. Report the full-stack smoke checklist (design §20.1), which the user runs before merging. The user opens PR 3 in each repo. Name any commit that relies on design §4.9, because Spec 16 must reach production before it does.
     - _Requirements: 6.1, 4.5, 2.10_
 
 ## PR 4: Track B2 (after PR 3 merges; branch `fix/spec17-track-b2`; failing test first except FB-01)
@@ -254,6 +272,7 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
   - [ ] 9.5 F-4+: each frontend/backend mismatch the user approved from Appendix B, one commit each; failing test first with fixture-shaped data
     - _Requirements: 2.8, 14.7_
   - [ ] 9.6 Report; the user opens PR 4 in each repo
+    - `TZ=UTC npx jest --ci` passes and the faked-clock sweep adds no failure (design §22).
     - Smoke: FB-02 by throwing in a dev build; FB-03 by a top-up and back navigation within 60 s.
 
 ## Standards documents (spec owner, in `~/sunbites-api`; each needs the user's approval of the exact text)
@@ -283,12 +302,14 @@ Unless a sub-task names one app, it runs in both: POS first, then portal, one co
 | 2.9 | ground rules; 2.1, 2.3, 4.x |
 | 2.10 | 8.3 |
 | 2.11 | 4.3 |
-| 3.1–3.5 | 2.1–2.4 |
+| 2.12–2.15 | ground rules (backend checks, direct calls); task 4.3 (design §4.10) |
+| 3.1–3.5 | 2.1–2.3, 2.7 |
+| 3.6 | 2.4, 2.5; 2.6 done as a hotfix |
 | 4.1, 4.2, 4.6 | 5.1–5.9 |
 | 4.3 | ground rules; every task in 6–8 |
 | 4.4 | 3.3, 5.x, 6.x, 7 |
 | 4.5 | 3.3, 8.2 |
-| 5.1–5.3 | 6.1 (5.3 also 5.6, 5.7) |
+| 5.1–5.5 | 6.1 (5.3 also 5.6, 5.7) |
 | 6.1–6.4 | 6.2, 8.3 |
 | 7.1–7.4 | 6.3 |
 | 7.5 | design H16 (no task: nothing is shared) |
