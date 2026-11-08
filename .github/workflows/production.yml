@@ -98,4 +98,4 @@ jobs:
           printf '{"api_tokens":["%s"]}' "$CLOUD_TOKEN" > ~/.config/cloud/config.json
 
       - name: Deploy to production
-        run: cloud deploy "Sunbites API Prod" production -n
+        run: cloud deploy "Sunbites API Prod" main -n

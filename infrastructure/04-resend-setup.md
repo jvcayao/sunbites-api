@@ -1,6 +1,6 @@
 # Phase 4 — Resend Email Setup
 
-Resend is the mailing service for both staging and production. It integrates natively with Laravel's mail system via the `resend/resend-laravel` package.
+Resend is the mailing service for production. It integrates natively with Laravel's mail system via the `resend/resend-laravel` package.
 
 ---
 
@@ -21,10 +21,8 @@ Resend is the mailing service for both staging and production. It integrates nat
 ## 4.1 Create a Resend Account
 
 1. Go to [resend.com](https://resend.com) and sign up
-2. Create **two API keys** — one for staging, one for production:
-   - Staging key name: `sunbites-staging`
-   - Production key name: `sunbites-production`
-3. Save both keys — you will set them as environment variables in Laravel Cloud
+2. Create an API key named `sunbites-production`
+3. Save the key — you will set it as an environment variable in Laravel Cloud
 
 ---
 
@@ -38,8 +36,6 @@ Resend will give you DNS records to add:
 - DMARC record (optional but recommended)
 
 Add these records to your DNS provider. Resend will automatically verify once propagated.
-
-> One domain verification covers both staging and production since both send from `@sunbites.com.ph`.
 
 ---
 
@@ -55,7 +51,7 @@ This package adds the `resend` mail transport to Laravel.
 
 ## 4.4 Configure Laravel Mail
 
-The `MAIL_MAILER=resend` env var is already set in both environment variable files from Phase 3.
+The `MAIL_MAILER=resend` env var is already set in the environment variable file from Phase 3.
 
 Verify [config/mail.php](../config/mail.php) has the `resend` mailer entry (it is included by default in Laravel 11+):
 
@@ -71,26 +67,21 @@ If it is not there, add it to the `mailers` array in `config/mail.php`.
 
 ## 4.5 Add RESEND_KEY to Laravel Cloud
 
-Set the API key in each environment via the Laravel Cloud CLI:
+Set the API key via the Laravel Cloud CLI:
 
 ```bash
-# For staging
-cloud environment:variables staging --json -n --force
-# Add: RESEND_KEY=re_xxxxxxxxxxxxxxxxxxxx  (staging key)
-
-# For production
-cloud environment:variables production --json -n --force
-# Add: RESEND_KEY=re_xxxxxxxxxxxxxxxxxxxx  (production key)
+cloud environment:variables main --json -n --force
+# Add: RESEND_KEY=re_xxxxxxxxxxxxxxxxxxxx
 ```
 
 ---
 
-## 4.6 Test Email Delivery on Staging
+## 4.6 Test Email Delivery
 
-After the first staging deploy, run a test via tinker:
+After the first deploy, run a test via tinker:
 
 ```bash
-cloud tinker staging --code='Mail::raw("Test from staging", function($m) { $m->to("your@email.com")->subject("Sunbites staging mail test"); });' --timeout=30 -n
+cloud tinker main --code='Mail::raw("Test email", function($m) { $m->to("your@email.com")->subject("Sunbites mail test"); });' --timeout=30 -n
 ```
 
 Verify it arrives and check Resend dashboard for delivery status.
@@ -102,20 +93,17 @@ Verify it arrives and check Resend dashboard for delivery status.
 | Purpose | From Address |
 |---------|-------------|
 | All transactional mail | `noreply@sunbites.com.ph` |
-| Staging (labeled differently) | `noreply@sunbites.com.ph` with name `Sunbites (Staging)` |
 
 ---
 
 ## Phase 4 Checklist
 
 - [ ] Resend account created
-- [ ] Staging API key created (`sunbites-staging`)
-- [ ] Production API key created (`sunbites-production`)
+- [ ] API key created (`sunbites-production`)
 - [ ] Domain `sunbites.com.ph` verified in Resend
 - [ ] `resend/resend-laravel` package installed
-- [ ] `RESEND_KEY` set in staging environment
-- [ ] `RESEND_KEY` set in production environment
-- [ ] Test email sent from staging and confirmed delivered
+- [ ] `RESEND_KEY` set
+- [ ] Test email sent and confirmed delivered
 
 ---
 

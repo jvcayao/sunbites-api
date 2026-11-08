@@ -48,7 +48,7 @@ use Sentry\Laravel\Integration;
 
 ## 8.5 Set the DSN in Laravel Cloud
 
-Add to both staging and production environment variables:
+Add to the environment variables:
 
 ```env
 SENTRY_LARAVEL_DSN=https://your-key@sentry.io/your-project-id
@@ -76,7 +76,7 @@ Check your Sentry dashboard — a test event should appear within seconds.
 - All unhandled exceptions with full stack trace
 - The HTTP request that caused the error (method, URL, headers)
 - Authenticated user context (who triggered it)
-- Release/environment tagging (`APP_ENV` separates staging from production)
+- Release/environment tagging via `APP_ENV`
 
 ---
 
@@ -97,6 +97,5 @@ The free tier is more than sufficient for early production. Sentry also sends em
 - [x] `sentry/sentry-laravel` package installed
 - [x] `php artisan sentry:publish` run — `config/sentry.php` created
 - [x] `Integration::handles($exceptions)` added to `bootstrap/app.php`
-- [ ] `SENTRY_LARAVEL_DSN` set in staging environment on Laravel Cloud
-- [ ] `SENTRY_LARAVEL_DSN` set in production environment on Laravel Cloud
+- [ ] `SENTRY_LARAVEL_DSN` set on Laravel Cloud
 - [ ] `php artisan sentry:test` confirmed test event appears in dashboard

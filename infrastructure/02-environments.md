@@ -1,61 +1,23 @@
-# Phase 2 — Environments
+# Phase 2 — Environment
 
-Create and configure both environments. Each environment is independent — separate database, separate env vars, separate domain.
+Configure the one Cloud environment: database, env vars, domain.
 
 ---
 
-## 2.1 Create the Staging Environment
+## 2.1 Create the Production Environment
 
 ```bash
 cloud environment:create --json -n
 ```
 
 When prompted:
-- **Environment name:** `staging`
-- **Branch:** `staging`
-- **Auto-deploy:** `yes` — deploys automatically on every push to the `staging` branch
-
----
-
-## 2.2 Create the Production Environment
-
-```bash
-cloud environment:create --json -n
-```
-
-When prompted:
-- **Environment name:** `production`
+- **Environment name:** `main`
 - **Branch:** `main`
-- **Auto-deploy:** `no` — production is triggered manually via GitHub Actions (see [05-cicd.md](05-cicd.md))
+- **Auto-deploy:** `no` — production deploys only through the Deploy to Production GitHub Actions workflow (see [05-cicd.md](05-cicd.md))
 
 ---
 
-## 2.3 Create MySQL Databases
-
-Create a separate database cluster and database for each environment.
-
-### Staging Database
-
-```bash
-cloud database-cluster:create --json -n
-```
-
-Recommended config:
-- **Name:** `sunbites-staging-db`
-- **Type:** MySQL
-- **Size:** Flex `1 vCPU / 512 MB` (~$5.50/month)
-- **Environment:** `staging`
-
-Then create the database inside the cluster:
-
-```bash
-cloud database:create --json -n
-```
-
-- **Name:** `sunbites_staging`
-- **Cluster:** `sunbites-staging-db`
-
-### Production Database
+## 2.2 Create the MySQL Database
 
 ```bash
 cloud database-cluster:create --json -n
@@ -65,7 +27,7 @@ Recommended config:
 - **Name:** `sunbites-production-db`
 - **Type:** MySQL
 - **Size:** Flex `1 vCPU / 1 GB` (~$11/month)
-- **Environment:** `production`
+- **Environment:** `main`
 
 Then create the database:
 
@@ -78,89 +40,55 @@ cloud database:create --json -n
 
 ---
 
-## 2.4 Configure Compute Instances
+## 2.3 Configure the Compute Instance
 
-Laravel Cloud sets a default instance — verify and adjust sizes per environment.
-
-### Staging
+Laravel Cloud sets a default instance — verify and adjust the size.
 
 ```bash
 cloud instance:list --json -n
-# find the staging instance ID, then:
+# find the instance ID for the "App" instance, then:
 cloud instance:update {instance-id} --json -n --force
 ```
 
-Set size to `1 vCPU / 512 MB`.
-
-### Production
-
-```bash
-cloud instance:update {instance-id} --json -n --force
-```
-
-Set size to `1 vCPU / 1 GB`.
+Set size to `flex-1gb` (1 vCPU / 1 GB).
 
 ---
 
-## 2.5 Create Queue Worker (Background Process)
+## 2.4 Create the Queue Worker (Background Process)
 
-The app uses `QUEUE_CONNECTION=database`. Register a background process so queued jobs run in both environments.
+The app uses `QUEUE_CONNECTION=database`. Register a background process so queued jobs run.
 
 ```bash
 cloud background-process:create --json -n
 ```
 
 When prompted:
-- **Command:** `php artisan queue:work --sleep=3 --tries=3 --max-time=3600`
-- **Environment:** `staging` (repeat for `production`)
+- **Command:** `php artisan queue:work database --tries=3 --sleep=3 --quiet`
+- **Environment:** `main`
 
 ---
 
-## 2.6 Create Storage Buckets
+## 2.5 Create the Storage Bucket
 
-Each environment needs its own bucket for file uploads (student photos, Excel exports). See [06-storage.md](06-storage.md) for full setup details.
+The app needs a bucket for file uploads (student photos, Excel exports). See [06-storage.md](06-storage.md) for full setup details.
 
 ```bash
-# Staging bucket
 cloud bucket:create --json -n
-# Name: sunbites-staging | Environment: staging
-
-# Production bucket
-cloud bucket:create --json -n
-# Name: sunbites-production | Environment: production
+# Name: sunbites_api_prod_bucket | Private | Environment: main
 ```
 
 Laravel Cloud automatically injects `AWS_*` credentials into the environment — no manual configuration needed.
 
 ---
 
-## 2.7 Configure Custom Domains
-
-### Staging Domain
-
-```bash
-cloud domain:create --json -n
-```
-
-- **Domain:** `api-staging.sunbites.com.ph`
-- **Environment:** `staging`
-
-Then verify via DNS:
-
-```bash
-cloud domain:verify -n
-```
-
-Add the CNAME record that Laravel Cloud provides to your DNS provider pointing `api-staging.sunbites.com.ph` to the Laravel Cloud domain.
-
-### Production Domain
+## 2.6 Configure the Custom Domain
 
 ```bash
 cloud domain:create --json -n
 ```
 
 - **Domain:** `api.sunbites.com.ph`
-- **Environment:** `production`
+- **Environment:** `main`
 
 Then verify:
 
@@ -174,13 +102,12 @@ Add the A record or CNAME to your DNS provider.
 
 ---
 
-## 2.8 First Deploy (Staging)
+## 2.7 First Deploy
 
-Once environments and databases are configured, trigger the first deployment to staging:
+Once the environment and database are configured, trigger the first deployment through the Deploy to Production GitHub Actions workflow (see [05-cicd.md](05-cicd.md)), which runs:
 
 ```bash
-cloud deploy sunbites-api staging -n
-cloud deploy:monitor -n
+cloud deploy "Sunbites API Prod" main -n
 ```
 
 This will:
@@ -188,28 +115,24 @@ This will:
 2. Run `php artisan migrate --force`
 3. Start the web process and queue worker
 
-Verify staging is healthy:
+Verify production is healthy:
 
 ```bash
-curl -s https://api-staging.sunbites.com.ph/api/health | jq .
+curl -s https://api.sunbites.com.ph/api/health | jq .
 ```
 
 ---
 
 ## Phase 2 Checklist
 
-- [ ] `staging` environment created — auto-deploy on `staging` branch
-- [ ] `production` environment created — auto-deploy OFF
-- [ ] Staging MySQL database cluster created (`sunbites-staging-db`)
+- [ ] `main` environment created — auto-deploy OFF
 - [ ] Production MySQL database cluster created (`sunbites-production-db`)
-- [ ] Queue worker background process configured in both environments
-- [ ] Scheduler background process (`php artisan schedule:run`) configured in both environments
-- [ ] Staging bucket `sunbites-staging` created
-- [ ] Production bucket `sunbites-production` created
-- [ ] Domain `api-staging.sunbites.com.ph` added and DNS verified
+- [ ] Queue worker background process configured
+- [ ] Scheduler on for the `App` instance (`usesScheduler`) — no separate `schedule:run` background process needed
+- [ ] Production bucket `sunbites_api_prod_bucket` created
 - [ ] Domain `api.sunbites.com.ph` added and DNS verified
-- [ ] First staging deploy successful and health check passes
+- [ ] First deploy successful and health check passes
 
 ---
 
-**Next:** [03-environment-variables.md](03-environment-variables.md) — Set env vars per environment
+**Next:** [03-environment-variables.md](03-environment-variables.md) — Set env vars

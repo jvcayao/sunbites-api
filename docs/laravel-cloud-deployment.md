@@ -1,6 +1,8 @@
 # Laravel Cloud Deployment — Full Process & Troubleshooting Record
 
-> **2026-11-07:** the staging environment was removed from Laravel Cloud. The `staging` branch stays and runs tests only. Merging to `main` deploys to production. CI runs on MySQL 8.4, not SQLite. Staging deploy steps below are historical.
+> **Cloud CLI warning:** with one environment, the CLI treats any environment name it cannot match as `main`. Always type `main`. A command naming another environment still acts on production.
+>
+> **2026-11-07:** the staging environment was removed from Laravel Cloud. The `staging` branch stays and runs tests only. Merging to `main` does not deploy: production deploys only through the Deploy to Production workflow. CI runs on MySQL 8.4, not SQLite.
 
 This document covers the complete deployment of the Sunbites API to Laravel Cloud, including every issue encountered and how it was resolved. It serves as a runbook for future deployments and a reference for the team.
 
@@ -8,29 +10,27 @@ This document covers the complete deployment of the Sunbites API to Laravel Clou
 
 ## Environments
 
+Laravel Cloud has one environment today. The staging environment described in the rest of this record (below) was removed on 2026-11-07.
+
 | Environment | URL | Branch | Deploy |
 |-------------|-----|--------|--------|
-| Staging | `https://api-staging.sunbites.com.ph` | `staging` | Auto on push |
-| Production | `https://api.sunbites.com.ph` | `main` | Manual `workflow_dispatch` |
+| Production (`main`) | `https://api.sunbites.com.ph` | `main` | Manual: Deploy to Production workflow (`workflow_dispatch`) |
 
-Laravel Cloud app name: **Sunbites API Prod**
+Laravel Cloud app name: **Sunbites API Prod**, region `ap-southeast-1`.
 
 ---
 
 ## CI/CD Pipeline
 
-Both environments use GitHub Actions. Workflows are in `.github/workflows/`.
-
-### How staging deploys
-
-Push any commit to the `staging` branch — GitHub Actions automatically runs tests then deploys.
+Three GitHub Actions workflows, in `.github/workflows/`: `ci.yml` (pull requests to `staging` or `main`), `staging.yml` (push to `staging`, tests only — there is no staging environment to deploy to), and `production.yml` (manual deploy). All three run the same MySQL 8.4 test job.
 
 ### How production deploys
 
 1. Go to GitHub → Actions → **Deploy to Production** → **Run workflow**
 2. Type `DEPLOY` in the confirmation field
-3. Approve the environment protection gate
-4. Monitor for success
+3. The test job runs, then `cloud deploy "Sunbites API Prod" main -n`
+
+`CLOUD_API_TOKEN` lives on the GitHub Actions environment named `production` (allowed branch `main`), not as a repository-level secret. There is no monitor step and no required-reviewer gate today.
 
 ### Authenticating the CLI in GitHub Actions
 
@@ -84,6 +84,8 @@ printf '{"api_tokens":["%s"]}' "$CLOUD_TOKEN" > ~/.config/cloud/config.json
 composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 ```
 
+**2026-11-07:** this cannot recur — the repository is now API-only, with the frontend toolchain (`package.json`, `vite.config.ts`, etc.) removed entirely (Spec 16 T-22).
+
 ---
 
 ### 3. `DB_CONNECTION` defaulting to SQLite on Laravel Cloud
@@ -92,10 +94,7 @@ composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 **Cause:** `DB_CONNECTION` was not set in the environment — Laravel defaulted to `sqlite` from `.env.example`.
 
-**Fix:**
-```bash
-cloud environment:variables staging --action=set --key=DB_CONNECTION --value=mysql --force -n
-```
+**Fix:** set `DB_CONNECTION=mysql` via `cloud environment:variables`. This was done on the old staging environment at the time; the same fix applied to production.
 
 ---
 
@@ -126,11 +125,7 @@ $table->unique(['branch_id', 'school_month', 'week_number', 'day_of_week'], 'wee
 
 **Cause:** MySQL DDL statements (`ALTER TABLE`, `CREATE TABLE`) are **not transactional** — unlike SQLite, a failed migration leaves the database in a partially migrated state.
 
-**Fix (one-time recovery):** Run `migrate:fresh` on the affected environment. This drops all tables and re-runs all migrations from scratch. Only safe when there is no real data to preserve.
-
-```bash
-cloud command:run staging --cmd='php artisan migrate:fresh --force' -n
-```
+**Fix (one-time recovery):** ran `php artisan migrate:fresh --force` once via the Cloud command runner, against the old staging environment, to drop all tables and re-run all migrations from scratch. Only safe when there is no real data to preserve — **never run `migrate:fresh` against production.**
 
 After recovery, restore the deploy command to the standard `php artisan migrate --force`.
 
@@ -179,11 +174,7 @@ This applies to both:
 )),
 ```
 
-Also set the required Sanctum and session env vars on each environment:
-```bash
-cloud environment:variables staging --action=set --key=SANCTUM_STATEFUL_DOMAINS --value="pos-staging.sunbites.com.ph,portal-staging.sunbites.com.ph,localhost,localhost:3000,127.0.0.1" --force -n
-cloud environment:variables staging --action=set --key=SESSION_DOMAIN --value=".sunbites.com.ph" --force -n
-```
+Also set the required Sanctum and session env vars on each environment at the time: `SANCTUM_STATEFUL_DOMAINS` to that environment's frontend origins, and `SESSION_DOMAIN` to `.sunbites.com.ph`. The production values are in the Commands Run During Initial Deployment section below (steps 7 and 8).
 
 ---
 
@@ -205,7 +196,7 @@ cloud environment:variables staging --action=set --key=SESSION_DOMAIN --value=".
 
 **Fix:** Use `cloud tinker` with `--code` to run PHP directly:
 ```bash
-cloud tinker production --code='
+cloud tinker main --code='
 $user = App\Models\User::create([
     "name" => "Admin",
     "email" => "admin@example.com",
@@ -224,12 +215,7 @@ echo "Created: " . $user->email . "\n";
 
 **Cause:** The running server instances are not restarted when env vars are changed via CLI. The new values are stored in Cloud's config but not propagated to live processes.
 
-**Fix:** Always redeploy after setting env vars, or run `php artisan config:clear` to clear the config cache (this works for uncached values but a redeploy is more reliable):
-```bash
-cloud deploy "Sunbites API Prod" staging -n
-# or for just clearing cache:
-cloud command:run staging --cmd='php artisan config:clear' -n
-```
+**Fix:** Always redeploy after setting env vars, or run `php artisan config:clear` to clear the config cache (this works for uncached values but a redeploy is more reliable). At the time this was done via `cloud deploy "Sunbites API Prod" <environment> -n`, or `cloud command:run <environment> --cmd='php artisan config:clear' -n` for just clearing cache, against the old staging environment.
 
 ---
 
@@ -241,7 +227,7 @@ cloud command:run staging --cmd='php artisan config:clear' -n
 
 **Fix:** Assign the role via tinker:
 ```bash
-cloud tinker production --code='
+cloud tinker main --code='
 App\Models\User::all()->each(function($user) {
     $user->assignRole("admin");
     echo $user->email . " => admin\n";
@@ -261,7 +247,7 @@ App\Models\User::all()->each(function($user) {
 
 **Fix:**
 ```bash
-cloud tinker production --code='
+cloud tinker main --code='
 $branch = App\Models\Branch::where("name", "like", "%ANTIPOLO%")->firstOrFail();
 App\Models\User::all()->each(function($user) use ($branch) {
     $user->branches()->syncWithoutDetaching([
@@ -282,14 +268,13 @@ App\Models\User::all()->each(function($user) use ($branch) {
 
 **Fix:**
 ```bash
-cloud environment:variables production --action=set --key=PORTAL_APP_URL --value="https://portal.sunbites.com.ph" --force -n
-cloud environment:variables staging --action=set --key=PORTAL_APP_URL --value="https://portal-staging.sunbites.com.ph" --force -n
+cloud environment:variables main --action=set --key=PORTAL_APP_URL --value="https://portal.sunbites.com.ph" --force -n
 ```
+The old staging environment got the same fix with its own staging portal URL.
 
 Then redeploy (env vars require a redeploy to propagate):
 ```bash
-cloud deploy "Sunbites API Prod" production -n
-cloud deploy "Sunbites API Prod" staging -n
+cloud deploy "Sunbites API Prod" main -n
 ```
 
 ---
@@ -302,9 +287,9 @@ cloud deploy "Sunbites API Prod" staging -n
 
 **Fix:**
 ```bash
-cloud environment:variables production --action=set --key=MAIL_MAILER --value="resend" --force -n
-cloud environment:variables production --action=set --key=MAIL_FROM_ADDRESS --value="noreply@sunbites.com.ph" --force -n
-cloud environment:variables production --action=set --key=MAIL_FROM_NAME --value="Sunbites" --force -n
+cloud environment:variables main --action=set --key=MAIL_MAILER --value="resend" --force -n
+cloud environment:variables main --action=set --key=MAIL_FROM_ADDRESS --value="noreply@sunbites.com.ph" --force -n
+cloud environment:variables main --action=set --key=MAIL_FROM_NAME --value="Sunbites" --force -n
 ```
 
 ---
@@ -324,7 +309,7 @@ cloud environment:variables production --action=set --key=MAIL_FROM_NAME --value
 
 To test before domain is verified, temporarily use Resend's test address:
 ```bash
-cloud environment:variables production --action=set --key=MAIL_FROM_ADDRESS --value="onboarding@resend.dev" --force -n
+cloud environment:variables main --action=set --key=MAIL_FROM_ADDRESS --value="onboarding@resend.dev" --force -n
 ```
 
 ---
@@ -350,48 +335,35 @@ cloud auth -n
 printf '{"api_tokens":["%s"]}' "$CLOUD_TOKEN" > ~/.config/cloud/config.json
 ```
 
-### Step 3 — Fix MySQL default connection on staging
+### Step 3 — Fix MySQL default connection on the old staging environment
 
-```bash
-cloud environment:variables staging --action=set --key=DB_CONNECTION --value=mysql --force -n
-```
+Set `DB_CONNECTION=mysql` via `cloud environment:variables` against the old staging environment, the same way as issue 3 above.
 
 ### Step 4 — Recover from dirty DB state (migrate:fresh)
 
-Run only once after a partial migration failure. Drops everything and re-runs from scratch.
+Ran `php artisan migrate:fresh --force` once via the Cloud command runner against the old staging environment, after a partial migration failure, to drop everything and re-run from scratch. Never run `migrate:fresh` against production.
 
-```bash
-cloud command:run staging --cmd='php artisan migrate:fresh --force' -n
-```
+### Step 5 — Deploy the old staging environment
 
-### Step 5 — Deploy staging
-
-```bash
-cloud deploy "Sunbites API Prod" staging -n
-```
+Deployed the same way as step 6, against the old staging environment.
 
 ### Step 6 — Deploy production
 
 ```bash
-cloud deploy "Sunbites API Prod" production -n
+cloud deploy "Sunbites API Prod" main -n
 ```
 
-### Step 7 — Fix CORS and Sanctum on staging
+### Step 7 — Fix CORS and Sanctum on the old staging environment
 
-```bash
-cloud environment:variables staging --action=set --key=SANCTUM_STATEFUL_DOMAINS --value="pos-staging.sunbites.com.ph,portal-staging.sunbites.com.ph,localhost,localhost:3000,127.0.0.1" --force -n
-cloud environment:variables staging --action=set --key=CORS_ALLOWED_ORIGINS --value="https://pos-staging.sunbites.com.ph,https://portal-staging.sunbites.com.ph,http://localhost:3000,http://localhost:3001" --force -n
-cloud environment:variables staging --action=set --key=SESSION_DOMAIN --value=".sunbites.com.ph" --force -n
-cloud command:run staging --cmd='php artisan config:clear' -n
-```
+Set the same four values as step 8, against the old staging environment, with the staging frontend origins (`pos-staging.sunbites.com.ph`, `portal-staging.sunbites.com.ph`) in place of the production ones.
 
 ### Step 8 — Fix CORS and Sanctum on production
 
 ```bash
-cloud environment:variables production --action=set --key=SANCTUM_STATEFUL_DOMAINS --value="pos.sunbites.com.ph,portal.sunbites.com.ph,localhost,localhost:3000,127.0.0.1" --force -n
-cloud environment:variables production --action=set --key=CORS_ALLOWED_ORIGINS --value="https://pos.sunbites.com.ph,https://portal.sunbites.com.ph,http://localhost:3000,http://localhost:3001" --force -n
-cloud environment:variables production --action=set --key=SESSION_DOMAIN --value=".sunbites.com.ph" --force -n
-cloud command:run production --cmd='php artisan config:clear' -n
+cloud environment:variables main --action=set --key=SANCTUM_STATEFUL_DOMAINS --value="pos.sunbites.com.ph,portal.sunbites.com.ph,localhost,localhost:3000,127.0.0.1" --force -n
+cloud environment:variables main --action=set --key=CORS_ALLOWED_ORIGINS --value="https://pos.sunbites.com.ph,https://portal.sunbites.com.ph,http://localhost:3000,http://localhost:3001" --force -n
+cloud environment:variables main --action=set --key=SESSION_DOMAIN --value=".sunbites.com.ph" --force -n
+cloud command:run main --cmd='php artisan config:clear' -n
 ```
 
 ### Step 9 — Create first admin user via tinker (non-interactive)
@@ -399,7 +371,7 @@ cloud command:run production --cmd='php artisan config:clear' -n
 The `sunbites:create-admin` Artisan command uses interactive prompts — not supported in Cloud. Use tinker instead:
 
 ```bash
-cloud tinker production --code='
+cloud tinker main --code='
 $user = App\Models\User::create([
     "name" => "Admin",
     "email" => "admin@sunbites.com.ph",
@@ -413,7 +385,7 @@ echo "Created: " . $user->email . "\n";
 ### Step 10 — Assign branch to users
 
 ```bash
-cloud tinker production --code='
+cloud tinker main --code='
 $branch = App\Models\Branch::where("name", "like", "%ANTIPOLO%")->firstOrFail();
 App\Models\User::all()->each(function($user) use ($branch) {
     $user->branches()->syncWithoutDetaching([
@@ -424,47 +396,36 @@ App\Models\User::all()->each(function($user) use ($branch) {
 ' --timeout=60 -n
 ```
 
-### Step 11 — Assign admin role to users
+### Step 11 — Assign admin role to users on the old staging environment
 
-```bash
-cloud tinker staging --code='
-App\Models\User::all()->each(function($user) {
-    $user->assignRole("admin");
-    echo $user->email . " => admin\n";
-});
-' --timeout=60 -n
-```
+Ran the same tinker script as issue 11 above, against the old staging environment, before it was run on production.
 
 ### Step 12 — Configure email (Resend)
 
 ```bash
-# Both environments
-cloud environment:variables production --action=set --key=MAIL_MAILER --value="resend" --force -n
-cloud environment:variables production --action=set --key=MAIL_FROM_ADDRESS --value="noreply@sunbites.com.ph" --force -n
-cloud environment:variables production --action=set --key=MAIL_FROM_NAME --value="Sunbites" --force -n
-cloud environment:variables production --action=set --key=RESEND_API_KEY --value="your-key-here" --force -n
-
-cloud environment:variables staging --action=set --key=MAIL_MAILER --value="resend" --force -n
-cloud environment:variables staging --action=set --key=MAIL_FROM_ADDRESS --value="noreply@sunbites.com.ph" --force -n
-cloud environment:variables staging --action=set --key=MAIL_FROM_NAME --value="Sunbites" --force -n
-cloud environment:variables staging --action=set --key=RESEND_API_KEY --value="your-key-here" --force -n
+cloud environment:variables main --action=set --key=MAIL_MAILER --value="resend" --force -n
+cloud environment:variables main --action=set --key=MAIL_FROM_ADDRESS --value="noreply@sunbites.com.ph" --force -n
+cloud environment:variables main --action=set --key=MAIL_FROM_NAME --value="Sunbites" --force -n
+cloud environment:variables main --action=set --key=RESEND_API_KEY --value="your-key-here" --force -n
 ```
+
+The old staging environment got the same four variables, with the same values (Resend's domain verification covered both).
 
 ### Step 13 — Fix parent activation link URL
 
 ```bash
-cloud environment:variables production --action=set --key=PORTAL_APP_URL --value="https://portal.sunbites.com.ph" --force -n
-cloud environment:variables staging --action=set --key=PORTAL_APP_URL --value="https://portal-staging.sunbites.com.ph" --force -n
+cloud environment:variables main --action=set --key=PORTAL_APP_URL --value="https://portal.sunbites.com.ph" --force -n
 
 # Env vars require a redeploy to take effect — config:clear alone is not enough
-cloud deploy "Sunbites API Prod" production -n
-cloud deploy "Sunbites API Prod" staging -n
+cloud deploy "Sunbites API Prod" main -n
 ```
+
+The old staging environment got the same fix with its own staging portal URL and its own redeploy.
 
 ### Step 14 — Verify config values are live
 
 ```bash
-cloud tinker production --code='
+cloud tinker main --code='
 echo "Mailer: " . config("mail.default") . "\n";
 echo "From: " . config("mail.from.address") . "\n";
 echo "Portal URL: " . config("app.portal_url") . "\n";
@@ -478,14 +439,14 @@ echo "Resend key set: " . (config("services.resend.key") ? "yes" : "no") . "\n";
 
 ```bash
 # Check PHP config values on a live environment
-cloud tinker production --code='
+cloud tinker main --code='
 echo config("mail.default") . "\n";
 echo config("app.portal_url") . "\n";
 echo config("app.url") . "\n";
 ' --timeout=30 -n
 
 # List all users with their roles
-cloud tinker production --code='
+cloud tinker main --code='
 $users = App\Models\User::with("roles")->get();
 foreach ($users as $u) {
     echo $u->email . " | " . $u->roles->pluck("name")->join(", ") . "\n";
@@ -493,16 +454,16 @@ foreach ($users as $u) {
 ' --timeout=30 -n
 
 # Run a migration
-cloud command:run production --cmd='php artisan migrate --force' -n
+cloud command:run main --cmd='php artisan migrate --force' -n
 
 # Clear all caches
-cloud command:run production --cmd='php artisan optimize:clear' -n
+cloud command:run main --cmd='php artisan optimize:clear' -n
 
 # Seed the database
-cloud command:run production --cmd='php artisan db:seed --force' -n
+cloud command:run main --cmd='php artisan db:seed --force' -n
 
 # Seed a specific seeder
-cloud command:run production --cmd='php artisan db:seed --class=BranchSeeder --force' -n
+cloud command:run main --cmd='php artisan db:seed --class=BranchSeeder --force' -n
 ```
 
 ---
@@ -512,5 +473,5 @@ cloud command:run production --cmd='php artisan db:seed --class=BranchSeeder --f
 - **Never share API keys in chat or commit them to git.** If a key is accidentally exposed, revoke it immediately in the provider dashboard and generate a new one.
 - Set all secrets exclusively via `cloud environment:variables --action=set` or the Laravel Cloud dashboard.
 - The `RESEND_API_KEY` exposed during setup was revoked and regenerated before use.
-- Production deployments require manual trigger + `DEPLOY` confirmation + GitHub environment approval gate.
+- Production deployments require a manual trigger and `DEPLOY` confirmation. There is no required-reviewer approval gate today.
 - Never push directly to `main` — always create a branch and open a PR.
