@@ -467,7 +467,7 @@
 
 ---
 
-- [ ] 24. Staging deploy removed, CI on MySQL *(approved 2026-11-07; design §18; Req 17; HANDOFF §6 steps 50 and 51)*
+- [x] 24. Staging deploy removed, CI on MySQL *(approved 2026-11-07; design §18; Req 17; HANDOFF §6 steps 50 and 51)*
   - [x] 24.1 Revert `16f9fac`
     - Follow design §18.2. `git diff 9ba8f46 HEAD --name-only -- . ':!.kiro'` must print nothing.
     - _Requirements: 17.1_
@@ -476,10 +476,10 @@
     - Tests: none new. Full local verification gate, 1693 tests with no skips. Run every audit command in design §18.4 and paste the output.
     - Fixtures: unchanged.
     - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5, 17.6_
-  - [ ] 24.3 Name `main` in the production deploy and correct the docs note
+  - [x] 24.3 Name `main` in the production deploy and correct the docs note
     - Make exactly the changes in design §18.6 and run its audit. No PHP changes.
     - _Requirements: 17.4, 17.7_
-  - [ ] 24.4 Bring the deployment docs up to date
+  - [x] 24.4 Bring the deployment docs up to date
     - Follow the rules in design §18.7 and run its audit. No PHP changes.
     - _Requirements: 17.8_
 
